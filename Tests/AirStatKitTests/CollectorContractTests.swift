@@ -344,4 +344,37 @@ struct CollectorContractTests {
         }
         #expect(source.callCount == 0, "sampled while the machine was asleep")
     }
+
+    @Test("a slot that keeps its value holds the last reading while it re-baselines")
+    func keptValueSurvivesRebaseline() {
+        // Like the disk collector: nothing to report on the sample that baselines its
+        // counters, which is the first one after every pause.
+        final class Rates: MetricSource {
+            typealias Output = DiskSnapshot
+            let identifier = CollectorID.disk
+            let preferredInterval: TimeInterval = 0
+            private var reading = 0.0
+            func collect(context: SampleContext) -> MetricState<DiskSnapshot> {
+                guard !context.isFirstSample else { return .pending }
+                reading += 1
+                return .value(DiskSnapshot(readBytesPerSecond: reading))
+            }
+        }
+        func pauseAndResume(_ slot: SourceSlot<Rates>) -> MetricState<DiskSnapshot> {
+            slot.tick(now: Monotonic.now, activity: .panel, isEnabled: true,
+                      baseInterval: 0, didWakeFromSleep: false)
+            slot.tick(now: Monotonic.now, activity: .panel, isEnabled: true,
+                      baseInterval: 0, didWakeFromSleep: false, force: true)
+            slot.tick(now: Monotonic.now, activity: .panel, isEnabled: false,
+                      baseInterval: 0, didWakeFromSleep: false)
+            slot.tick(now: Monotonic.now, activity: .panel, isEnabled: true,
+                      baseInterval: 0, didWakeFromSleep: false)
+            return slot.state
+        }
+
+        let kept = pauseAndResume(SourceSlot(Rates(), keepsValueWhileRebaselining: true))
+        #expect(kept == .value(DiskSnapshot(readBytesPerSecond: 1)))
+        let dropped = pauseAndResume(SourceSlot(Rates()))
+        #expect(dropped == .pending)
+    }
 }

@@ -13,8 +13,11 @@ struct BarStyleAvailabilityTests {
     @Test("only the readouts with a known ceiling offer it")
     func onlyFractionsOfferIt() {
         for metric in MenuBarMetric.allCases {
-            let offered = metric.supportedStyles.contains(.bar)
-            #expect(offered == Self.fractionMetrics.contains(metric), "\(metric) offered \(offered)")
+            for style in [MenuBarDisplayStyle.bar, .tile] {
+                let offered = metric.supportedStyles.contains(style)
+                #expect(offered == Self.fractionMetrics.contains(metric),
+                        "\(metric) offered \(style): \(offered)")
+            }
         }
     }
 

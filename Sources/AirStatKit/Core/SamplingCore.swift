@@ -13,7 +13,14 @@ final class SourceSlot<Source: MetricSource> {
     private var consecutiveFailures = 0
     private var retryNotBefore: ContinuousClock.Instant?
 
-    init(_ source: Source) { self.source = source }
+    /// Whether the last reading stands while the source re-establishes its baseline
+    /// after a pause, rather than the state dropping back to `.pending` for a sample.
+    private let keepsValueWhileRebaselining: Bool
+
+    init(_ source: Source, keepsValueWhileRebaselining: Bool = false) {
+        self.source = source
+        self.keepsValueWhileRebaselining = keepsValueWhileRebaselining
+    }
 
     var identifier: CollectorID { source.identifier }
 
@@ -79,6 +86,7 @@ final class SourceSlot<Source: MetricSource> {
             }
         }
 
+        if keepsValueWhileRebaselining, newState == .pending, state.isAvailable { return false }
         let changed = newState != state
         state = newState
         return changed
@@ -180,7 +188,9 @@ public final class SamplingCore: @unchecked Sendable {
         self.memorySlot = SourceSlot(MemoryCollector())
         self.gpuSlot = SourceSlot(GPUCollector())
         self.networkSlot = SourceSlot(NetworkCollector())
-        self.diskSlot = SourceSlot(DiskCollector())
+        // Free space barely moves while sampling is paused, so the last reading is a
+        // fair answer for the one sample a resumed disk spends re-baselining its rates.
+        self.diskSlot = SourceSlot(DiskCollector(), keepsValueWhileRebaselining: true)
         self.powerSlot = SourceSlot(PowerCollector())
         self.thermalSlot = SourceSlot(ThermalCollector())
         self.processSlot = SourceSlot(ProcessCollector())

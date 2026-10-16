@@ -145,7 +145,7 @@ public enum MenuBarMetric: String, Sendable, Codable, CaseIterable, Equatable, H
         case .cpuUsage, .gpuUsage, .memoryUsage, .memoryPressure:
             // The readouts that are a fraction of a known ceiling, which is the only
             // thing a fill level can honestly draw.
-            return MenuBarDisplayStyle.general + [.bar]
+            return MenuBarDisplayStyle.general + [.bar, .tile]
         default:
             return MenuBarDisplayStyle.general
         }
@@ -167,10 +167,16 @@ public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equata
     case battery
     case statusDot
     case bar
+    /// The bar's fill level as a solid block with its label set inside it.
+    case tile
 
     /// The styles any numeric readout can take. The indicator styles are left out
     /// because each draws one kind of metric and nothing else.
     public static let general: [MenuBarDisplayStyle] = [.text, .graph, .textAndGraph, .iconAndText]
+
+    /// The two styles that draw a fraction as a fill level, with the caption stacked
+    /// one letter to a row.
+    public var drawsLevel: Bool { self == .bar || self == .tile }
 
     public var label: String {
         switch self {
@@ -181,6 +187,7 @@ public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equata
         case .battery: return "Battery Indicator"
         case .statusDot: return "Status Dot"
         case .bar: return "Compact Bar"
+        case .tile: return "Tile"
         }
     }
 
@@ -190,7 +197,7 @@ public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equata
     /// anonymous shape, so the caption is what says which fraction it is.
     public var supportsCaption: Bool {
         switch self {
-        case .text, .graph, .textAndGraph, .bar: return true
+        case .text, .graph, .textAndGraph, .bar, .tile: return true
         case .iconAndText, .battery, .statusDot: return false
         }
     }
@@ -360,6 +367,26 @@ public enum PanelModule: String, Sendable, Codable, CaseIterable, Equatable, Has
     public var symbolName: String { requiredSource.symbolName }
 }
 
+/// Which layout the click-down panel draws.
+public enum PanelStyle: String, Sendable, Codable, CaseIterable, Equatable {
+    /// The first design: one row per module, and a click on a heading unfolds the
+    /// module's detail under it.
+    case original
+    /// One row per module, drawn as a meter where the reading is a fraction, with the
+    /// detail in a card beside the panel while a row is hovered.
+    case list
+    /// A grid of cards in different sizes, with the same detail card on hover.
+    case bento
+
+    public var label: String {
+        switch self {
+        case .original: return "Original"
+        case .list: return "List"
+        case .bento: return "Bento"
+        }
+    }
+}
+
 /// What the panel remembers between openings.
 ///
 /// The panel used to be configurable — module order, which modules were on, width,
@@ -373,6 +400,9 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public var collapsedModules: Set<PanelModule>
     /// Draw the history chart under an expanded module's rows.
     public var showsHistoryChart: Bool
+    /// The panel's layout. The one choice of how the panel looks that is left to the
+    /// user, because the three are different ways of reading it rather than tweaks.
+    public var style: PanelStyle
 
     /// Fixed layout, previously the `width` setting. 380pt gives a detail grid three
     /// columns and a process name room beside its icon, and still leaves the panel
@@ -389,9 +419,10 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public static let staysOpenOnFocusLoss = false
 
     public init(collapsedModules: Set<PanelModule> = PanelSettings.defaultCollapsed,
-                showsHistoryChart: Bool = true) {
+                showsHistoryChart: Bool = true, style: PanelStyle = .list) {
         self.collapsedModules = Self.accordion(collapsedModules)
         self.showsHistoryChart = showsHistoryChart
+        self.style = style
     }
 
     /// The collapsed set after a click on `module`'s header.
@@ -438,7 +469,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public var visibleModules: [PanelModule] { PanelModule.allCases }
 
     private enum CodingKeys: String, CodingKey {
-        case collapsedModules, showsHistoryChart
+        case collapsedModules, showsHistoryChart, style
     }
 
     /// Decoded leniently, and settings files written before the panel pane was removed
@@ -448,6 +479,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         collapsedModules = Self.accordion(c.value(.collapsedModules, or: PanelSettings.defaultCollapsed))
         showsHistoryChart = c.value(.showsHistoryChart, or: true)
+        style = c.value(.style, or: .list)
     }
 }
 

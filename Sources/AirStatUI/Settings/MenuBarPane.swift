@@ -204,6 +204,10 @@ struct MenuBarPane: View {
             let label = MenuBarRenderModel.sideCaptionText(for: item.metric) ?? item.metric.label
             return "Show \"\(label)\" beside the bar"
         }
+        if item.style == .tile {
+            let label = MenuBarRenderModel.sideCaptionText(for: item.metric) ?? item.metric.label
+            return "Show \"\(label)\" inside the tile"
+        }
         let label = MenuBarRenderModel.captionText(for: item.metric) ?? item.metric.label
         return "Show \"\(label)\" above the value"
     }

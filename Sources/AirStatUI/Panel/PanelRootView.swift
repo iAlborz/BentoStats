@@ -3,12 +3,20 @@ import AppKit
 import Observation
 import AirStatKit
 
-/// Ephemeral presentation state shared by the panel's SwiftUI tree and its AppKit
-/// controller. Settings remain the durable truth; the override exists only long enough
-/// to measure and animate one disclosure as a coordinated transaction.
+/// Ephemeral presentation state shared by the panel's SwiftUI trees and its AppKit
+/// controller: which module's detail is open beside the panel, the hooks the rows and
+/// the detail report the pointer through, and, for the original style, the override
+/// that exists only long enough to measure and animate one disclosure as a coordinated
+/// transaction. Settings remain the durable truth.
 @MainActor
 @Observable
 final class PanelLayoutState {
+    /// The module whose detail is showing beside the panel, nil while none is.
+    var detailModule: PanelModule?
+    /// The pointer over a row or card, with its frame in the panel; nil once it has left.
+    @ObservationIgnored var rowHover: ((PanelModule, CGRect?) -> Void)?
+    @ObservationIgnored var detailHover: ((Bool) -> Void)?
+
     var collapsedModulesOverride: Set<PanelModule>?
     /// The collapsed set a disclosure started from, held until it has finished.
     var disclosureOrigin: Set<PanelModule>?
@@ -18,7 +26,7 @@ final class PanelLayoutState {
 
 /// Root of the click-down panel.
 ///
-/// A stack of modules in the user's order, each carrying its own headline value, over
+/// The modules, as a list of rows or a grid of cards depending on the panel style, over
 /// a footer. The panel sizes to its content and has no chrome of its own; it scrolls
 /// only in the one case where it would otherwise run off the screen.
 public struct PanelRootView: View {
@@ -57,15 +65,23 @@ public struct PanelRootView: View {
                 PanelSeparator()
             }
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 0) {
-                    let captionColumnWidth = captionColumnWidth
-                    ForEach(Array(modules.enumerated()), id: \.element) { index, module in
-                        if index > 0 { PanelSeparator(isVisible: separatorNeeded(before: index)) }
-                        PanelModuleView(module: module, engine: engine, settings: settings,
-                                        layout: layout, captionColumnWidth: captionColumnWidth)
+                if style == .bento {
+                    BentoGrid(engine: engine, settings: settings, layout: layout)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        let captionColumnWidth = captionColumnWidth
+                        ForEach(Array(modules.enumerated()), id: \.element) { index, module in
+                            if style == .original, index > 0 {
+                                PanelSeparator(isVisible: separatorNeeded(before: index))
+                            }
+                            PanelModuleView(module: module, engine: engine, settings: settings,
+                                            layout: layout,
+                                            presentation: style == .original ? .accordion : .row,
+                                            captionColumnWidth: captionColumnWidth)
+                        }
                     }
+                    .padding(.vertical, Design.Space.xs)
                 }
-                .padding(.vertical, Design.Space.xs)
             }
             .scrollBounceBehavior(.basedOnSize)
             // No indicator, ever.
@@ -102,7 +118,7 @@ public struct PanelRootView: View {
         // Past it the controller caps the window and the list scrolls under a footer
         // that stays on screen.
         .frame(maxHeight: .infinity, alignment: .top)
-        .frame(width: PanelSettings.width)
+        .frame(width: style == .bento ? BentoGrid.width : PanelSettings.width)
         .environment(\.metricFormatter, MetricFormatter(settings: settings.settings.general))
     }
 
@@ -110,15 +126,19 @@ public struct PanelRootView: View {
 
     private var modules: [PanelModule] { settings.settings.panel.visibleModules }
 
+    private var style: PanelStyle { settings.settings.panel.style }
+
     /// One width for every row's qualifier column, from the captions on screen now.
+    /// A list row drawn as a meter shows no caption, so it takes no part.
     private var captionColumnWidth: CGFloat {
         let formatter = MetricFormatter(settings: settings.settings.general)
         return PanelSummary.captionColumnWidth(for: modules.map {
             PanelSummary.make(for: $0, engine: engine, formatter: formatter)
-        })
+        }.filter { style == .original || $0.fraction == nil })
     }
 
-    /// A rule earns its place only where it delimits a block of detail.
+    /// In the original style, a rule earns its place only where it delimits a block of
+    /// detail.
     ///
     /// Drawing one between every module turned the panel into a ruled table — nine
     /// full-width lines competing with the content they were meant to organise. Between
@@ -143,6 +163,30 @@ public struct PanelRootView: View {
         !collapsed.contains(modules[index - 1]) || !collapsed.contains(modules[index])
     }
 
+}
+
+/// The detail of the module whose row is hovered, in its own window beside the panel.
+struct PanelDetailView: View {
+    let engine: MetricsEngine
+    let settings: SettingsStore
+    let layout: PanelLayoutState
+
+    var body: some View {
+        if let module = layout.detailModule {
+            let formatter = MetricFormatter(settings: settings.settings.general)
+            let summary = PanelSummary.make(for: module, engine: engine, formatter: formatter)
+            PanelModuleView(module: module, engine: engine, settings: settings,
+                            presentation: .detail,
+                            captionColumnWidth: PanelSummary.captionColumnWidth(for: [summary]))
+                // A fresh view per module, so a chart range picked for one module does
+                // not carry over to the next.
+                .id(module)
+                .padding(.vertical, Design.Space.xs)
+                .frame(width: PanelSettings.width)
+                .contentShape(Rectangle())
+                .onHover { layout.detailHover?($0) }
+        }
+    }
 }
 
 /// Inset rule between modules. macOS insets its separators to the content margin so

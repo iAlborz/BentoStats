@@ -45,19 +45,24 @@ extension PanelModuleView {
         }
     }
 
-    /// Detail when the module is open, and the reason when the metric is unavailable.
+    /// Detail beside the panel, and the reason when the metric is unavailable.
     ///
-    /// A failure is shown whether or not the module is collapsed: for a module that
-    /// has no value, the explanation *is* the summary, and hiding it would leave a
-    /// header with a blank space where the number belongs.
+    /// A failure is shown in the row as well: for a module that has no value, the
+    /// explanation *is* the summary, and hiding it would leave a header with a blank
+    /// space where the number belongs. Waiting for a first reading is the exception:
+    /// the header's spinner already says so, and a "Collecting…" line here lasted one
+    /// sample and then pulled every row beneath it up when it went.
     @ViewBuilder
     private func section<V: Sendable & Equatable, C: View>(
         _ state: MetricState<V>,
         @ViewBuilder content: @escaping (V) -> C
     ) -> some View {
-        if isExpanded {
+        if state.failure == .pending {
+            EmptyView()
+        } else if showsDetail {
             // The transition lives here, on the view that is actually inserted and
-            // removed. On the container in `PanelModuleView` it applied to nothing.
+            // removed when an original-style row unfolds. On the container in
+            // `PanelModuleView` it applied to nothing.
             MetricContent(state) { content($0) }
                 .transition(.disclosure)
         } else if let failure = state.failure {

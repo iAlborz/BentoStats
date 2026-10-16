@@ -76,7 +76,7 @@ public struct MenuBarItemRender: Equatable, Sendable {
     /// network one, and carried here for the reason the battery fields are: the view
     /// draws what it is handed, and nothing it fetches for itself.
     public var networkStatus: NetworkStatus?
-    /// The fraction the `.bar` style fills to, 0...1. Set only on the readouts that
+    /// The fraction the `.bar` and `.tile` styles fill to, 0...1. Set only on the readouts that
     /// are a fraction of a known ceiling, and carried for the reason the battery
     /// charge is: the view draws what it is handed.
     public var level: Double?
@@ -454,11 +454,11 @@ public struct MenuBarRenderModel: Equatable, Sendable {
     /// indicator says it to the one audience on earth that did not need telling.
     private static func caption(for config: MenuBarItemConfig) -> String? {
         guard config.style.supportsCaption, config.showsCaption else { return nil }
-        if config.style == .bar { return sideCaptionText(for: config.metric) }
+        if config.style.drawsLevel { return sideCaptionText(for: config.metric) }
         return captionText(for: config.metric)
     }
 
-    /// The caption stacked beside a bar, one letter to a row. Three rows is all a
+    /// The caption stacked beside a bar or inside a tile, one letter to a row. Three rows is all a
     /// 22-point item has room for, so "PRESS" does not fit.
     public static func sideCaptionText(for metric: MenuBarMetric) -> String? {
         switch metric {

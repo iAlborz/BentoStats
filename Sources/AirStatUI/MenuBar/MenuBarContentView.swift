@@ -118,6 +118,16 @@ public final class MenuBarContentView: NSView {
         static let barFillInset: CGFloat = 2
         static let barFillRadius: CGFloat = 1.5
         static let barMinimumFill: CGFloat = 2
+        /// The tile: the bar's level as a solid block with its label set inside it. No
+        /// shell and no inset, so a full reading fills the whole tile, and the label is
+        /// knocked out of the fill the way the battery's digits are, so it reads at any
+        /// level. Its height comes off its font, as the bar's does: see `tileHeight`.
+        static let tileTrackAlpha: CGFloat = 0.25
+        static let tileLabelFontSize: CGFloat = 7
+        static let tileInsetX: CGFloat = 2.5
+        static let tileInsetY: CGFloat = 1
+        static let tileRowGap: CGFloat = 1.5
+        static let tileCornerRadius: CGFloat = 3
         /// The bolt, in a unit box with y running up as this view's coordinates do.
         ///
         /// Traced off `bolt.fill` rather than invented: the symbol was rasterised at 200
@@ -197,7 +207,7 @@ public final class MenuBarContentView: NSView {
             // point of the shape is that three of them read as one group, so a bar that
             // follows a bar gets the gap between the parts of one readout instead.
             if index > 0 {
-                let packed = item.style == .bar && model.items[index - 1].style == .bar
+                let packed = item.style.drawsLevel && model.items[index - 1].style.drawsLevel
                 content += packed ? Layout.partGap : CGFloat(model.spacing)
             }
             let symbol = symbol(for: item)
@@ -231,6 +241,7 @@ public final class MenuBarContentView: NSView {
         var battery: CGFloat = 0
         var caption: CGFloat = 0
         var bar: CGFloat = 0
+        var tile: CGFloat = 0
         var statusDot: CGFloat = 0
         var graph: CGFloat = 0
         var primaryGlyph: CGFloat = 0
@@ -255,6 +266,7 @@ public final class MenuBarContentView: NSView {
             append(battery, after: Layout.partGap)
             append(caption, after: Layout.partGap)
             append(bar, after: Layout.partGap)
+            append(tile, after: Layout.partGap)
             append(statusDot, after: Layout.partGap)
             append(graph, after: Layout.partGap)
             append(stack, after: Layout.partGap)
@@ -279,7 +291,7 @@ public final class MenuBarContentView: NSView {
     private func geometry(for item: MenuBarItemRender, symbol: SymbolAsset?,
                           model: MenuBarRenderModel) -> Geometry {
         var geometry = Geometry()
-        if let caption = item.caption, !isStacked(item), item.style != .bar {
+        if let caption = item.caption, !isStacked(item), !item.style.drawsLevel {
             geometry.caption = width(caption, role: .caption)
         }
 
@@ -322,6 +334,13 @@ public final class MenuBarContentView: NSView {
             if let caption = item.caption {
                 geometry.bar += sideLabelWidth(caption) + Layout.glyphGap
             }
+            return geometry
+        }
+
+        // Every letter of a monospaced face is one width, so every tile is too, with
+        // or without its label, and a row of them lines up as one group.
+        if item.style == .tile {
+            geometry.tile = width("M", role: .tileLabel) + Layout.tileInsetX * 2
             return geometry
         }
 
@@ -453,6 +472,13 @@ public final class MenuBarContentView: NSView {
             gap(Layout.partGap)
             drawBar(item, x: x, colors: colors, scale: scale, context: context)
             x += geometry.bar
+        }
+
+        if geometry.tile > 0 {
+            gap(Layout.partGap)
+            drawTile(item, x: x, width: geometry.tile, colors: colors, scale: scale,
+                     context: context)
+            x += geometry.tile
         }
 
         if geometry.statusDot > 0 {
@@ -763,6 +789,86 @@ public final class MenuBarContentView: NSView {
                      x: x + (column - glyphWidth) / 2,
                      baseline: top - cap - CGFloat(row) * pitch,
                      color: color, scale: scale, context: context)
+        }
+    }
+
+    // MARK: Tile
+
+    /// A dim block filled from the bottom to the reading, edge to edge: at 100% the
+    /// fill is the tile. The label sits inside, one letter to a row.
+    private func drawTile(_ item: MenuBarItemRender, x: CGFloat, width: CGFloat,
+                          colors: ItemColors, scale: CGFloat, context: CGContext) {
+        let tile = snapped(CGRect(x: x, y: bounds.midY - tileHeight / 2,
+                                  width: width, height: tileHeight), scale: scale)
+        let shape = CGPath(roundedRect: tile, cornerWidth: Layout.tileCornerRadius,
+                           cornerHeight: Layout.tileCornerRadius, transform: nil)
+        let trackColor = colors.mark.withAlphaComponent(
+            colors.mark.alphaComponent * Layout.tileTrackAlpha)
+        context.addPath(shape)
+        context.setFillColor(trackColor.cgColor)
+        context.fillPath()
+
+        // Where the fill stops is also where the letters change from painted to
+        // knocked out, so it is computed once and both are drawn against it.
+        var fillEdge = tile.minY
+        let level = min(max(item.level ?? 0, 0), 1)
+        if level > 0 {
+            // Snapped to whole pixels, as the bar's is: a top edge that lands mid-pixel
+            // is a grey row that reads as a lower level than the one it is drawing.
+            let fill = snapped(CGRect(x: tile.minX, y: tile.minY, width: tile.width,
+                                      height: max(tile.height * level, Layout.barMinimumFill)),
+                               scale: scale)
+            fillEdge = fill.maxY
+            context.saveGState()
+            context.addPath(shape)
+            context.clip()
+            context.setFillColor(colors.mark.cgColor)
+            context.fill(fill)
+            context.restoreGState()
+        }
+
+        if let caption = item.caption {
+            drawTileLabel(caption, in: tile, fillEdge: fillEdge, ink: colors.mark.cgColor,
+                          scale: scale, context: context)
+        }
+    }
+
+    /// Three rows of cap height and the gaps between them, inside the tile's own inset.
+    private var tileHeight: CGFloat {
+        ceil(3 * fonts[.tileLabel].capHeight + 2 * Layout.tileRowGap + 2 * Layout.tileInsetY)
+    }
+
+    /// The label inside a tile, one letter to a row, each drawn twice the way the
+    /// battery's digits are: cleared out of the fill below `fillEdge`, painted above it.
+    /// See `drawBatteryValue` for why clearing, rather than a colour, is what is right.
+    private func drawTileLabel(_ text: String, in tile: CGRect, fillEdge: CGFloat,
+                               ink: CGColor, scale: CGFloat, context: CGContext) {
+        let cap = fonts[.tileLabel].capHeight
+        let pitch = cap + Layout.tileRowGap
+        let rows = CGFloat(text.count)
+        // Centred as a block, so a shorter label sits mid-tile rather than at its top.
+        let top = tile.midY + (rows * cap + (rows - 1) * Layout.tileRowGap) / 2
+        let filled = CGRect(x: bounds.minX, y: bounds.minY,
+                            width: bounds.width, height: fillEdge - bounds.minY)
+        let empty = CGRect(x: bounds.minX, y: fillEdge,
+                           width: bounds.width, height: bounds.maxY - fillEdge)
+        for (row, letter) in text.enumerated() {
+            let glyph = String(letter)
+            let x = tile.midX - width(glyph, role: .tileLabel) / 2
+            let baseline = top - cap - CGFloat(row) * pitch
+            if filled.height > 0 {
+                context.saveGState()
+                context.clip(to: filled)
+                context.setBlendMode(.clear)
+                drawText(glyph, role: .tileLabel, x: x, baseline: baseline,
+                         color: ink, scale: scale, context: context)
+                context.restoreGState()
+            }
+            context.saveGState()
+            context.clip(to: empty)
+            drawText(glyph, role: .tileLabel, x: x, baseline: baseline,
+                     color: ink, scale: scale, context: context)
+            context.restoreGState()
         }
     }
 
@@ -1168,6 +1274,9 @@ public final class MenuBarContentView: NSView {
         case stackedCaption
         /// One letter to a row beside a bar.
         case sideLabel
+        /// One letter to a row inside a tile: SF Mono Heavy, so the letters are heavy
+        /// enough to survive being knocked out of the fill and all one width.
+        case tileLabel
         /// The digits inside the battery shell. Always monospaced and always medium,
         /// whatever the rest of the bar is set in: this number is knocked out of solid
         /// ink at nine points, and a regular weight does not survive that at 1x.
@@ -1180,6 +1289,7 @@ public final class MenuBarContentView: NSView {
         let stackedValue: NSFont
         let stackedCaption: NSFont
         let sideLabel: NSFont
+        let tileLabel: NSFont
         let batteryValue: NSFont
 
         init(monospacedDigits: Bool) {
@@ -1197,6 +1307,7 @@ public final class MenuBarContentView: NSView {
             stackedCaption = .systemFont(ofSize: Design.MenuBar.stackedCaptionFontSize,
                                          weight: .medium)
             sideLabel = .systemFont(ofSize: Design.MenuBar.sideLabelFontSize, weight: .medium)
+            tileLabel = .monospacedSystemFont(ofSize: Layout.tileLabelFontSize, weight: .heavy)
         }
 
         subscript(role: FontRole) -> NSFont {
@@ -1206,6 +1317,7 @@ public final class MenuBarContentView: NSView {
             case .stackedValue: return stackedValue
             case .stackedCaption: return stackedCaption
             case .sideLabel: return sideLabel
+            case .tileLabel: return tileLabel
             case .batteryValue: return batteryValue
             }
         }
@@ -1229,7 +1341,7 @@ private extension MenuBarDisplayStyle {
     var drawsValue: Bool {
         switch self {
         case .text, .textAndGraph, .iconAndText: return true
-        case .graph, .battery, .statusDot, .bar: return false
+        case .graph, .battery, .statusDot, .bar, .tile: return false
         }
     }
 }

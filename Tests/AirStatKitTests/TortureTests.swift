@@ -163,6 +163,7 @@ struct WindowTortureTests {
     @Test("a disclosure resizes once while keeping the panel's top edge anchored")
     func disclosureResizesFromTopEdge() async throws {
         let s = store()
+        s.update { $0.panel.style = .original }
         let engine = MetricsEngine(settingsStore: s)
         engine.loadFixture(snapshot: SnapshotFixtures.nominal,
                            history: MetricHistory(capacity: 60, sampleInterval: 1))

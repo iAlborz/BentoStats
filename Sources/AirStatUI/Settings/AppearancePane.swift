@@ -53,6 +53,21 @@ struct AppearancePane: View {
                                  + "Each metric can still be changed on its own.")
             }
 
+            Section {
+                Picker("Layout", selection: settings.binding(\.panel.style)) {
+                    ForEach(PanelStyle.allCases, id: \.self) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Panel")
+            } footer: {
+                SettingsFootnote("Original unfolds a module when you click its heading. "
+                                 + "List and Bento show its detail beside the panel when "
+                                 + "you point at it.")
+            }
+
             // A board rather than nine rows. One colour per metric is a palette, and a
             // palette is something you look at all at once — as a column it was a
             // 390pt scroll of near-identical rows that pushed the chart settings off

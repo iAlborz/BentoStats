@@ -26,6 +26,26 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// AppKit's window resize. The transition ends when the last of them does.
     private var disclosureAnimationsPending = 0
 
+    /// The window beside the panel that shows the hovered module's detail.
+    private var detailWindow: PanelWindow?
+    /// The row the pointer is over, with its frame in the panel.
+    private var hoveredRow: (module: PanelModule, frame: CGRect)?
+    /// The frame of the row whose detail is showing, which the detail lines up with.
+    private var detailRowFrame: CGRect?
+    private var isPointerInDetail = false
+    /// The pointer's last position over a row, for telling a move towards the detail
+    /// from a move onto another row.
+    private var previousPointer: NSPoint?
+    private var settleTask: Task<Void, Never>?
+    private var hasPendingDetailResize = false
+    /// Set while the detail is ordered out, so the key status it gives up on the way
+    /// is not read as the user leaving the panel.
+    private var isClosingDetail = false
+
+    /// How long the detail holds before following the pointer elsewhere: long enough
+    /// to cut across other rows on the way to it, short enough to read as a response.
+    private static let detailGrace: Duration = .milliseconds(300)
+
     /// Every `NSEvent` monitor and notification observer this controller owns, in one
     /// place. Two collections, one lifetime: they are installed together when the
     /// panel appears and torn down together on every path that hides it.
@@ -111,6 +131,9 @@ public final class PanelController: NSObject, NSWindowDelegate {
         // Unconditional: a monitor must never outlive the state that installed it,
         // even if this is called on a path where the panel was already hidden.
         removeDismissMonitors()
+        hideDetail()
+        hoveredRow = nil
+        previousPointer = nil
         guard let window, isVisible else { return }
         presentation &+= 1
         let generation = presentation
@@ -142,6 +165,9 @@ public final class PanelController: NSObject, NSWindowDelegate {
             try? await Task.sleep(for: Self.windowReleaseDelay)
             guard !Task.isCancelled, let self, !self.isVisible, let window = self.window else { return }
             self.releaseTask = nil
+            self.detailWindow?.delegate = nil
+            self.detailWindow?.close()
+            self.detailWindow = nil
             self.window = nil
             self.layout = nil
             self.lastAnchor = nil
@@ -171,6 +197,12 @@ public final class PanelController: NSObject, NSWindowDelegate {
         layout.toggleModule = { [weak self] module in
             self?.toggleModule(module)
         }
+        layout.rowHover = { [weak self] module, frame in
+            self?.rowHover(module, frame: frame)
+        }
+        layout.detailHover = { [weak self] hovering in
+            self?.detailHover(hovering)
+        }
         let root = PanelRootView(engine: engine, settings: settings, updates: updates,
                                  layout: layout)
             .environment(\.panelActions, PanelActions(
@@ -188,8 +220,18 @@ public final class PanelController: NSObject, NSWindowDelegate {
         // Escape is handled here as well as by the key monitor, so it still works if
         // the panel is key but the monitor is not installed.
         window.onCancel = { [weak self] in self?.hide() }
+
+        let detailHosting = ContentSizedHostingView(
+            rootView: PanelDetailView(engine: engine, settings: settings, layout: layout))
+        detailHosting.onContentSizeChange = { [weak self] in self?.scheduleDetailResize() }
+        let detailWindow = PanelWindow(contentView: detailHosting)
+        detailWindow.title = "AirStats Detail"
+        detailWindow.delegate = self
+        detailWindow.onCancel = { [weak self] in self?.hide() }
+
         self.layout = layout
         self.window = window
+        self.detailWindow = detailWindow
         return window
     }
 
@@ -350,6 +392,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
         let frame = targetFrame(for: fitting, anchoredTo: anchor, on: screen)
         guard frame != window.frame else { return }
         window.setFrame(frame, display: true)
+        if detailWindow?.isVisible == true { positionDetail() }
     }
 
     private func targetFrame(for fitting: NSSize, anchoredTo anchor: NSRect?,
@@ -440,16 +483,167 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// SwiftUI grows the window downwards from its bottom-left corner; re-running the
     /// placement re-pins it under the status item and re-applies the height cap.
     public func windowDidResize(_ notification: Notification) {
-        guard let window, isVisible, !isPositioning,
-              !isDisclosureTransitionActive else { return }
+        guard let window, notification.object as? NSWindow === window,
+              isVisible, !isPositioning, !isDisclosureTransitionActive else { return }
         position(window, anchoredTo: lastAnchor, on: lastScreen)
     }
 
     /// Covers the dismissal the mouse monitor cannot see: ⌘-tabbing to another app.
+    ///
+    /// Either window can hold the keyboard — a click in the detail makes it key — so
+    /// the panel goes only once neither does. Checked a turn later, because the window
+    /// taking over is not key yet while the other one resigns.
     public func windowDidResignKey(_ notification: Notification) {
         guard isVisible else { return }
-        WindowLog.log("panel resigned key; dismissing")
-        hide()
+        if let detailWindow, notification.object as? NSWindow === detailWindow,
+           isClosingDetail || !detailWindow.isVisible { return }
+        Task { @MainActor [weak self] in
+            guard let self, self.isVisible,
+                  self.window?.isKeyWindow != true,
+                  self.detailWindow?.isKeyWindow != true else { return }
+            WindowLog.log("panel resigned key; dismissing")
+            self.hide()
+        }
+    }
+
+    // MARK: Detail
+
+    /// The pointer moving over a row, or leaving it (`frame` nil).
+    private func rowHover(_ module: PanelModule, frame: CGRect?) {
+        guard isVisible else { return }
+        guard let frame else {
+            if hoveredRow?.module == module { hoveredRow = nil }
+            scheduleSettle()
+            return
+        }
+        let pointer = NSEvent.mouseLocation
+        defer { previousPointer = pointer }
+        hoveredRow = (module, frame)
+
+        if layout?.detailModule == module {
+            settleTask?.cancel()
+            // The row moved under the pointer: the list scrolled or reflowed.
+            if detailRowFrame != frame {
+                detailRowFrame = frame
+                positionDetail()
+            }
+        } else if let previous = previousPointer, isHeadingToDetail(from: previous, to: pointer) {
+            // Crossing other rows on the way to the open detail. Each move that keeps
+            // heading there pushes the switch back; stopping short lets it happen.
+            scheduleSettle()
+        } else {
+            settle()
+        }
+    }
+
+    private func detailHover(_ hovering: Bool) {
+        isPointerInDetail = hovering
+        if hovering {
+            settleTask?.cancel()
+            // Coming back from the detail, the next row the pointer lands on is where
+            // it is going, not a row it is passing over.
+            previousPointer = nil
+        } else {
+            scheduleSettle()
+        }
+    }
+
+    private func scheduleSettle() {
+        settleTask?.cancel()
+        settleTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.detailGrace)
+            guard !Task.isCancelled else { return }
+            self?.settle()
+        }
+    }
+
+    /// Brings the detail in line with the pointer: over the detail it stays, over a row
+    /// it shows that row's module, and anywhere else it closes.
+    private func settle() {
+        settleTask?.cancel()
+        settleTask = nil
+        guard isVisible, !isPointerInDetail else { return }
+        if let row = hoveredRow {
+            showDetail(row.module, rowFrame: row.frame)
+        } else {
+            hideDetail()
+        }
+    }
+
+    /// Whether the move from `a` to `b` points into the open detail: `b` lies inside
+    /// the triangle between `a` and the detail's near edge. This is how menus let the
+    /// pointer cut diagonally across other items without each one taking over.
+    private func isHeadingToDetail(from a: NSPoint, to b: NSPoint) -> Bool {
+        guard a != b, let window, let detailWindow, detailWindow.isVisible else { return false }
+        let detail = detailWindow.frame
+        let edge = detail.midX < window.frame.midX ? detail.maxX : detail.minX
+        let top = NSPoint(x: edge, y: detail.maxY)
+        let bottom = NSPoint(x: edge, y: detail.minY)
+        func side(_ p: NSPoint, _ q: NSPoint) -> CGFloat {
+            (b.x - q.x) * (p.y - q.y) - (p.x - q.x) * (b.y - q.y)
+        }
+        let sides = [side(a, top), side(top, bottom), side(bottom, a)]
+        return !(sides.contains { $0 < 0 } && sides.contains { $0 > 0 })
+    }
+
+    private func showDetail(_ module: PanelModule, rowFrame: CGRect) {
+        guard let detailWindow, let layout else { return }
+        layout.detailModule = module
+        detailRowFrame = rowFrame
+        positionDetail()
+        if !detailWindow.isVisible { detailWindow.orderFrontRegardless() }
+    }
+
+    private func hideDetail() {
+        settleTask?.cancel()
+        settleTask = nil
+        isPointerInDetail = false
+        detailRowFrame = nil
+        layout?.detailModule = nil
+        guard let detailWindow, detailWindow.isVisible else { return }
+        isClosingDetail = true
+        detailWindow.orderOut(nil)
+        isClosingDetail = false
+    }
+
+    /// Beside the panel, level with the row it belongs to. On the left by preference,
+    /// since the panel hangs from the right-hand end of the menu bar; on the right
+    /// when the left has no room.
+    private func positionDetail() {
+        guard let window, let detailWindow, let row = detailRowFrame,
+              let visible = (window.screen ?? lastScreen ?? NSScreen.main)?.visibleFrame else { return }
+        detailWindow.layoutIfNeeded()
+        guard let fitting = detailWindow.contentView?.fittingSize, fitting.height > 0 else { return }
+
+        let margin = Design.Space.m
+        let gap = Design.Space.xs
+        let panel = window.frame
+        let height = ceil(min(fitting.height, visible.height - margin * 2))
+
+        var x = panel.minX - gap - fitting.width
+        if x < visible.minX + margin { x = panel.maxX + gap }
+        x = min(x, visible.maxX - fitting.width - margin)
+        // SwiftUI measures the row from the panel's top edge, and screen y runs upwards.
+        // The detail's own top padding goes back on so its header sits level with the row.
+        let rowTop = panel.maxY - row.minY + Design.Space.xs
+        let y = min(max(rowTop - height, visible.minY + margin), visible.maxY - height - margin)
+
+        let frame = NSRect(x: x.rounded(), y: y.rounded(), width: fitting.width, height: height)
+        guard frame != detailWindow.frame else { return }
+        detailWindow.setFrame(frame, display: true)
+    }
+
+    /// Like the panel, the detail is re-measured once on the next turn rather than on
+    /// every invalidation.
+    private func scheduleDetailResize() {
+        guard !hasPendingDetailResize else { return }
+        hasPendingDetailResize = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.hasPendingDetailResize = false
+            guard self.detailWindow?.isVisible == true else { return }
+            self.positionDetail()
+        }
     }
 
     // MARK: Dismissal
@@ -478,10 +672,25 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
         // Global monitors see only events destined for *other* apps, so a click inside
         // the panel never reaches this and cannot dismiss it.
+        //
+        // A click on the status item can, though: since macOS 27 the menu bar is drawn
+        // by the window server, and the item's mouse-down reaches this monitor too.
+        // Dismissing here let the item's own action, which runs on mouse-up, find the
+        // panel closed and reopen it, so the item could never close the panel. A plain
+        // click there belongs to the item's action, so it is left alone here; a right-
+        // or Control-click opens the item's menu, which should still close the panel.
         if let outside = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown],
-            handler: { [weak self] _ in
-                Task { @MainActor in self?.hide() }
+            handler: { [weak self] event in
+                let location = event.locationInWindow
+                let isPlainClick = event.type == .leftMouseDown
+                    && !event.modifierFlags.contains(.control)
+                Task { @MainActor in
+                    guard let self else { return }
+                    if isPlainClick, let anchor = self.lastAnchor, anchor.contains(location) { return }
+                    WindowLog.log("click outside the panel; dismissing")
+                    self.hide()
+                }
             }) {
             monitors.append(outside)
         }
@@ -508,8 +717,16 @@ public final class PanelController: NSObject, NSWindowDelegate {
     }
 }
 
-/// Borderless, non-activating panel with the vibrancy macOS uses for menu surfaces.
+/// Borderless, non-activating panel on a solid backdrop.
 final class PanelWindow: NSPanel {
+
+    /// The panel's backdrop: black in dark appearance, Apple's light grey in light.
+    ///
+    /// Solid rather than translucent glass: the wallpaper and the sheen showing through
+    /// made the panel hard to read.
+    static let backdropColor = NSColor(name: nil) { appearance in
+        appearance.isDark ? .black : NSColor(srgbRed: 0.961, green: 0.961, blue: 0.969, alpha: 1)
+    }
 
     var onCancel: (() -> Void)?
 
@@ -537,25 +754,22 @@ final class PanelWindow: NSPanel {
         isMovableByWindowBackground = false
         title = "AirStats Panel"
 
-        // `.hudWindow` rather than `.menu`: the panel is not a menu, and the menu
-        // material is nearly opaque — what is behind the panel should be visible
-        // through it. `.active` rather than following the window, because the panel is
-        // routinely looked at while another app is frontmost and a backdrop that goes
-        // flat the moment it opens defeats the point of having one.
-        let visualEffect = GlassBackdropView(material: .hudWindow,
-                                             cornerRadius: Design.Radius.panel,
-                                             state: .active)
+        let backdrop = PanelBackdropView()
+        backdrop.wantsLayer = true
+        backdrop.layer?.cornerRadius = Design.Radius.panel
+        backdrop.layer?.cornerCurve = .continuous
+        backdrop.layer?.masksToBounds = true
 
         contentView.translatesAutoresizingMaskIntoConstraints = false
-        visualEffect.addSubview(contentView)
+        backdrop.addSubview(contentView)
         NSLayoutConstraint.activate([
-            contentView.leadingAnchor.constraint(equalTo: visualEffect.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: visualEffect.trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: visualEffect.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: visualEffect.bottomAnchor),
+            contentView.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: backdrop.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
         ])
 
-        self.contentView = visualEffect
+        self.contentView = backdrop
     }
 
     /// Borderless windows are not key by default, which would break text fields
@@ -567,6 +781,17 @@ final class PanelWindow: NSPanel {
     /// The responder-chain half of Escape-to-dismiss, for when the key window is the
     /// panel but focus sits on a control that swallows the key event.
     override func cancelOperation(_ sender: Any?) { onCancel?() }
+}
+
+/// Paints `PanelWindow.backdropColor` into its layer. A layer holds a resolved colour,
+/// so it is set again in `updateLayer`, which AppKit calls with the view's appearance
+/// current whenever that appearance changes.
+private final class PanelBackdropView: NSView {
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.backgroundColor = PanelWindow.backdropColor.cgColor
+    }
 }
 
 // MARK: - Actions plumbed through the environment
