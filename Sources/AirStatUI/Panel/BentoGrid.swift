@@ -7,17 +7,19 @@ import AirStatKit
 ///
 /// One fixed composition rather than a flowing grid. A bento grid works when the big
 /// cards are the ones that matter most and the small ones fill in around them, which is
-/// a design decision, not something a layout algorithm makes:
+/// a design decision, not something a layout algorithm makes. Six columns by three rows
+/// puts the whole panel at 3:2, landscape, with the panel's two actions as two
+/// half-height cards in the last column in place of a footer:
 ///
-///     ┌───────────┬───────────┐
-///     │           │  Memory   │
-///     │    CPU    ├─────┬─────┤
-///     │           │ GPU │Disk │
-///     ├───────────┼─────┼─────┤
-///     │  Battery  │     │Proc │
-///     ├───────────┤Temp ├─────┤
-///     │  Network  │     │ Sys │
-///     └───────────┴─────┴─────┘
+///     ┌─────────┬─────────┬────┬────┐
+///     │         │ Memory  │GPU │    │
+///     │   CPU   ├─────────┼────┤Temp│
+///     │         │ Battery │Disk│    │
+///     ├─────────┼────┬────┴────┼────┤
+///     │ Network │Proc│ System  │ ⚙︎ │
+///     │         │    │         ├────┤
+///     │         │    │         │ ⏻  │
+///     └─────────┴────┴─────────┴────┘
 ///
 /// Each card follows Apple's: one object or one big number in the middle, set in the
 /// card's own colour, and a short caption under it, on plain white cards over light
@@ -30,14 +32,17 @@ struct BentoGrid: View {
     let settings: SettingsStore
     let layout: PanelLayoutState?
 
-    static let width: CGFloat = 460
     private static let inset: CGFloat = 12
     private static let gap: CGFloat = 10
-    /// One of four columns.
-    private static let unitWidth = (width - inset * 2 - gap * 3) / 4
-    private static let unitHeight: CGFloat = 100
+    /// One of six columns and one of three rows. A little taller than wide, which is
+    /// what brings six by three out at 3:2 overall: 644 by 428.
+    private static let unitWidth: CGFloat = 95
+    private static let unitHeight: CGFloat = 128
     private static let wide = unitWidth * 2 + gap
     private static let tall = unitHeight * 2 + gap
+    static let width = inset * 2 + unitWidth * 6 + gap * 5
+
+    @Environment(\.panelActions) private var actions
 
     private var formatter: MetricFormatter {
         MetricFormatter(settings: settings.settings.general)
@@ -47,15 +52,24 @@ struct BentoGrid: View {
         VStack(spacing: Self.gap) {
             HStack(alignment: .top, spacing: Self.gap) {
                 cpu
-                VStack(spacing: Self.gap) {
-                    memory
-                    HStack(spacing: Self.gap) { gpu; disk }
-                }
-            }
-            HStack(alignment: .top, spacing: Self.gap) {
-                VStack(spacing: Self.gap) { battery; network }
+                VStack(spacing: Self.gap) { memory; battery }
+                VStack(spacing: Self.gap) { gpu; disk }
                 thermal
-                VStack(spacing: Self.gap) { processes; system }
+            }
+            HStack(spacing: Self.gap) {
+                network
+                processes
+                system
+                VStack(spacing: Self.gap) {
+                    action("Settings", symbol: "gearshape.fill",
+                           colors: [Color(nsColor: .systemGray), Color(nsColor: .secondaryLabelColor)],
+                           perform: actions.openSettings)
+                        .keyboardShortcut(",", modifiers: .command)
+                    action("Quit", symbol: "power",
+                           colors: [Color(nsColor: .systemRed), Color(nsColor: .systemPink)],
+                           perform: actions.quit)
+                        .keyboardShortcut("q", modifiers: .command)
+                }
             }
         }
         .padding(Self.inset)
@@ -71,7 +85,7 @@ struct BentoGrid: View {
                     caption: system.map { "\($0.physicalCores)-core CPU" } ?? "CPU") {
             VStack(spacing: Design.Space.m) {
                 ChipGraphic(name: system?.chipName, fraction: busy ?? 0, load: palette(.cpu)[0])
-                    .frame(width: 112, height: 112)
+                    .frame(width: 136, height: 136)
                 bigNumber(.cpu, busy.map { formatter.percent($0) }, size: 30)
             }
         }
@@ -84,7 +98,7 @@ struct BentoGrid: View {
                     caption: memory.map { "Memory · \(formatter.memory($0.usedBytes)) used" } ?? "Memory") {
             MemoryGraphic(capacity: memory.map { Self.marketingCapacity($0.totalBytes) },
                           fraction: used ?? 0, load: palette(.memory)[0])
-                .frame(width: 176, height: 50)
+                .frame(width: 180, height: 56)
         }
     }
 
@@ -95,8 +109,17 @@ struct BentoGrid: View {
         return card(.gpu, width: Self.unitWidth, height: Self.unitHeight,
                     caption: load.map { "GPU · \(formatter.percent($0))" } ?? "GPU") {
             VStack(spacing: Design.Space.s) {
-                numberWithUnit(.gpu, cores.map { formatter.count($0) }, unit: "cores", size: 28)
-                LevelBar(fraction: load ?? 0, colors: palette(.gpu))
+                if let cores, cores > 0 {
+                    GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu))
+                } else {
+                    numberWithUnit(.gpu, nil, unit: "cores", size: 20)
+                }
+                // The three figures the driver publishes. macOS reports the GPU only as
+                // a whole, never core by core, so a bar per core would be invented.
+                GPUChannelBars(channels: [("Dev", load), ("Rend", device?.rendererUtilization),
+                                          ("Tile", device?.tilerUtilization)]
+                                   .compactMap { name, value in value.map { (name, $0) } },
+                               colors: palette(.gpu))
             }
         }
     }
@@ -167,7 +190,7 @@ struct BentoGrid: View {
             VStack(spacing: Design.Space.m) {
                 ThermometerGraphic(fraction: celsius.map { min(max(($0 - 30) / 70, 0), 1) } ?? 0,
                                    colors: palette(.thermal))
-                    .frame(width: 30, height: 112)
+                    .frame(width: 30, height: 150)
                 bigNumber(.thermal, celsius.map { formatter.temperature($0) } ?? thermal?.pressure.label,
                           size: celsius == nil ? 17 : 26)
             }
@@ -190,12 +213,38 @@ struct BentoGrid: View {
 
     private var system: some View {
         let system = engine.system.value
-        return card(.system, width: Self.unitWidth, height: Self.unitHeight, caption: "uptime") {
-            bigNumber(.system, system.map { formatter.uptime($0.uptime) }, size: 22)
+        return card(.system, width: Self.wide, height: Self.unitHeight,
+                    caption: system.map { system in
+                        // "MacBook Pro (16-inch, 2021)" is the family and then its year;
+                        // the family is what a caption this short has room for.
+                        let model = system.modelName.components(separatedBy: " (").first ?? system.modelName
+                        return "\(model) · \(system.osName) \(system.osVersion)"
+                    } ?? "System") {
+            numberWithUnit(.system, system.map { formatter.uptime($0.uptime) }, unit: "uptime", size: 28)
         }
     }
 
     // MARK: Pieces
+
+    /// One of the panel's two actions as a half-height card of its own: a symbol in its
+    /// gradient beside its name, the whole card the button. Half height, because they
+    /// are furniture and should not weigh as much as a reading.
+    private func action(_ title: String, symbol: String, colors: [Color],
+                        perform: @escaping @MainActor () -> Void) -> some View {
+        Button(action: perform) {
+            HStack(spacing: Design.Space.xs) {
+                Image(systemName: symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(gradient(colors))
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Design.Palette.secondaryText)
+            }
+            .frame(width: Self.unitWidth, height: (Self.unitHeight - Self.gap) / 2)
+        }
+        .buttonStyle(BentoActionStyle())
+        .accessibilityLabel(title)
+    }
 
     private func card<Content: View>(_ module: PanelModule, width: CGFloat, height: CGFloat,
                                      caption: String,
@@ -346,6 +395,30 @@ private struct BentoCard<Content: View>: View {
     }
 }
 
+/// A card that is a button: the card's own surface, a step darker under the pointer and
+/// another while pressed, the way a system button answers.
+private struct BentoActionStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        BentoActionBody(configuration: configuration)
+    }
+}
+
+private struct BentoActionBody: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var isHovering = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        configuration.label
+            .background(shape.fill(BentoCard<EmptyView>.surface))
+            .overlay(shape.fill(Design.Palette.primaryText
+                .opacity(configuration.isPressed ? 0.12 : isHovering ? 0.06 : 0)))
+            .contentShape(shape)
+            .onHover { isHovering = $0 }
+            .animation(Design.Motion.respectingAccessibility(Design.Motion.hover), value: isHovering)
+    }
+}
+
 // MARK: - Graphics
 
 /// An Apple silicon package drawn the way Apple shows it: a square, sharp-cornered die
@@ -434,6 +507,99 @@ private struct ChipGraphic: View {
         case "ultra": return [Color(red: 0.45, green: 0.62, blue: 1.0), Color(red: 0.62, green: 0.42, blue: 1.0)]
         default: return [Color(white: 0.97), Color(white: 0.66)]
         }
+    }
+}
+
+/// The GPU's load as the driver reports it: overall, the renderer and the tiler, each a
+/// slim bar filling from the left in the card's gradient over a pale track.
+private struct GPUChannelBars: View {
+    let channels: [(name: String, value: Double)]
+    let colors: [Color]
+
+    var body: some View {
+        let capsule = Capsule(style: .continuous)
+        VStack(spacing: 4) {
+            ForEach(Array(channels.enumerated()), id: \.offset) { _, channel in
+                HStack(spacing: Design.Space.xs) {
+                    Text(channel.name)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Design.Palette.secondaryText)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .frame(width: 26, alignment: .leading)
+                    ZStack {
+                        capsule.fill(colors[0].opacity(0.18))
+                        FillFromLeading(fraction: channel.value)
+                            .fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
+                            .clipShape(capsule)
+                    }
+                    .frame(height: 6)
+                }
+                .animation(Design.Motion.respectingAccessibility(Design.Motion.value),
+                           value: channel.value)
+            }
+        }
+    }
+}
+
+/// The GPU drawn as its cores: a dark die with one cell per core, eight across, so a
+/// 32-core GPU reads as the 4 by 8 block it is.
+///
+/// Cells switch on one by one as the load rises, in reading order: at 18% of 32 cores,
+/// the first six. macOS reports the GPU only as a whole, so the cells are lit in order,
+/// which reads as a level, rather than scattered, which would claim to know which cores
+/// are busy.
+private struct GPUDie: View {
+    let cores: Int
+    let load: Double
+    let colors: [Color]
+
+    private static let cell: CGFloat = 6.5
+    private static let gap: CGFloat = 2
+    private static let padding: CGFloat = 4
+
+    var body: some View {
+        let columns = cores % 8 == 0 || cores > 8 ? min(cores, 8) : cores
+        let rows = Int((Double(cores) / Double(columns)).rounded(.up))
+        let size = CGSize(width: Self.cell * CGFloat(columns) + Self.gap * CGFloat(columns - 1),
+                          height: Self.cell * CGFloat(rows) + Self.gap * CGFloat(rows - 1))
+        let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
+        let die = RoundedRectangle(cornerRadius: 4, style: .continuous)
+        ZStack {
+            die.fill(LinearGradient(colors: [Color(white: 0.17), Color(white: 0.07)],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing))
+            die.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            ZStack {
+                CoreCells(columns: columns, cells: lit..<cores, cell: Self.cell, gap: Self.gap)
+                    .fill(Color.white.opacity(0.1))
+                LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .mask(CoreCells(columns: columns, cells: 0..<lit, cell: Self.cell, gap: Self.gap))
+                    .shadow(color: colors[0].opacity(0.7), radius: 2.5)
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(width: size.width + Self.padding * 2, height: size.height + Self.padding * 2)
+        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: lit)
+    }
+}
+
+/// Rounded cells of a core grid laid out row by row: the cores in `cells`.
+private struct CoreCells: Shape {
+    let columns: Int
+    let cells: Range<Int>
+    let cell: CGFloat
+    let gap: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for index in cells {
+            let x = rect.minX + CGFloat(index % columns) * (cell + gap)
+            let y = rect.minY + CGFloat(index / columns) * (cell + gap)
+            path.addRoundedRect(in: CGRect(x: x, y: y, width: cell, height: cell),
+                                cornerSize: CGSize(width: cell * 0.25, height: cell * 0.25),
+                                style: .continuous)
+        }
+        return path
     }
 }
 

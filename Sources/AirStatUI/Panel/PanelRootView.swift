@@ -98,8 +98,11 @@ public struct PanelRootView: View {
             // case that it reaches the ceiling below.
             .scrollIndicators(.never)
             .defaultScrollAnchor(.top)
-            PanelSeparator()
-            PanelFooterView()
+            // Bento carries Settings and Quit as cards of its own.
+            if style != .bento {
+                PanelSeparator()
+                PanelFooterView()
+            }
         }
         // The list takes whatever height the window has, and the rows sit at its top.
         //
