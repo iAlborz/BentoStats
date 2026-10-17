@@ -150,9 +150,10 @@ struct BentoGrid: View {
             "\(cores)-core GPU" + (load.map { " · \(formatter.percent($0))" } ?? "")
         }
         return card(.gpu, width: Self.span(2), height: Self.span(2), caption: caption ?? "GPU") {
-            VStack(spacing: Design.Space.l) {
+            VStack(spacing: Design.Space.m) {
                 if let cores, cores > 0 {
-                    GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu, onCard: false), width: 192)
+                    GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu, onCard: false),
+                           size: CGSize(width: 196, height: 98))
                 } else {
                     bigNumber(.gpu, nil, size: 24)
                 }
@@ -699,7 +700,7 @@ private struct GPUMeters: View {
     let formatter: MetricFormatter
 
     var body: some View {
-        VStack(spacing: Design.Space.s) {
+        VStack(spacing: 5) {
             ForEach(Array(channels.enumerated()), id: \.offset) { _, channel in
                 VStack(spacing: 3) {
                     HStack {
@@ -757,49 +758,98 @@ private struct Ticks: Shape {
     }
 }
 
-/// The GPU as a chip of its own, in the CPU chip's finish: the same sharp-cornered die
-/// with its sheen and bevel, and one block per core, eight across, 4pt from the edges
-/// and from each other, so a 32-core GPU reads as the 4 by 8 block it is.
+/// The GPU as a packaged chip: the CPU chip's face, gold legs standing off all four
+/// edges, and its cores laid out as on the die, in four clusters with a wider channel
+/// between them, so a 32-core GPU reads as four blocks of eight.
 ///
-/// Blocks switch on one by one as the load rises, in reading order: at 18% of 32 cores,
-/// the first six. macOS reports the GPU only as a whole, so the blocks are lit in
-/// order, which reads as a level, rather than scattered, which would claim to know
-/// which cores are busy.
+/// Blocks switch on one by one as the load rises, in reading order across the whole
+/// grid: at 18% of 32 cores, the first six. macOS reports the GPU only as a whole, so
+/// the blocks are lit in order, which reads as a level, rather than scattered, which
+/// would claim to know which cores are busy.
 private struct GPUDie: View {
     let cores: Int
     let load: Double
     let colors: [Color]
-    /// The die's width; the blocks, and so the height, follow from it.
-    let width: CGFloat
+    /// The whole chip, legs included; the blocks follow from it.
+    let size: CGSize
 
-    private static let gap: CGFloat = 4
+    /// How far the legs stand off the package.
+    private static let leg: CGFloat = 4
+    /// From the package's edge to the blocks.
+    private static let inset: CGFloat = 6
+    private static let gap: CGFloat = 3
+    /// Between the clusters.
+    private static let channel: CGFloat = 8
 
     var body: some View {
         let columns = cores % 8 == 0 || cores > 8 ? min(cores, 8) : cores
         let rows = Int((Double(cores) / Double(columns)).rounded(.up))
-        let block = (width - Self.gap * CGFloat(columns + 1)) / CGFloat(columns)
-        let height = block * CGFloat(rows) + Self.gap * CGFloat(rows + 1)
+        // Split down the middle each way where the grid divides evenly.
+        let columnSplit = columns >= 4 && columns % 2 == 0 ? columns / 2 : nil
+        let rowSplit = rows >= 2 && rows % 2 == 0 ? rows / 2 : nil
+        let package = CGSize(width: size.width - Self.leg * 2, height: size.height - Self.leg * 2)
+        let across = Self.gap * CGFloat(columns - 1) + (columnSplit == nil ? 0 : Self.channel - Self.gap)
+        let down = Self.gap * CGFloat(rows - 1) + (rowSplit == nil ? 0 : Self.channel - Self.gap)
+        let block = CGSize(width: (package.width - Self.inset * 2 - across) / CGFloat(columns),
+                           height: (package.height - Self.inset * 2 - down) / CGFloat(rows))
         let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
         ZStack {
+            ChipLegs(leg: Self.leg)
+                .fill(LinearGradient(colors: [Color(red: 0.93, green: 0.78, blue: 0.4),
+                                              Color(red: 0.72, green: 0.55, blue: 0.22)],
+                                     startPoint: .top, endPoint: .bottom))
             ChipFace()
-            VStack(spacing: Self.gap) {
+                .frame(width: package.width, height: package.height)
+            VStack(spacing: 0) {
                 ForEach(0..<rows, id: \.self) { row in
-                    HStack(spacing: Self.gap) {
+                    if row > 0 {
+                        Color.clear.frame(height: row == rowSplit ? Self.channel : Self.gap)
+                    }
+                    HStack(spacing: 0) {
                         ForEach(0..<columns, id: \.self) { column in
+                            if column > 0 {
+                                Color.clear.frame(width: column == columnSplit ? Self.channel : Self.gap)
+                            }
                             let index = row * columns + column
                             if index < cores {
                                 GPUBlock(isLit: index < lit, colors: colors)
-                                    .frame(width: block, height: block)
+                                    .frame(width: block.width, height: block.height)
                             } else {
-                                Color.clear.frame(width: block, height: block)
+                                Color.clear.frame(width: block.width, height: block.height)
                             }
                         }
                     }
                 }
             }
         }
-        .frame(width: width, height: height)
+        .frame(width: size.width, height: size.height)
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: lit)
+    }
+}
+
+/// A packaged chip's legs: short pins standing off all four edges of a package inset
+/// `leg` into the rect, each running a point under the package so none floats.
+private struct ChipLegs: Shape {
+    let leg: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let pitch: CGFloat = 8
+        let width: CGFloat = 2.5
+        let margin: CGFloat = 8
+        var x = rect.minX + leg + margin
+        while x <= rect.maxX - leg - margin {
+            path.addRect(CGRect(x: x - width / 2, y: rect.minY, width: width, height: leg + 1))
+            path.addRect(CGRect(x: x - width / 2, y: rect.maxY - leg - 1, width: width, height: leg + 1))
+            x += pitch
+        }
+        var y = rect.minY + leg + margin
+        while y <= rect.maxY - leg - margin {
+            path.addRect(CGRect(x: rect.minX, y: y - width / 2, width: leg + 1, height: width))
+            path.addRect(CGRect(x: rect.maxX - leg - 1, y: y - width / 2, width: leg + 1, height: width))
+            y += pitch
+        }
+        return path
     }
 }
 
@@ -825,16 +875,36 @@ private struct GPUBlock: View {
 /// The face Apple draws its chips with, shared by the CPU and the GPU: a square,
 /// sharp-cornered die in near-black, a faint diagonal sheen across its top-left, and a
 /// bright bevel along its edge.
+///
+/// A couple of shades lighter in dark appearance, with a brighter bevel all round: the
+/// near-black that stands out on a white card all but disappears into a dark one.
 private struct ChipFace: View {
+    private static func shade(light: CGFloat, dark: CGFloat, alpha: CGFloat = 1) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            NSColor(white: appearance.isDark ? dark : light, alpha: alpha)
+        })
+    }
+
+    private static let top = shade(light: 0.17, dark: 0.27)
+    private static let bottom = shade(light: 0.07, dark: 0.15)
+    private static let bevelLight = Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(white: 1, alpha: appearance.isDark ? 0.5 : 0.32)
+    })
+    private static let bevelShadow = Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(white: 1, alpha: appearance.isDark ? 0.16 : 0.04)
+    })
+    private static let bevelEnd = Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(white: 1, alpha: appearance.isDark ? 0.3 : 0.14)
+    })
+
     var body: some View {
         let face = Rectangle()
         ZStack {
-            face.fill(LinearGradient(colors: [Color(white: 0.17), Color(white: 0.07)],
+            face.fill(LinearGradient(colors: [Self.top, Self.bottom],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
             face.fill(LinearGradient(colors: [.white.opacity(0.07), .clear],
                                      startPoint: .topLeading, endPoint: .center))
-            face.strokeBorder(LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.04),
-                                                      .white.opacity(0.14)],
+            face.strokeBorder(LinearGradient(colors: [Self.bevelLight, Self.bevelShadow, Self.bevelEnd],
                                              startPoint: .topLeading, endPoint: .bottomTrailing),
                               lineWidth: 1)
         }
