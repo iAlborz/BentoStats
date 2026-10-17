@@ -12,14 +12,14 @@ import AirStatKit
 /// half-height cards in the last column in place of a footer:
 ///
 ///     ┌─────────┬─────────┬────┬────┐
-///     │         │ Memory  │GPU │    │
+///     │         │ Memory  │Batt│    │
 ///     │   CPU   ├─────────┼────┤Temp│
-///     │         │ Battery │Disk│    │
-///     ├─────────┼────┬────┴────┼────┤
-///     │ Network │Proc│ System  │ ⚙︎ │
-///     │         │    │         ├────┤
-///     │         │    │         │ ⏻  │
-///     └─────────┴────┴─────────┴────┘
+///     │         │   GPU   │Proc│    │
+///     ├─────────┼─────────┼────┼────┤
+///     │ Network │   SSD   │Up- │ ⚙︎ │
+///     │         │         │time├────┤
+///     │         │         │    │ ⏻  │
+///     └─────────┴─────────┴────┴────┘
 ///
 /// Each card follows Apple's: one object or one big number in the middle, set in the
 /// card's own colour, and a short caption under it, on plain white cards over light
@@ -52,13 +52,13 @@ struct BentoGrid: View {
         VStack(spacing: Self.gap) {
             HStack(alignment: .top, spacing: Self.gap) {
                 cpu
-                VStack(spacing: Self.gap) { memory; battery }
-                VStack(spacing: Self.gap) { gpu; disk }
+                VStack(spacing: Self.gap) { memory; gpu }
+                VStack(spacing: Self.gap) { battery; processes }
                 thermal
             }
             HStack(spacing: Self.gap) {
                 network
-                processes
+                disk
                 system
                 VStack(spacing: Self.gap) {
                     action("Settings", symbol: "gearshape.fill",
@@ -100,7 +100,7 @@ struct BentoGrid: View {
                 ChipGraphic(name: system?.chipName,
                             performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
                             efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
-                            performanceColors: palette(.cpu),
+                            performanceColors: palette(.cpu, onCard: false),
                             efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
                     .frame(width: 150, height: 150)
                 bigNumber(.cpu, busy.map { formatter.percent($0) }, size: 28)
@@ -114,7 +114,7 @@ struct BentoGrid: View {
         return card(.memory, width: Self.wide, height: Self.unitHeight,
                     caption: memory.map { "Memory · \(formatter.memory($0.usedBytes)) used" } ?? "Memory") {
             MemoryGraphic(capacity: memory.map { Self.marketingCapacity($0.totalBytes) },
-                          fraction: used ?? 0, load: palette(.memory)[0])
+                          fraction: used ?? 0, load: palette(.memory, onCard: false)[0])
                 .frame(width: 180, height: 56)
         }
     }
@@ -123,60 +123,72 @@ struct BentoGrid: View {
         let device = engine.gpu.value?.primary
         let cores = device?.coreCount ?? engine.system.value?.gpuCoreCount
         let load = device?.utilization
-        return card(.gpu, width: Self.unitWidth, height: Self.unitHeight,
-                    caption: load.map { "GPU · \(formatter.percent($0))" } ?? "GPU") {
-            VStack(spacing: Design.Space.s) {
+        return card(.gpu, width: Self.wide, height: Self.unitHeight,
+                    caption: cores.map { "\($0)-core GPU" } ?? "GPU") {
+            HStack(spacing: Design.Space.l) {
                 if let cores, cores > 0 {
-                    GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu))
+                    GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu, onCard: false), cell: 8.5)
                 } else {
-                    numberWithUnit(.gpu, nil, unit: "cores", size: 20)
+                    bigNumber(.gpu, nil, size: 24)
                 }
                 // The three figures the driver publishes. macOS reports the GPU only as
-                // a whole, never core by core, so a bar per core would be invented.
-                GPUChannelBars(channels: [("Dev", load), ("Rend", device?.rendererUtilization),
-                                          ("Tile", device?.tilerUtilization)]
-                                   .compactMap { name, value in value.map { (name, $0) } },
-                               colors: palette(.gpu))
+                // a whole, never core by core, so a meter per core would be invented.
+                GPUMeters(channels: [("Device", load), ("Renderer", device?.rendererUtilization),
+                                     ("Tiler", device?.tilerUtilization)]
+                              .compactMap { name, value in value.map { (name, $0) } },
+                          colors: palette(.gpu), formatter: formatter)
             }
         }
     }
 
     private var disk: some View {
-        let root = engine.disk.value?.rootVolume
+        let disk = engine.disk.value
+        let root = disk?.rootVolume
         // The number and its unit are set apart, as Apple sets "1TB", so the number can
         // be large without the unit crowding it.
         let parts = root.map { formatter.storage($0.availableBytes).split(separator: " ") }
-        return card(.disk, width: Self.unitWidth, height: Self.unitHeight, caption: "free") {
+        return card(.disk, width: Self.wide, height: Self.unitHeight,
+                    caption: root.map { "\(formatter.storage($0.totalBytes)) SSD" } ?? "SSD") {
             VStack(spacing: Design.Space.s) {
-                numberWithUnit(.disk, parts?.first.map(String.init),
-                               unit: parts.flatMap { $0.count > 1 ? String($0[1]) : nil } ?? "",
-                               size: 28)
-                // How full the disk is, the way Finder and System Settings draw storage,
-                // from the same available space as the number above it so the two agree.
-                LevelBar(fraction: root.map { $0.totalBytes > 0
-                            ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 } ?? 0,
-                         colors: palette(.disk))
+                // How full the disk is, from the same available space as the number under
+                // it so the two agree, the way Finder and System Settings count it.
+                SSDGraphic(fraction: root.map { $0.totalBytes > 0
+                               ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 } ?? 0,
+                           colors: palette(.disk, onCard: false))
+                    .frame(width: 176, height: 44)
+                HStack(alignment: .center) {
+                    numberWithUnit(.disk, parts?.first.map(String.init),
+                                   unit: (parts.flatMap { $0.count > 1 ? String($0[1]) : nil } ?? "") + " free",
+                                   size: 24)
+                    Spacer(minLength: Design.Space.s)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        diskRate("Read", disk?.readBytesPerSecond)
+                        diskRate("Write", disk?.writeBytesPerSecond)
+                    }
+                }
+                .padding(.horizontal, Design.Space.xs)
             }
         }
     }
 
     private var battery: some View {
         let power = engine.power.value
-        return card(.battery, width: Self.wide, height: Self.unitHeight,
+        return card(.battery, width: Self.unitWidth, height: Self.unitHeight,
                     caption: power.map(batteryCaption) ?? "Battery") {
-            HStack(spacing: Design.Space.l) {
+            VStack(spacing: Design.Space.s) {
                 if let power, !power.hasBattery {
                     Image(systemName: "powerplug.fill")
-                        .font(.system(size: 30, weight: .semibold))
+                        .font(.system(size: 26, weight: .semibold))
                         .foregroundStyle(gradient(.battery))
-                    bigNumber(.battery, "AC", size: 28)
+                    bigNumber(.battery, "AC", size: 22)
                 } else {
                     let fraction = (power?.percentage ?? 0) / 100
                     let isLow = power != nil && fraction <= 0.2 && power?.isCharging == false
                     BatteryGraphic(fraction: fraction, isCharging: power?.isCharging ?? false,
-                                   charge: isLow ? Color(nsColor: .systemRed) : palette(.battery)[0])
-                        .frame(width: 86, height: 40)
-                    bigNumber(.battery, power?.percentage.map { formatter.percentValue($0) }, size: 30,
+                                   charge: isLow ? Color(nsColor: .systemRed) : palette(.battery)[0],
+                                   scale: 0.7)
+                        .frame(width: 62, height: 28)
+                    bigNumber(.battery, power?.percentage.map { formatter.percentValue($0) }, size: 24,
                               colors: isLow ? [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)] : nil)
                 }
             }
@@ -187,13 +199,19 @@ struct BentoGrid: View {
         let network = engine.network.value
         return card(.network, width: Self.wide, height: Self.unitHeight,
                     caption: network.map { $0.wifi?.ssid ?? $0.connectionType.label } ?? "Network") {
-            // Upload over download, in Activity Monitor's colours for the two directions:
-            // red going out, blue coming in.
-            VStack(alignment: .leading, spacing: 0) {
-                rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
-                     colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)])
-                rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
-                     colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)])
+            HStack(spacing: Design.Space.l) {
+                // Wi-Fi when that is the connection, the generic network glyph otherwise.
+                Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundStyle(gradient(.network))
+                // Upload over download, in Activity Monitor's colours for the two
+                // directions: red going out, blue coming in.
+                VStack(alignment: .leading, spacing: 0) {
+                    rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
+                         colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)])
+                    rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
+                         colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)])
+                }
             }
         }
     }
@@ -230,14 +248,8 @@ struct BentoGrid: View {
 
     private var system: some View {
         let system = engine.system.value
-        return card(.system, width: Self.wide, height: Self.unitHeight,
-                    caption: system.map { system in
-                        // "MacBook Pro (16-inch, 2021)" is the family and then its year;
-                        // the family is what a caption this short has room for.
-                        let model = system.modelName.components(separatedBy: " (").first ?? system.modelName
-                        return "\(model) · \(system.osName) \(system.osVersion)"
-                    } ?? "System") {
-            numberWithUnit(.system, system.map { formatter.uptime($0.uptime) }, unit: "uptime", size: 28)
+        return card(.system, width: Self.unitWidth, height: Self.unitHeight, caption: "uptime") {
+            bigNumber(.system, system.map { formatter.uptime($0.uptime) }, size: 22)
         }
     }
 
@@ -302,6 +314,18 @@ struct BentoGrid: View {
         }
     }
 
+    private func diskRate(_ label: String, _ bytesPerSecond: Double?) -> some View {
+        HStack(spacing: Design.Space.xs) {
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(Design.Palette.secondaryText)
+            Text(bytesPerSecond.map { formatter.diskRate($0) } ?? MetricFormatter.unavailable)
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                .foregroundStyle(Design.Palette.primaryText)
+                .contentTransition(.numericText())
+        }
+    }
+
     private func rate(_ symbol: String, _ value: String?, colors: [Color]) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
             Image(systemName: symbol)
@@ -318,7 +342,7 @@ struct BentoGrid: View {
             return power.timeToFull.map { "Full in \(formatter.duration($0))" } ?? "Charging"
         }
         if power.isFullyCharged { return "Fully charged" }
-        return power.timeToEmpty.map { "\(formatter.duration($0)) remaining" } ?? "On battery"
+        return power.timeToEmpty.map { "\(formatter.duration($0)) left" } ?? "On battery"
     }
 
     private func gradient(_ module: PanelModule) -> LinearGradient {
@@ -332,9 +356,16 @@ struct BentoGrid: View {
     /// Two colours per card, drawn as a gradient the way Apple sets its headline words,
     /// and chosen so the nine cards read as nine different things at a glance. A colour
     /// the user has set for the metric in Appearance wins over these.
-    private func palette(_ module: PanelModule) -> [Color] {
+    ///
+    /// `onCard` is for colour drawn straight on the card rather than on one of the dark
+    /// objects (the chip, the memory module, the GPU die, the SSD). There, a colour the
+    /// user picked that is too pale to read on a white card gives way to the label
+    /// colour in light appearance: white is a fine choice for the dark panel and an
+    /// invisible number on a light one.
+    private func palette(_ module: PanelModule, onCard: Bool = true) -> [Color] {
         if let custom = settings.settings.theme.color(for: module.requiredSource) {
-            return [Color(themeColor: custom), Color(themeColor: custom)]
+            let color = onCard ? Self.legibleOnCard(custom) : Color(themeColor: custom)
+            return [color, color]
         }
         let pair: (NSColor, NSColor)
         switch module {
@@ -349,6 +380,14 @@ struct BentoGrid: View {
         case .system: pair = (.systemGray, .secondaryLabelColor)
         }
         return [Color(nsColor: pair.0), Color(nsColor: pair.1)]
+    }
+
+    private static func legibleOnCard(_ theme: ThemeColor) -> Color {
+        let color = NSColor(srgbRed: theme.red, green: theme.green, blue: theme.blue, alpha: 1)
+        let luminance = 0.2126 * theme.red + 0.7152 * theme.green + 0.0722 * theme.blue
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            !appearance.isDark && luminance > 0.75 ? .labelColor : color
+        })
     }
 
     /// Installed memory the way it is sold: 34,359,738,368 bytes is "32 GB", not the
@@ -547,8 +586,8 @@ private struct ChipCores: View {
     let performanceColors: [Color]
     let efficiencyColors: [Color]
 
-    private static let gap: CGFloat = 3.5
-    private static let clusterGap: CGFloat = 7
+    private static let gap: CGFloat = 1.75
+    private static let clusterGap: CGFloat = 3.5
     private static let efficiencyWidth: CGFloat = 0.55
 
     var body: some View {
@@ -597,12 +636,13 @@ private struct ChipCores: View {
 }
 
 /// One core: a dark block with a hairline edge, filled from the bottom to its load.
+/// Nearly square-cornered, as die diagrams draw their blocks.
 private struct CoreBlock: View {
     let fraction: Double
     let colors: [Color]
 
     var body: some View {
-        let block = RoundedRectangle(cornerRadius: 3, style: .continuous)
+        let block = RoundedRectangle(cornerRadius: 1, style: .continuous)
         ZStack {
             block.fill(Color.white.opacity(0.07))
             FillFromBottom(fraction: fraction)
@@ -614,35 +654,68 @@ private struct CoreBlock: View {
     }
 }
 
-/// The GPU's load as the driver reports it: overall, the renderer and the tiler, each a
-/// slim bar filling from the left in the card's gradient over a pale track.
-private struct GPUChannelBars: View {
+/// The GPU's load as the driver reports it, each figure by its full name with its
+/// percentage, over a segmented meter: a row of thin vertical ticks that light from the
+/// left, the way a hardware level meter reads.
+private struct GPUMeters: View {
     let channels: [(name: String, value: Double)]
     let colors: [Color]
+    let formatter: MetricFormatter
 
     var body: some View {
-        let capsule = Capsule(style: .continuous)
-        VStack(spacing: 4) {
+        VStack(spacing: Design.Space.s) {
             ForEach(Array(channels.enumerated()), id: \.offset) { _, channel in
-                HStack(spacing: Design.Space.xs) {
-                    Text(channel.name)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Design.Palette.secondaryText)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .frame(width: 26, alignment: .leading)
-                    ZStack {
-                        capsule.fill(colors[0].opacity(0.18))
-                        FillFromLeading(fraction: channel.value)
-                            .fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
-                            .clipShape(capsule)
+                VStack(spacing: 3) {
+                    HStack {
+                        Text(channel.name)
+                        Spacer(minLength: Design.Space.xs)
+                        Text(formatter.percent(channel.value)).monospacedDigit()
                     }
-                    .frame(height: 6)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(Design.Palette.secondaryText)
+                    TickMeter(fraction: channel.value, colors: colors)
+                        .frame(height: 7)
                 }
-                .animation(Design.Motion.respectingAccessibility(Design.Motion.value),
-                           value: channel.value)
             }
         }
+    }
+}
+
+/// A level drawn as a row of thin vertical ticks: the lit ones in the gradient, the rest
+/// a pale wash of it.
+private struct TickMeter: View {
+    let fraction: Double
+    let colors: [Color]
+
+    private static let count = 24
+
+    var body: some View {
+        let lit = Int((min(max(fraction, 0), 1) * Double(Self.count)).rounded())
+        ZStack {
+            Ticks(count: Self.count, range: lit..<Self.count).fill(colors[0].opacity(0.18))
+            LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing)
+                .mask(Ticks(count: Self.count, range: 0..<lit))
+        }
+        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: lit)
+    }
+}
+
+/// `count` equal vertical ticks across the rect with gaps between them, keeping those
+/// whose index falls in `range`.
+private struct Ticks: Shape {
+    let count: Int
+    let range: Range<Int>
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let gap: CGFloat = 1.5
+        let width = (rect.width - gap * CGFloat(count - 1)) / CGFloat(count)
+        for index in range {
+            let x = rect.minX + CGFloat(index) * (width + gap)
+            path.addRoundedRect(in: CGRect(x: x, y: rect.minY, width: width, height: rect.height),
+                                cornerSize: CGSize(width: width / 2, height: width / 2))
+        }
+        return path
     }
 }
 
@@ -657,16 +730,16 @@ private struct GPUDie: View {
     let cores: Int
     let load: Double
     let colors: [Color]
+    var cell: CGFloat = 6.5
 
-    private static let cell: CGFloat = 6.5
     private static let gap: CGFloat = 2
     private static let padding: CGFloat = 4
 
     var body: some View {
         let columns = cores % 8 == 0 || cores > 8 ? min(cores, 8) : cores
         let rows = Int((Double(cores) / Double(columns)).rounded(.up))
-        let size = CGSize(width: Self.cell * CGFloat(columns) + Self.gap * CGFloat(columns - 1),
-                          height: Self.cell * CGFloat(rows) + Self.gap * CGFloat(rows - 1))
+        let size = CGSize(width: cell * CGFloat(columns) + Self.gap * CGFloat(columns - 1),
+                          height: cell * CGFloat(rows) + Self.gap * CGFloat(rows - 1))
         let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
         let die = RoundedRectangle(cornerRadius: 4, style: .continuous)
         ZStack {
@@ -674,10 +747,10 @@ private struct GPUDie: View {
                                     startPoint: .topLeading, endPoint: .bottomTrailing))
             die.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
             ZStack {
-                CoreCells(columns: columns, cells: lit..<cores, cell: Self.cell, gap: Self.gap)
+                CoreCells(columns: columns, cells: lit..<cores, cell: cell, gap: Self.gap)
                     .fill(Color.white.opacity(0.1))
                 LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .mask(CoreCells(columns: columns, cells: 0..<lit, cell: Self.cell, gap: Self.gap))
+                    .mask(CoreCells(columns: columns, cells: 0..<lit, cell: cell, gap: Self.gap))
                     .shadow(color: colors[0].opacity(0.7), radius: 2.5)
             }
             .frame(width: size.width, height: size.height)
@@ -725,20 +798,18 @@ private struct MemoryGraphic: View {
                                          startPoint: .leading, endPoint: .trailing))
                     .clipShape(board)
                 LevelEdge(fraction: fraction, axis: .horizontal).fill(load).clipShape(board)
-                // The packages on the board, faint enough to be texture rather than
-                // boxes the capacity sits in.
-                HStack(spacing: 6) {
-                    ForEach(0..<4, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: 1.5).fill(Color.white.opacity(0.05))
-                    }
+                // The memory packages, eight across as on a module.
+                HStack(spacing: 4) {
+                    ForEach(0..<8, id: \.self) { _ in BoardPackage() }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
                 board.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                 Text(capacity ?? MetricFormatter.unavailable)
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(LinearGradient(colors: [Color(white: 0.98), Color(white: 0.72)],
                                                     startPoint: .top, endPoint: .bottom))
+                    .shadow(color: .black.opacity(0.55), radius: 2)
             }
             MemoryContacts()
                 .fill(LinearGradient(colors: [Color(red: 0.93, green: 0.78, blue: 0.4),
@@ -750,57 +821,119 @@ private struct MemoryGraphic: View {
     }
 }
 
+/// An M.2 SSD: a long dark board with the edge connector's gold pins down its left end
+/// (broken by the key notch), the controller beside them, three flash packages along
+/// the rest, and the half-round cut for its screw at the far end.
+///
+/// The whole board is the meter, as the memory module is: it fills from the left with
+/// how full the disk is, and the controller and flash packages sit on top of the fill,
+/// so it still reads as a drive.
+private struct SSDGraphic: View {
+    let fraction: Double
+    let colors: [Color]
+
+    var body: some View {
+        let board = RoundedRectangle(cornerRadius: 3, style: .continuous)
+        ZStack {
+            board.fill(LinearGradient(colors: [Color(white: 0.19), Color(white: 0.09)],
+                                      startPoint: .top, endPoint: .bottom))
+            FillFromLeading(fraction: fraction)
+                .fill(LinearGradient(colors: [colors[0].opacity(0.65), colors[colors.count - 1].opacity(0.25)],
+                                     startPoint: .leading, endPoint: .trailing))
+                .clipShape(board)
+            LevelEdge(fraction: fraction, axis: .horizontal).fill(colors[0]).clipShape(board)
+            board.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            HStack(spacing: 5) {
+                SSDPins()
+                    .fill(LinearGradient(colors: [Color(red: 0.93, green: 0.78, blue: 0.4),
+                                                  Color(red: 0.72, green: 0.55, blue: 0.22)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .frame(width: 7)
+                BoardPackage().frame(width: 22, height: 22)
+                ForEach(0..<3, id: \.self) { _ in
+                    BoardPackage().frame(height: 30)
+                }
+            }
+            .padding(.leading, 2)
+            .padding(.trailing, 12)
+            .padding(.vertical, 4)
+            // The screw's half-round cut, in the card's own colour so it reads as a
+            // notch out of the board.
+            HStack {
+                Spacer()
+                Circle().fill(BentoCard<EmptyView>.surface).frame(width: 10, height: 10)
+                    .offset(x: 5)
+            }
+        }
+        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
+    }
+}
+
+/// A chip package on a board: a dark translucent block with a light hairline edge.
+///
+/// Over the bare board it reads as a darker chip outlined in light; over a fill, as a
+/// darker shade of the fill with the same edge, so it stays clear on both. That is what
+/// a multiply blend would give, drawn as plain translucency so it renders the same
+/// everywhere the panel is drawn.
+private struct BoardPackage: View {
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+        shape.fill(Color.black.opacity(0.32))
+            .overlay(shape.strokeBorder(Color.white.opacity(0.24), lineWidth: 0.75))
+    }
+}
+
+/// The edge connector: short gold pins stacked down the board's end, broken a third of
+/// the way down by the key notch.
+private struct SSDPins: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let pitch: CGFloat = 2.6
+        let notch = (rect.minY + rect.height * 0.3)...(rect.minY + rect.height * 0.3 + pitch * 1.5)
+        var y = rect.minY + 3
+        while y <= rect.maxY - 3 {
+            if !notch.contains(y) {
+                path.addRect(CGRect(x: rect.minX, y: y, width: rect.width, height: 1.4))
+            }
+            y += pitch
+        }
+        return path
+    }
+}
+
 /// A battery at the proportions of the system glyph, large: an outlined body and a
 /// terminal, the charge inset inside it.
 private struct BatteryGraphic: View {
     let fraction: Double
     let isCharging: Bool
     let charge: Color
+    /// Strokes, radii and the bolt at a fraction of their full size, for a smaller card.
+    var scale: CGFloat = 1
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 2 * scale) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Design.Palette.tertiaryText, lineWidth: 2.5)
+                RoundedRectangle(cornerRadius: 10 * scale, style: .continuous)
+                    .strokeBorder(Design.Palette.tertiaryText, lineWidth: 2.5 * scale)
                 FillFromLeading(fraction: fraction)
                     .fill(charge)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .padding(5)
+                    .clipShape(RoundedRectangle(cornerRadius: 6 * scale, style: .continuous))
+                    .padding(5 * scale)
                 if isCharging {
                     // In the label colour with a halo of the card's, so it stands out over
                     // the charge and over the empty part alike, in either appearance.
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 19, weight: .bold))
+                        .font(.system(size: 19 * scale, weight: .bold))
                         .foregroundStyle(Design.Palette.primaryText)
                         .shadow(color: BentoCard<EmptyView>.surface, radius: 1)
                         .shadow(color: BentoCard<EmptyView>.surface, radius: 1)
                 }
             }
             UnevenRoundedRectangle(cornerRadii: .init(topLeading: 0, bottomLeading: 0,
-                                                      bottomTrailing: 3, topTrailing: 3))
+                                                      bottomTrailing: 3 * scale, topTrailing: 3 * scale))
                 .fill(Design.Palette.tertiaryText)
-                .frame(width: 4, height: 13)
+                .frame(width: 4 * scale, height: 13 * scale)
         }
-        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
-    }
-}
-
-/// How full something is, as a slim capsule filled from the left in the card's
-/// gradient over a pale wash of the same colour.
-private struct LevelBar: View {
-    let fraction: Double
-    let colors: [Color]
-
-    var body: some View {
-        let capsule = Capsule(style: .continuous)
-        ZStack(alignment: .leading) {
-            capsule.fill(colors[0].opacity(0.18))
-            FillFromLeading(fraction: fraction)
-                .fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
-                .clipShape(capsule)
-        }
-        .frame(height: 7)
-        .padding(.horizontal, Design.Space.xs)
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
     }
 }
