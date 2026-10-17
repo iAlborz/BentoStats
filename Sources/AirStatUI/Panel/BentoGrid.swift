@@ -781,117 +781,129 @@ private struct CoreCells: Shape {
 }
 
 /// A memory module with its capacity printed on it, filled from the left with what is
-/// in use, over a row of gold contacts. Dark in both appearances, like the chip.
+/// in use. One board: the gold contacts sit along its bottom edge, which the key notch
+/// cuts into, and only the part above them fills. Dark in both appearances, like the
+/// chip.
 private struct MemoryGraphic: View {
     let capacity: String?
     let fraction: Double
     let load: Color
 
-    /// The board under the contacts: the module's dark finish a shade lighter, so the
-    /// strip stands off a dark card as well as a white one.
-    static let backing = LinearGradient(colors: [Color(white: 0.24), Color(white: 0.14)],
-                                        startPoint: .top, endPoint: .bottom)
-    /// The strip's edge. The boards are told apart from a dark card by their hairline;
-    /// the strip needs one too, a little brighter for being so much smaller.
-    static let backingEdge = Color.white.opacity(0.2)
+    /// The depth of the contact strip along the board's bottom edge.
+    private static let connector: CGFloat = 8
 
     var body: some View {
-        let board = RoundedRectangle(cornerRadius: 4, style: .continuous)
-        VStack(spacing: 2) {
-            ZStack {
-                board.fill(LinearGradient(colors: [Color(white: 0.2), Color(white: 0.1)],
-                                          startPoint: .top, endPoint: .bottom))
-                FillFromLeading(fraction: fraction)
-                    .fill(LinearGradient(colors: [load.opacity(0.6), load.opacity(0.2)],
-                                         startPoint: .leading, endPoint: .trailing))
-                    .clipShape(board)
-                LevelEdge(fraction: fraction, axis: .horizontal).fill(load).clipShape(board)
-                // The memory packages, eight across as on a module.
-                HStack(spacing: 4) {
-                    ForEach(0..<8, id: \.self) { _ in BoardPackage() }
+        let board = NotchedBoard(edge: .bottom, cornerRadius: 4, notchFraction: 0.42,
+                                 notchOffset: -4, notchLength: 8, notchDepth: Self.connector)
+        // The part above the contacts: square along its foot, where it runs on into them.
+        let face = UnevenRoundedRectangle(cornerRadii: .init(topLeading: 4, bottomLeading: 0,
+                                                             bottomTrailing: 0, topTrailing: 4),
+                                          style: .continuous)
+        ZStack {
+            board.fill(BoardFinish.gradient)
+            VStack(spacing: 0) {
+                ZStack {
+                    FillFromLeading(fraction: fraction)
+                        .fill(LinearGradient(colors: [load.opacity(0.6), load.opacity(0.2)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .clipShape(face)
+                    LevelEdge(fraction: fraction, axis: .horizontal).fill(load).clipShape(face)
+                    // The memory packages, eight across as on a module.
+                    HStack(spacing: 4) {
+                        ForEach(0..<8, id: \.self) { _ in BoardPackage() }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+                    .padding(.bottom, 5)
+                    Text(capacity ?? MetricFormatter.unavailable)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(LinearGradient(colors: [Color(white: 0.98), Color(white: 0.72)],
+                                                        startPoint: .top, endPoint: .bottom))
+                        .shadow(color: .black.opacity(0.55), radius: 2)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-                board.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                Text(capacity ?? MetricFormatter.unavailable)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(LinearGradient(colors: [Color(white: 0.98), Color(white: 0.72)],
-                                                    startPoint: .top, endPoint: .bottom))
-                    .shadow(color: .black.opacity(0.55), radius: 2)
-            }
-            ZStack {
-                EdgeBacking(axis: .horizontal, notchFraction: 0.42, notchOffset: -4, notchLength: 8)
-                    .fill(Self.backing)
-                EdgeBacking(axis: .horizontal, notchFraction: 0.42, notchOffset: -4, notchLength: 8)
-                    .stroke(Self.backingEdge, lineWidth: 0.75)
                 MemoryContacts()
                     .fill(LinearGradient(colors: [Color(red: 0.93, green: 0.78, blue: 0.4),
                                                   Color(red: 0.72, green: 0.55, blue: 0.22)],
                                          startPoint: .top, endPoint: .bottom))
-                    .padding(.vertical, 1.5)
+                    .padding(.top, 1)
+                    .padding(.bottom, 1.5)
+                    .frame(height: Self.connector)
             }
-            .frame(height: 8)
+            board.stroke(BoardFinish.edge, lineWidth: 1)
         }
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
     }
 }
 
-/// An M.2 SSD: the edge connector's gold pins on the left, broken by the key notch, then
-/// a long dark board carrying the controller and three flash packages, with the
-/// half-round cut for its screw at the far end.
+/// An M.2 SSD: one long dark board with the edge connector's gold pins at its left end,
+/// which the key notch cuts into, the controller and three flash packages along the
+/// rest, and the half-round cut for its screw at the far end.
 ///
-/// The board is the meter, as the memory module is: it fills from the left with how
-/// full the disk is, and the controller and flash packages sit on top of the fill, so it
-/// still reads as a drive. The connector stands apart from it, as the memory module's
-/// contacts do, and stays gold whatever the level.
+/// The board is the meter, as the memory module is: everything right of the connector
+/// fills from the left with how full the disk is, and the controller and flash packages
+/// sit on top of the fill, so it still reads as a drive. The connector stays gold
+/// whatever the level.
 private struct SSDGraphic: View {
     let fraction: Double
     let colors: [Color]
 
+    /// The depth of the connector at the board's left end.
+    private static let connector: CGFloat = 9
+
     var body: some View {
-        let board = RoundedRectangle(cornerRadius: 3, style: .continuous)
-        HStack(spacing: 2) {
-            ZStack {
-                EdgeBacking(axis: .vertical, notchFraction: 0.3, notchOffset: -1, notchLength: 6)
-                    .fill(MemoryGraphic.backing)
-                EdgeBacking(axis: .vertical, notchFraction: 0.3, notchOffset: -1, notchLength: 6)
-                    .stroke(MemoryGraphic.backingEdge, lineWidth: 0.75)
+        let board = NotchedBoard(edge: .leading, cornerRadius: 3, notchFraction: 0.3,
+                                 notchOffset: -1, notchLength: 6, notchDepth: Self.connector)
+        // The part right of the connector: square at its left, where it runs on into it.
+        let face = UnevenRoundedRectangle(cornerRadii: .init(topLeading: 0, bottomLeading: 0,
+                                                             bottomTrailing: 3, topTrailing: 3),
+                                          style: .continuous)
+        ZStack {
+            board.fill(BoardFinish.gradient)
+            HStack(spacing: 0) {
                 SSDPins()
                     .fill(LinearGradient(colors: [Color(red: 0.72, green: 0.55, blue: 0.22),
                                                   Color(red: 0.93, green: 0.78, blue: 0.4)],
                                          startPoint: .leading, endPoint: .trailing))
-                    .padding(.horizontal, 1.5)
-            }
-            .frame(width: 9)
-            ZStack {
-            board.fill(LinearGradient(colors: [Color(white: 0.19), Color(white: 0.09)],
-                                      startPoint: .top, endPoint: .bottom))
-            FillFromLeading(fraction: fraction)
-                .fill(LinearGradient(colors: [colors[0].opacity(0.65), colors[colors.count - 1].opacity(0.25)],
-                                     startPoint: .leading, endPoint: .trailing))
-                .clipShape(board)
-            LevelEdge(fraction: fraction, axis: .horizontal).fill(colors[0]).clipShape(board)
-            board.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-            HStack(spacing: 5) {
-                BoardPackage().frame(width: 22, height: 22)
-                ForEach(0..<3, id: \.self) { _ in
-                    BoardPackage().frame(height: 30)
+                    .padding(.leading, 1)
+                    .padding(.trailing, 1.5)
+                    .frame(width: Self.connector)
+                ZStack {
+                    FillFromLeading(fraction: fraction)
+                        .fill(LinearGradient(colors: [colors[0].opacity(0.65),
+                                                      colors[colors.count - 1].opacity(0.25)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .clipShape(face)
+                    LevelEdge(fraction: fraction, axis: .horizontal).fill(colors[0]).clipShape(face)
+                    HStack(spacing: 5) {
+                        BoardPackage().frame(width: 22, height: 22)
+                        ForEach(0..<3, id: \.self) { _ in
+                            BoardPackage().frame(height: 30)
+                        }
+                    }
+                    .padding(.leading, 5)
+                    .padding(.trailing, 12)
+                    .padding(.vertical, 4)
+                    // The screw's half-round cut, in the card's own colour so it reads as
+                    // a notch out of the board.
+                    HStack {
+                        Spacer()
+                        Circle().fill(BentoCard<EmptyView>.surface).frame(width: 10, height: 10)
+                            .offset(x: 5)
+                    }
                 }
             }
-            .padding(.leading, 6)
-            .padding(.trailing, 12)
-            .padding(.vertical, 4)
-            // The screw's half-round cut, in the card's own colour so it reads as a
-            // notch out of the board.
-            HStack {
-                Spacer()
-                Circle().fill(BentoCard<EmptyView>.surface).frame(width: 10, height: 10)
-                    .offset(x: 5)
-            }
-            }
+            board.stroke(BoardFinish.edge, lineWidth: 1)
         }
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
     }
+}
+
+/// The dark board finish the memory module and the SSD share, and the hairline that
+/// keeps either one clear of a dark card.
+private enum BoardFinish {
+    static let gradient = LinearGradient(colors: [Color(white: 0.2), Color(white: 0.1)],
+                                         startPoint: .top, endPoint: .bottom)
+    static let edge = Color.white.opacity(0.16)
 }
 
 /// A chip package on a board: a dark translucent block with a light hairline edge.
@@ -908,37 +920,59 @@ private struct BoardPackage: View {
     }
 }
 
-/// The strip of board an edge connector's fingers sit on, cut through by the key notch:
-/// along the bottom of a module (`.horizontal`) or down the end of a drive
-/// (`.vertical`). The notch starts at `notchFraction` of the strip's length, moved by
-/// `notchOffset` points, so it lines up with the gap the fingers leave.
-private struct EdgeBacking: Shape {
-    let axis: Axis
+/// A board's outline: rounded corners, with the key notch cut into one edge, the
+/// bottom of a memory module or the left end of an M.2 drive. The notch starts at
+/// `notchFraction` along that edge, moved by `notchOffset` points, so it lines up with
+/// the gap the contacts leave, and runs `notchDepth` into the board, the depth of the
+/// connector. One path, so the fill and the outline both follow the notch.
+private struct NotchedBoard: Shape {
+    enum Edge { case bottom, leading }
+
+    let edge: Edge
+    let cornerRadius: CGFloat
     let notchFraction: CGFloat
     let notchOffset: CGFloat
     let notchLength: CGFloat
+    let notchDepth: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let radius = CGSize(width: 1.5, height: 1.5)
-        switch axis {
-        case .horizontal:
+        let r = cornerRadius
+        switch edge {
+        case .bottom:
             let start = rect.minX + rect.width * notchFraction + notchOffset
-            path.addRoundedRect(in: CGRect(x: rect.minX, y: rect.minY,
-                                           width: start - rect.minX, height: rect.height),
-                                cornerSize: radius)
-            path.addRoundedRect(in: CGRect(x: start + notchLength, y: rect.minY,
-                                           width: rect.maxX - start - notchLength, height: rect.height),
-                                cornerSize: radius)
-        case .vertical:
+            let end = start + notchLength
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY),
+                        tangent2End: CGPoint(x: rect.maxX, y: rect.minY), radius: r)
+            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
+                        tangent2End: CGPoint(x: rect.maxX, y: rect.maxY), radius: r)
+            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+                        tangent2End: CGPoint(x: end, y: rect.maxY), radius: r)
+            path.addLine(to: CGPoint(x: end, y: rect.maxY))
+            path.addLine(to: CGPoint(x: end, y: rect.maxY - notchDepth))
+            path.addLine(to: CGPoint(x: start, y: rect.maxY - notchDepth))
+            path.addLine(to: CGPoint(x: start, y: rect.maxY))
+            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY),
+                        tangent2End: CGPoint(x: rect.minX, y: rect.minY), radius: r)
+        case .leading:
             let start = rect.minY + rect.height * notchFraction + notchOffset
-            path.addRoundedRect(in: CGRect(x: rect.minX, y: rect.minY,
-                                           width: rect.width, height: start - rect.minY),
-                                cornerSize: radius)
-            path.addRoundedRect(in: CGRect(x: rect.minX, y: start + notchLength,
-                                           width: rect.width, height: rect.maxY - start - notchLength),
-                                cornerSize: radius)
+            let end = start + notchLength
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
+                        tangent2End: CGPoint(x: rect.maxX, y: rect.maxY), radius: r)
+            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+                        tangent2End: CGPoint(x: rect.minX, y: rect.maxY), radius: r)
+            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY),
+                        tangent2End: CGPoint(x: rect.minX, y: end), radius: r)
+            path.addLine(to: CGPoint(x: rect.minX, y: end))
+            path.addLine(to: CGPoint(x: rect.minX + notchDepth, y: end))
+            path.addLine(to: CGPoint(x: rect.minX + notchDepth, y: start))
+            path.addLine(to: CGPoint(x: rect.minX, y: start))
+            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY),
+                        tangent2End: CGPoint(x: rect.maxX, y: rect.minY), radius: r)
         }
+        path.closeSubpath()
         return path
     }
 }
