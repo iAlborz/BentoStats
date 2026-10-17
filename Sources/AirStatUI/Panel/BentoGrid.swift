@@ -79,14 +79,31 @@ struct BentoGrid: View {
     // MARK: Cards
 
     private var cpu: some View {
-        let busy = engine.cpu.value?.total.busy
+        let cpu = engine.cpu.value
+        let busy = cpu?.total.busy
         let system = engine.system.value
-        return card(.cpu, width: Self.wide, height: Self.tall,
-                    caption: system.map { "\($0.physicalCores)-core CPU" } ?? "CPU") {
+        // Each core's own load beside its kind. A core the system did not classify is
+        // drawn as a performance core: that is what a chip without the split has.
+        let cores = cpu.map { cpu in
+            cpu.perCore.indices.map { index in
+                (kind: index < cpu.coreKinds.count ? cpu.coreKinds[index] : .unknown,
+                 busy: cpu.perCore[index].busy)
+            }
+        } ?? []
+        let caption = system.map { system in
+            system.efficiencyCores > 0
+                ? "\(system.physicalCores)-core CPU · \(system.performanceCores)P + \(system.efficiencyCores)E"
+                : "\(system.physicalCores)-core CPU"
+        }
+        return card(.cpu, width: Self.wide, height: Self.tall, caption: caption ?? "CPU") {
             VStack(spacing: Design.Space.m) {
-                ChipGraphic(name: system?.chipName, fraction: busy ?? 0, load: palette(.cpu)[0])
-                    .frame(width: 136, height: 136)
-                bigNumber(.cpu, busy.map { formatter.percent($0) }, size: 30)
+                ChipGraphic(name: system?.chipName,
+                            performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
+                            efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
+                            performanceColors: palette(.cpu),
+                            efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
+                    .frame(width: 150, height: 150)
+                bigNumber(.cpu, busy.map { formatter.percent($0) }, size: 28)
             }
         }
     }
@@ -425,16 +442,19 @@ private struct BentoActionBody: View {
 /// in near-black with a faint sheen and a bright bevel, the logo and chip in brushed
 /// silver, and the tier — PRO, MAX, ULTRA — in its own gradient underneath.
 ///
-/// The CPU's load rises over the face from the bottom as a translucent wash of blue
-/// with a bright line at its level, under the lettering: the chip still reads as the
-/// chip, the name stays crisp at any level, and how much of it is busy reads at a
-/// glance from the line. The chip is drawn dark in both appearances: it is an object, and
-/// Apple's chip is black on a white page too.
+/// Under the name, the CPU cores as blocks on the die, each filling from the bottom with
+/// its own load: the performance cores as larger squares in the card's blue, two rows of
+/// them, and the efficiency cores as narrower blocks in green beside them, so the two
+/// kinds read apart by shape and by colour. The chip is drawn dark in both appearances:
+/// it is an object, and Apple's chip is black on a white page too.
 private struct ChipGraphic: View {
     /// "Apple M1 Max", or whatever the system reports for a chip that is not Apple's.
     let name: String?
-    let fraction: Double
-    let load: Color
+    /// Each performance core's busy fraction, then each efficiency core's.
+    let performance: [Double]
+    let efficiency: [Double]
+    let performanceColors: [Color]
+    let efficiencyColors: [Color]
 
     var body: some View {
         GeometryReader { proxy in
@@ -446,55 +466,62 @@ private struct ChipGraphic: View {
                 // The sheen: a soft diagonal lift across the top-left of the die.
                 face.fill(LinearGradient(colors: [.white.opacity(0.07), .clear],
                                          startPoint: .topLeading, endPoint: .center))
-                FillFromBottom(fraction: fraction)
-                    .fill(LinearGradient(colors: [load.opacity(0.55), load.opacity(0.12)],
-                                         startPoint: .bottom, endPoint: .top))
-                LevelEdge(fraction: fraction, axis: .vertical).fill(load)
                 face.strokeBorder(LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.04),
                                                           .white.opacity(0.14)],
                                                  startPoint: .topLeading, endPoint: .bottomTrailing),
                                   lineWidth: 1)
-                lettering(side: side)
+                if performance.isEmpty && efficiency.isEmpty {
+                    // No cores read yet: the name alone, at the size it has on its own.
+                    lettering(side: side, scale: 1)
+                } else {
+                    VStack(spacing: side * 0.07) {
+                        lettering(side: side, scale: 0.62)
+                        ChipCores(performance: performance, efficiency: efficiency,
+                                  width: side * 0.84,
+                                  performanceColors: performanceColors,
+                                  efficiencyColors: efficiencyColors)
+                    }
+                }
             }
             .frame(width: side, height: side)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
     }
 
     private static let silver = LinearGradient(colors: [Color(white: 0.97), Color(white: 0.66)],
                                                startPoint: .top, endPoint: .bottom)
 
     @ViewBuilder
-    private func lettering(side: CGFloat) -> some View {
+    private func lettering(side: CGFloat, scale: CGFloat) -> some View {
+        let size = side * scale
         if let name, name.hasPrefix("Apple ") {
             // "Apple M1 Max" is set as the chip is marked: the logo and "M1" in silver,
             // and the tier under it in that tier's colours.
             let words = name.dropFirst("Apple ".count).split(separator: " ", maxSplits: 1)
-            VStack(spacing: side * 0.02) {
-                HStack(alignment: .center, spacing: side * 0.01) {
+            VStack(spacing: size * 0.02) {
+                HStack(alignment: .center, spacing: size * 0.01) {
                     Image(systemName: "applelogo")
-                        .font(.system(size: side * 0.25, weight: .regular))
+                        .font(.system(size: size * 0.25, weight: .regular))
                     Text(words.first.map(String.init) ?? "")
-                        .font(.system(size: side * 0.3, weight: .semibold))
-                        .tracking(-side * 0.005)
+                        .font(.system(size: size * 0.3, weight: .semibold))
+                        .tracking(-size * 0.005)
                 }
                 .foregroundStyle(Self.silver)
                 if words.count > 1 {
                     Text(words[1].uppercased())
-                        .font(.system(size: side * 0.14, weight: .semibold))
-                        .tracking(side * 0.01)
+                        .font(.system(size: size * 0.14, weight: .semibold))
+                        .tracking(size * 0.01)
                         .foregroundStyle(LinearGradient(colors: Self.tierColors(String(words[1])),
                                                         startPoint: .leading, endPoint: .trailing))
                 }
             }
-            .offset(x: -side * 0.01)
+            .offset(x: -size * 0.01)
         } else if let name {
             Text(name)
-                .font(.system(size: side * 0.1, weight: .semibold))
+                .font(.system(size: size * 0.1, weight: .semibold))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Self.silver)
-                .padding(side * 0.08)
+                .padding(size * 0.08)
         }
     }
 
@@ -507,6 +534,83 @@ private struct ChipGraphic: View {
         case "ultra": return [Color(red: 0.45, green: 0.62, blue: 1.0), Color(red: 0.62, green: 0.42, blue: 1.0)]
         default: return [Color(white: 0.97), Color(white: 0.66)]
         }
+    }
+}
+
+/// The CPU cores laid out on the die: performance cores as squares in two rows, the
+/// efficiency cores beside them as blocks a little over half as wide, each rising from
+/// the bottom with its own load.
+private struct ChipCores: View {
+    let performance: [Double]
+    let efficiency: [Double]
+    let width: CGFloat
+    let performanceColors: [Color]
+    let efficiencyColors: [Color]
+
+    private static let gap: CGFloat = 3.5
+    private static let clusterGap: CGFloat = 7
+    private static let efficiencyWidth: CGFloat = 0.55
+
+    var body: some View {
+        let pColumns = Self.columns(performance.count)
+        let eColumns = Self.columns(efficiency.count)
+        let units = CGFloat(pColumns) + CGFloat(eColumns) * Self.efficiencyWidth
+        let gaps = CGFloat(max(pColumns - 1, 0) + max(eColumns - 1, 0)) * Self.gap
+            + (pColumns > 0 && eColumns > 0 ? Self.clusterGap : 0)
+        let side = min((width - gaps) / max(units, 1), 28)
+        HStack(alignment: .top, spacing: Self.clusterGap) {
+            if pColumns > 0 {
+                cluster(performance, columns: pColumns,
+                        size: CGSize(width: side, height: side), colors: performanceColors)
+            }
+            if eColumns > 0 {
+                cluster(efficiency, columns: eColumns,
+                        size: CGSize(width: side * Self.efficiencyWidth, height: side),
+                        colors: efficiencyColors)
+            }
+        }
+    }
+
+    /// Two rows, filled left to right along the top row first.
+    private static func columns(_ count: Int) -> Int {
+        Int((Double(count) / 2).rounded(.up))
+    }
+
+    private func cluster(_ loads: [Double], columns: Int, size: CGSize,
+                         colors: [Color]) -> some View {
+        VStack(spacing: Self.gap) {
+            ForEach(0..<2, id: \.self) { row in
+                HStack(spacing: Self.gap) {
+                    ForEach(0..<columns, id: \.self) { column in
+                        let index = row * columns + column
+                        if index < loads.count {
+                            CoreBlock(fraction: loads[index], colors: colors)
+                                .frame(width: size.width, height: size.height)
+                        } else {
+                            Color.clear.frame(width: size.width, height: size.height)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One core: a dark block with a hairline edge, filled from the bottom to its load.
+private struct CoreBlock: View {
+    let fraction: Double
+    let colors: [Color]
+
+    var body: some View {
+        let block = RoundedRectangle(cornerRadius: 3, style: .continuous)
+        ZStack {
+            block.fill(Color.white.opacity(0.07))
+            FillFromBottom(fraction: fraction)
+                .fill(LinearGradient(colors: colors, startPoint: .bottom, endPoint: .top))
+                .clipShape(block)
+            block.strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+        }
+        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
     }
 }
 
