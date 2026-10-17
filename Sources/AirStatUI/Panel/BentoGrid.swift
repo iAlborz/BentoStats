@@ -139,19 +139,30 @@ struct BentoGrid: View {
         let device = engine.gpu.value?.primary
         let cores = device?.coreCount ?? engine.system.value?.gpuCoreCount
         let load = device?.utilization
-        return card(.gpu, width: Self.span(2), height: Self.span(2),
-                    caption: cores.map { "\($0)-core GPU" } ?? "GPU") {
+        // What the GPU holds of the shared memory, against the most macOS will let it
+        // have: not memory of its own, a share of the one pool the Memory card shows.
+        var memory: GPUChannel?
+        if let used = device?.vramUsedBytes, let total = device?.vramTotalBytes, total > 0 {
+            memory = GPUChannel(name: "Memory", value: Double(used) / Double(total),
+                                detail: "\(formatter.memory(used)) of \(formatter.memory(total))")
+        }
+        let caption = cores.map { cores in
+            "\(cores)-core GPU" + (load.map { " · \(formatter.percent($0))" } ?? "")
+        }
+        return card(.gpu, width: Self.span(2), height: Self.span(2), caption: caption ?? "GPU") {
             VStack(spacing: Design.Space.l) {
                 if let cores, cores > 0 {
-                    GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu, onCard: false), cell: 13)
+                    GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu, onCard: false), width: 192)
                 } else {
                     bigNumber(.gpu, nil, size: 24)
                 }
-                // The three figures the driver publishes. macOS reports the GPU only as
-                // a whole, never core by core, so a meter per core would be invented.
-                GPUMeters(channels: [("Device", load), ("Renderer", device?.rendererUtilization),
-                                     ("Tiler", device?.tilerUtilization)]
-                              .compactMap { name, value in value.map { (name, $0) } },
+                // The die already draws the overall load, so the meters carry what it
+                // cannot: the GPU's memory, then the renderer and tiler the driver reports.
+                // macOS reports the GPU only as a whole, never core by core.
+                GPUMeters(channels: [memory,
+                                     device?.rendererUtilization.map { GPUChannel(name: "Renderer", value: $0) },
+                                     device?.tilerUtilization.map { GPUChannel(name: "Tiler", value: $0) }]
+                              .compactMap { $0 },
                           colors: palette(.gpu), formatter: formatter)
                     .padding(.horizontal, Design.Space.xs)
             }
@@ -517,17 +528,8 @@ private struct ChipGraphic: View {
     var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
-            let face = Rectangle()
             ZStack {
-                face.fill(LinearGradient(colors: [Color(white: 0.17), Color(white: 0.07)],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                // The sheen: a soft diagonal lift across the top-left of the die.
-                face.fill(LinearGradient(colors: [.white.opacity(0.07), .clear],
-                                         startPoint: .topLeading, endPoint: .center))
-                face.strokeBorder(LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.04),
-                                                          .white.opacity(0.14)],
-                                                 startPoint: .topLeading, endPoint: .bottomTrailing),
-                                  lineWidth: 1)
+                ChipFace()
                 if performance.isEmpty && efficiency.isEmpty {
                     // No cores read yet: the name alone, at the size it has on its own.
                     lettering(side: side, scale: 1)
@@ -683,8 +685,16 @@ private struct CoreBlock: View {
 /// The GPU's load as the driver reports it, each figure by its full name with its
 /// percentage, over a segmented meter: a row of thin vertical ticks that light from the
 /// left, the way a hardware level meter reads.
+/// One meter on the GPU card: a 0...1 level, shown as a percentage unless it has a
+/// reading of its own to show instead.
+private struct GPUChannel {
+    let name: String
+    let value: Double
+    var detail: String?
+}
+
 private struct GPUMeters: View {
-    let channels: [(name: String, value: Double)]
+    let channels: [GPUChannel]
     let colors: [Color]
     let formatter: MetricFormatter
 
@@ -695,7 +705,7 @@ private struct GPUMeters: View {
                     HStack {
                         Text(channel.name)
                         Spacer(minLength: Design.Space.xs)
-                        Text(formatter.percent(channel.value)).monospacedDigit()
+                        Text(channel.detail ?? formatter.percent(channel.value)).monospacedDigit()
                     }
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Design.Palette.secondaryText)
@@ -747,64 +757,87 @@ private struct Ticks: Shape {
     }
 }
 
-/// The GPU drawn as its cores: a dark die with one cell per core, eight across, so a
-/// 32-core GPU reads as the 4 by 8 block it is.
+/// The GPU as a chip of its own, in the CPU chip's finish: the same sharp-cornered die
+/// with its sheen and bevel, and one block per core, eight across, 4pt from the edges
+/// and from each other, so a 32-core GPU reads as the 4 by 8 block it is.
 ///
-/// Cells switch on one by one as the load rises, in reading order: at 18% of 32 cores,
-/// the first six. macOS reports the GPU only as a whole, so the cells are lit in order,
-/// which reads as a level, rather than scattered, which would claim to know which cores
-/// are busy.
+/// Blocks switch on one by one as the load rises, in reading order: at 18% of 32 cores,
+/// the first six. macOS reports the GPU only as a whole, so the blocks are lit in
+/// order, which reads as a level, rather than scattered, which would claim to know
+/// which cores are busy.
 private struct GPUDie: View {
     let cores: Int
     let load: Double
     let colors: [Color]
-    var cell: CGFloat = 6.5
+    /// The die's width; the blocks, and so the height, follow from it.
+    let width: CGFloat
 
-    private static let gap: CGFloat = 2
-    private static let padding: CGFloat = 4
+    private static let gap: CGFloat = 4
 
     var body: some View {
         let columns = cores % 8 == 0 || cores > 8 ? min(cores, 8) : cores
         let rows = Int((Double(cores) / Double(columns)).rounded(.up))
-        let size = CGSize(width: cell * CGFloat(columns) + Self.gap * CGFloat(columns - 1),
-                          height: cell * CGFloat(rows) + Self.gap * CGFloat(rows - 1))
+        let block = (width - Self.gap * CGFloat(columns + 1)) / CGFloat(columns)
+        let height = block * CGFloat(rows) + Self.gap * CGFloat(rows + 1)
         let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
-        let die = RoundedRectangle(cornerRadius: 4, style: .continuous)
         ZStack {
-            die.fill(LinearGradient(colors: [Color(white: 0.17), Color(white: 0.07)],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing))
-            die.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-            ZStack {
-                CoreCells(columns: columns, cells: lit..<cores, cell: cell, gap: Self.gap)
-                    .fill(Color.white.opacity(0.1))
-                LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .mask(CoreCells(columns: columns, cells: 0..<lit, cell: cell, gap: Self.gap))
-                    .shadow(color: colors[0].opacity(0.7), radius: 2.5)
+            ChipFace()
+            VStack(spacing: Self.gap) {
+                ForEach(0..<rows, id: \.self) { row in
+                    HStack(spacing: Self.gap) {
+                        ForEach(0..<columns, id: \.self) { column in
+                            let index = row * columns + column
+                            if index < cores {
+                                GPUBlock(isLit: index < lit, colors: colors)
+                                    .frame(width: block, height: block)
+                            } else {
+                                Color.clear.frame(width: block, height: block)
+                            }
+                        }
+                    }
+                }
             }
-            .frame(width: size.width, height: size.height)
         }
-        .frame(width: size.width + Self.padding * 2, height: size.height + Self.padding * 2)
+        .frame(width: width, height: height)
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: lit)
     }
 }
 
-/// Rounded cells of a core grid laid out row by row: the cores in `cells`.
-private struct CoreCells: Shape {
-    let columns: Int
-    let cells: Range<Int>
-    let cell: CGFloat
-    let gap: CGFloat
+/// One GPU core on the die: a dark block with a hairline edge, filled and glowing in
+/// the card's colour while lit. Square-cornered, as the CPU's cores are.
+private struct GPUBlock: View {
+    let isLit: Bool
+    let colors: [Color]
 
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        for index in cells {
-            let x = rect.minX + CGFloat(index % columns) * (cell + gap)
-            let y = rect.minY + CGFloat(index / columns) * (cell + gap)
-            path.addRoundedRect(in: CGRect(x: x, y: y, width: cell, height: cell),
-                                cornerSize: CGSize(width: cell * 0.25, height: cell * 0.25),
-                                style: .continuous)
+    var body: some View {
+        let block = RoundedRectangle(cornerRadius: 1, style: .continuous)
+        ZStack {
+            block.fill(Color.white.opacity(0.07))
+            if isLit {
+                block.fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .shadow(color: colors[0].opacity(0.6), radius: 2)
+            }
+            block.strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
         }
-        return path
+    }
+}
+
+/// The face Apple draws its chips with, shared by the CPU and the GPU: a square,
+/// sharp-cornered die in near-black, a faint diagonal sheen across its top-left, and a
+/// bright bevel along its edge.
+private struct ChipFace: View {
+    var body: some View {
+        let face = Rectangle()
+        ZStack {
+            face.fill(LinearGradient(colors: [Color(white: 0.17), Color(white: 0.07)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            face.fill(LinearGradient(colors: [.white.opacity(0.07), .clear],
+                                     startPoint: .topLeading, endPoint: .center))
+            face.strokeBorder(LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.04),
+                                                      .white.opacity(0.14)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing),
+                              lineWidth: 1)
+        }
     }
 }
 
