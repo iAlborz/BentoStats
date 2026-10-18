@@ -13,6 +13,15 @@ public final class MetricsEngine {
     /// The most recent complete snapshot. Starts as all-`.pending`.
     public private(set) var snapshot: SystemSnapshot = .empty
 
+    /// Every source's last reading, kept while the source is back to waiting for one.
+    ///
+    /// The process list runs only while the panel is open, and a source that starts
+    /// again spends its first sample re-establishing the baseline its rates are measured
+    /// from, so for that sample it has nothing to show. The panel shows this instead,
+    /// greyed, so it opens on what was there last time rather than on cards that fill
+    /// in and push each other around.
+    public private(set) var lastKnown: SystemSnapshot = .empty
+
     /// Bounded ring buffers behind every chart.
     public private(set) var history: MetricHistory
 
@@ -342,12 +351,25 @@ public final class MetricsEngine {
 
     func ingest(_ new: SystemSnapshot) {
         snapshot = new
+        remember(new)
         lastUpdate = new.capturedAt
         record(new)
         guard ingestCount < 2 else { return }
         ingestCount += 1
         // The pause that was waiting for rates to exist can take effect now.
         updateActivity()
+    }
+
+    private func remember(_ s: SystemSnapshot) {
+        if s.cpu.isAvailable { lastKnown.cpu = s.cpu }
+        if s.memory.isAvailable { lastKnown.memory = s.memory }
+        if s.gpu.isAvailable { lastKnown.gpu = s.gpu }
+        if s.network.isAvailable { lastKnown.network = s.network }
+        if s.disk.isAvailable { lastKnown.disk = s.disk }
+        if s.power.isAvailable { lastKnown.power = s.power }
+        if s.thermal.isAvailable { lastKnown.thermal = s.thermal }
+        if s.processes.isAvailable { lastKnown.processes = s.processes }
+        if s.system.isAvailable { lastKnown.system = s.system }
     }
 
     /// Fold a snapshot into history. Only series whose metric is actually available

@@ -121,3 +121,36 @@ struct LowPowerPauseTests {
         #expect(engine.isObservingPowerState == false, "a second install left an observer behind")
     }
 }
+
+@MainActor
+@Suite("Last-known readings")
+struct LastKnownTests {
+
+    private func makeEngine() -> MetricsEngine {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AirStatTests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return MetricsEngine(settingsStore: SettingsStore(directory: dir))
+    }
+
+    @Test("a source back to waiting keeps its last reading for the panel to grey")
+    func pendingKeepsLastReading() {
+        let engine = makeEngine()
+        engine.ingest(SnapshotFixtures.nominal)
+        var reopened = SnapshotFixtures.nominal
+        reopened.processes = .pending
+        reopened.network = .pending
+        engine.ingest(reopened)
+
+        #expect(engine.processes.value == nil, "the live state still says it is waiting")
+        #expect(engine.lastKnown.processes == SnapshotFixtures.nominal.processes)
+        #expect(engine.lastKnown.network == SnapshotFixtures.nominal.network)
+    }
+
+    @Test("a source that never had a reading has nothing to fall back to")
+    func nothingBeforeTheFirstReading() {
+        let engine = makeEngine()
+        engine.ingest(SystemSnapshot())
+        #expect(engine.lastKnown.processes.value == nil)
+    }
+}

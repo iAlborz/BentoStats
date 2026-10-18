@@ -102,12 +102,12 @@ struct BentoGrid: View {
         // carries the figures.
         // What is using the CPU belongs with the CPU: the five busiest processes under
         // the chip, each icon over its share, and the count in the caption.
-        let processes = engine.processes.value
+        let processes = processList
         let busiest = processes.map {
-            Array($0.processes.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(5))
+            Array($0.list.processes.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(5))
         } ?? []
         return card(.cpu, width: Self.span(2), height: Self.span(2),
-                    caption: processes.map { "\(formatter.count($0.totalProcessCount)) processes" }) {
+                    caption: processes.map { "\(formatter.count($0.list.totalProcessCount)) processes" }) {
             VStack(spacing: Design.Space.m) {
                 ChipGraphic(name: system?.chipName,
                             performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
@@ -115,7 +115,20 @@ struct BentoGrid: View {
                             performanceColors: palette(.cpu, onCard: false),
                             efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
                     .frame(width: 140, height: 140)
-                if !busiest.isEmpty {
+                if busiest.isEmpty {
+                    // Nothing yet, not even from last time: the row's shape, so the chip
+                    // does not move when the processes arrive.
+                    HStack(spacing: Design.Space.l) {
+                        ForEach(0..<5, id: \.self) { _ in
+                            VStack(spacing: 2) {
+                                Circle().fill(Design.Palette.track).frame(width: 16, height: 16)
+                                Capsule().fill(Design.Palette.track).frame(width: 18, height: 6)
+                                    .frame(height: 11)
+                            }
+                        }
+                    }
+                    .accessibilityHidden(true)
+                } else {
                     HStack(spacing: Design.Space.l) {
                         ForEach(busiest, id: \.pid) { process in
                             VStack(spacing: 2) {
@@ -128,6 +141,7 @@ struct BentoGrid: View {
                             }
                         }
                     }
+                    .lastKnown(processes?.isLastKnown == true)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Busiest processes: " + busiest.map(\.name).joined(separator: ", "))
                 }
@@ -143,8 +157,9 @@ struct BentoGrid: View {
         let free = memory.map { $0.totalBytes > $0.usedBytes ? $0.totalBytes - $0.usedBytes : 0 }
         // The biggest users, ranked by what they hold rather than by how busy they are:
         // the process sample keeps the largest idle ones for exactly this.
-        let top = engine.processes.value.map {
-            Array($0.processes.sorted { $0.memoryBytes > $1.memoryBytes }.prefix(5))
+        let processes = processList
+        let top = processes.map {
+            Array($0.list.processes.sorted { $0.memoryBytes > $1.memoryBytes }.prefix(5))
         } ?? []
         return card(.memory, width: Self.span(2), height: Self.span(2),
                     caption: memory.map { "\(Self.marketingCapacity($0.totalBytes)) Memory" } ?? "Memory") {
@@ -152,7 +167,22 @@ struct BentoGrid: View {
                 MemoryGraphic(label: free.map { "\(formatter.memory($0)) free" },
                               fraction: used ?? 0, load: palette(.memory, onCard: false)[0])
                     .frame(width: 200, height: 56)
-                if !top.isEmpty {
+                if top.isEmpty {
+                    // The list's shape until there is one to show.
+                    VStack(spacing: 2) {
+                        ForEach(0..<5, id: \.self) { _ in
+                            HStack(spacing: Design.Space.xs) {
+                                Circle().fill(Design.Palette.track).frame(width: 13, height: 13)
+                                Capsule().fill(Design.Palette.track).frame(width: 90, height: 7)
+                                Spacer(minLength: Design.Space.s)
+                                Capsule().fill(Design.Palette.track).frame(width: 34, height: 7)
+                            }
+                            .frame(height: 15)
+                        }
+                    }
+                    .padding(.horizontal, Design.Space.xs)
+                    .accessibilityHidden(true)
+                } else {
                     VStack(spacing: 2) {
                         ForEach(top, id: \.pid) { process in
                             HStack(spacing: Design.Space.xs) {
@@ -171,6 +201,7 @@ struct BentoGrid: View {
                         }
                     }
                     .padding(.horizontal, Design.Space.xs)
+                    .lastKnown(processes?.isLastKnown == true)
                 }
             }
         }
@@ -256,7 +287,8 @@ struct BentoGrid: View {
     }
 
     private var network: some View {
-        let network = engine.network.value
+        let isLastKnown = engine.network.value == nil && engine.lastKnown.network.value != nil
+        let network = engine.network.value ?? engine.lastKnown.network.value
         return card(.network, width: Self.span(2), height: Self.span(1),
                     caption: network.map { $0.wifi?.ssid ?? $0.connectionType.label } ?? "Network") {
             HStack(spacing: Design.Space.l) {
@@ -272,6 +304,7 @@ struct BentoGrid: View {
                     rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
                          colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)])
                 }
+                .lastKnown(isLastKnown)
             }
         }
     }
@@ -327,6 +360,13 @@ struct BentoGrid: View {
     }
 
     // MARK: Pieces
+
+    /// The process list now, or the last one while the list re-establishes its baseline
+    /// on opening, which the cards grey rather than leave empty.
+    private var processList: (list: ProcessSnapshot, isLastKnown: Bool)? {
+        if let current = engine.processes.value { return (current, false) }
+        return engine.lastKnown.processes.value.map { ($0, true) }
+    }
 
     /// One of the panel's two actions as a card of its own, one cell: a symbol in its
     /// gradient over its name, the whole card the button.
@@ -469,6 +509,16 @@ struct BentoGrid: View {
 }
 
 // MARK: - Card
+
+extension View {
+    /// Greys a reading that is the last one seen rather than a live one, and brings it
+    /// back to colour when the live one replaces it.
+    func lastKnown(_ isLastKnown: Bool) -> some View {
+        grayscale(isLastKnown ? 1 : 0)
+            .opacity(isLastKnown ? 0.45 : 1)
+            .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: isLastKnown)
+    }
+}
 
 /// One card: its content centred, a caption under it. Reports the pointer the way a list
 /// row does, so the detail opens beside the panel level with the card, and takes a ring
