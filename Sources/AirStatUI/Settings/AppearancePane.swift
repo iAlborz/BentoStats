@@ -65,7 +65,8 @@ struct AppearancePane: View {
             } footer: {
                 SettingsFootnote("Original unfolds a module when you click its heading. "
                                  + "List and Bento show its detail beside the panel when "
-                                 + "you point at it.")
+                                 + "you point at it. To arrange Bento's cards, press and "
+                                 + "hold one, or Control-click it and choose Edit Layout.")
             }
 
             // A board rather than nine rows. One colour per metric is a palette, and a

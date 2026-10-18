@@ -17,6 +17,16 @@ final class PanelLayoutState {
     @ObservationIgnored var rowHover: ((PanelModule, CGRect?) -> Void)?
     @ObservationIgnored var detailHover: ((Bool) -> Void)?
 
+    /// The bento grid is being arranged: cards move, resize, come and go.
+    var isEditing = false
+    /// Closes the detail beside the panel as editing starts.
+    @ObservationIgnored var onBeginEditing: (() -> Void)?
+
+    func beginEditing() {
+        onBeginEditing?()
+        isEditing = true
+    }
+
     var collapsedModulesOverride: Set<PanelModule>?
     /// The collapsed set a disclosure started from, held until it has finished.
     var disclosureOrigin: Set<PanelModule>?

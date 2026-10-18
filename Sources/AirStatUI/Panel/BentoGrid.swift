@@ -5,12 +5,14 @@ import AirStatKit
 /// The bento style: every module as a card in a grid of mixed sizes, the way Apple lays
 /// out what is new in a Mac.
 ///
-/// One fixed composition rather than a flowing grid. A bento grid works when the big
-/// cards are the ones that matter most and the small ones fill in around them, which is
-/// a design decision, not something a layout algorithm makes. The grid is square cells,
-/// six across and four down, which puts the panel at 3:2, landscape, and every card
-/// spans a whole number of them — 1×1, 2×1, 1×2 or 2×2 — so no card is a size of its
-/// own. The panel's two actions take a cell each:
+/// The grid is square cells, six across, and every card spans a whole number of them:
+/// 1×1, 2×1, 1×2, 2×2, 3×2, 2×3 or 4×2. The cards are the user's to arrange, the way
+/// Control Center's controls are. Pressing and holding a card, or right-clicking one,
+/// puts the grid into edit mode: a card is dragged to move it and by its corner to
+/// resize it, the minus removes it, the bar underneath adds more, and each card's menu
+/// picks its size and how it draws itself, as its object, a big number or a chart. See
+/// `BentoLayout` for how the cards pack. The arrangement it starts with, and goes back to
+/// on Reset:
 ///
 ///     ┌─────────┬─────────┬─────────┐
 ///     │         │         │   SSD   │
@@ -22,9 +24,11 @@ import AirStatKit
 ///     │         │ System  │    │ ⏻  │
 ///     └─────────┴─────────┴────┴────┘
 ///
-/// The CPU and Memory cards each carry the processes that answer their question, the
-/// busiest under the chip and the biggest under the module, so processes have no card
-/// of their own.
+/// At those sizes the cards draw as they were designed: the CPU and Memory cards each
+/// carry the processes that answer their question, the busiest under the chip and the
+/// biggest under the module, so processes have no card of their own. At any other size
+/// or style a card is put together from the same parts: its object, its reading, the
+/// readings that support it, and its history.
 ///
 /// Each card follows Apple's: one object or one big number in the middle, set in the
 /// card's own colour, and a short caption under it, on plain white cards over light
@@ -39,226 +43,404 @@ struct BentoGrid: View {
 
     private static let inset: CGFloat = 12
     private static let gap: CGFloat = 10
-    /// One square cell. Six by four of them, with the gaps and the inset, is 734 by 494.
+    /// One square cell. Six across, with the gaps and the inset, is 734 wide.
     private static let cell: CGFloat = 110
-    static let width = inset * 2 + span(6)
+    static let width = inset * 2 + span(BentoLayout.columns)
+    private static let space = "bento"
 
     /// The length of `cells` cells and the gaps between them, across or down.
     private static func span(_ cells: Int) -> CGFloat {
         cell * CGFloat(cells) + gap * CGFloat(cells - 1)
     }
 
+    private static func frame(of placement: BentoPlacement) -> CGRect {
+        CGRect(x: CGFloat(placement.column) * (cell + gap), y: CGFloat(placement.row) * (cell + gap),
+               width: span(placement.columns), height: span(placement.rows))
+    }
+
     @Environment(\.panelActions) private var actions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The arrangement while a card is being dragged or resized. It goes to the settings
+    /// when the card is let go, so a drag is one write rather than one per card it passes.
+    @State private var working: [BentoTile]?
+    @State private var drag: TileDrag?
+    @State private var resizeStart: BentoTileSize?
+    @State private var jiggle = false
+
+    private struct TileDrag {
+        let id: UUID
+        /// Where the card was when the drag began, and where it is now.
+        let start: CGPoint
+        var origin: CGPoint
+        /// The card it last traded places with, and where the pointer was then, so one
+        /// trade cannot set off another while the pointer stands still.
+        var lastTarget: UUID?
+        var lastSwap: CGPoint
+    }
 
     private var formatter: MetricFormatter {
         MetricFormatter(settings: settings.settings.general)
     }
 
+    private var tiles: [BentoTile] { working ?? settings.settings.panel.bentoTiles }
+    private var isEditing: Bool { layout?.isEditing == true }
+
     var body: some View {
-        // Three column pairs, each stacked top to bottom.
-        HStack(alignment: .top, spacing: Self.gap) {
-            VStack(spacing: Self.gap) { cpu; gpu }
-            VStack(spacing: Self.gap) {
-                memory
-                network
-                system
-            }
-            VStack(spacing: Self.gap) {
-                disk
-                battery
-                HStack(alignment: .top, spacing: Self.gap) {
-                    thermal
-                    VStack(spacing: Self.gap) {
-                        action("Settings", symbol: "gearshape.fill",
-                               colors: [Color(nsColor: .systemGray), Color(nsColor: .secondaryLabelColor)],
-                               perform: actions.openSettings)
-                            .keyboardShortcut(",", modifiers: .command)
-                        action("Quit", symbol: "power",
-                               colors: [Color(nsColor: .systemRed), Color(nsColor: .systemPink)],
-                               perform: actions.quit)
-                            .keyboardShortcut("q", modifiers: .command)
+        let tiles = self.tiles
+        let packed = BentoLayout.pack(tiles)
+        VStack(spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tile in
+                    if let placement = packed.placements[tile.id] {
+                        placed(tile, frame: Self.frame(of: placement), index: index)
                     }
                 }
             }
+            .frame(width: Self.span(BentoLayout.columns), height: Self.span(max(packed.rows, 1)),
+                   alignment: .topLeading)
+            .coordinateSpace(.named(Self.space))
+            .padding(Self.inset)
+            if isEditing {
+                editBar
+                    .padding(.horizontal, Self.inset)
+                    .padding(.bottom, Self.inset)
+            }
         }
-        .padding(Self.inset)
+        .animation(Design.Motion.respectingAccessibility(.spring(duration: 0.3, bounce: 0.12)), value: tiles)
         .environment(\.metricFormatter, formatter)
+        .onChange(of: isEditing, initial: true) { _, editing in
+            var still = Transaction()
+            still.disablesAnimations = true
+            withTransaction(still) { jiggle = false }
+            guard editing, !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 0.14).repeatForever(autoreverses: true)) { jiggle = true }
+        }
+    }
+
+    // MARK: Arranging
+
+    /// A card at its place in the grid, or under the pointer while it is dragged, with
+    /// the edit controls over it in edit mode.
+    @ViewBuilder
+    private func placed(_ tile: BentoTile, frame: CGRect, index: Int) -> some View {
+        let isDragged = drag?.id == tile.id
+        let origin = isDragged ? drag?.origin ?? frame.origin : frame.origin
+        // Neighbours lean opposite ways, so the grid shimmers rather than sways.
+        let tilt = (index.isMultiple(of: 2) ? 1.0 : -1.0) * (jiggle ? 0.6 : -0.6)
+        tileView(tile, size: frame.size)
+            .frame(width: frame.width, height: frame.height)
+            .allowsHitTesting(!isEditing)
+            .overlay {
+                if isEditing { editControls(tile, frame: frame) }
+            }
+            .contextMenu {
+                if !isEditing, layout != nil {
+                    Button("Edit Layout", systemImage: "square.grid.2x2") { layout?.beginEditing() }
+                }
+            }
+            // Pressing and holding a module card starts arranging, as in Control Center.
+            // Not an action card: holding Quit must not quit on the way.
+            .gesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in layout?.beginEditing() },
+                     including: isEditing || tile.kind.isAction || layout == nil ? .subviews : .all)
+            .rotationEffect(.degrees(isEditing && !isDragged ? tilt : 0))
+            .scaleEffect(isDragged ? 1.04 : 1)
+            .shadow(color: .black.opacity(isDragged ? 0.25 : 0), radius: 12, y: 4)
+            .zIndex(isDragged ? 1 : 0)
+            .offset(x: origin.x, y: origin.y)
+            .transition(.scale(scale: 0.85).combined(with: .opacity))
+    }
+
+    /// Over a card in edit mode: the surface it is dragged by, the minus that removes it,
+    /// the menu for its size and style, and the corner it is resized by.
+    private func editControls(_ tile: BentoTile, frame: CGRect) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(moveGesture(tile, frame: frame))
+            .overlay(alignment: .topLeading) {
+                // Settings and Quit stay: without them the panel has no way out.
+                if !tile.kind.isAction {
+                    badge("minus", label: "Remove \(tile.kind.label)") {
+                        edit { $0.removeAll { $0.id == tile.id } }
+                    }
+                    .offset(x: -7, y: -7)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                // Inside the corner: outside, it would meet the next card's minus.
+                options(tile).padding(Design.Space.s)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                resizeHandle(tile)
+            }
+    }
+
+    private func moveGesture(_ tile: BentoTile, frame: CGRect) -> some Gesture {
+        DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
+            .onChanged { value in
+                if drag == nil {
+                    working = tiles
+                    drag = TileDrag(id: tile.id, start: frame.origin, origin: frame.origin,
+                                    lastTarget: nil, lastSwap: value.startLocation)
+                }
+                guard let start = drag?.start else { return }
+                drag?.origin = CGPoint(x: start.x + value.translation.width,
+                                       y: start.y + value.translation.height)
+                reorder(tile.id, toward: value.location)
+            }
+            .onEnded { _ in
+                withAnimation(Design.Motion.respectingAccessibility(.spring(duration: 0.3, bounce: 0.12))) {
+                    drag = nil
+                }
+                commit()
+            }
+    }
+
+    /// Moves the dragged card to the place of the card under the pointer, and the cards
+    /// between them along by one, the way a list reorders.
+    private func reorder(_ id: UUID, toward point: CGPoint) {
+        guard var list = working, let drag else { return }
+        let packed = BentoLayout.pack(list).placements
+        guard let target = list.first(where: { tile in
+            tile.id != id && packed[tile.id].map { Self.frame(of: $0).contains(point) } == true
+        }) else {
+            self.drag?.lastTarget = nil
+            return
+        }
+        guard target.id != drag.lastTarget,
+              hypot(point.x - drag.lastSwap.x, point.y - drag.lastSwap.y) > 12,
+              let from = list.firstIndex(where: { $0.id == id }),
+              let to = list.firstIndex(where: { $0.id == target.id }) else { return }
+        list.insert(list.remove(at: from), at: to)
+        working = list
+        self.drag?.lastTarget = target.id
+        self.drag?.lastSwap = point
+    }
+
+    /// The corner a card is resized by: dragged, it snaps to the nearest size the card
+    /// can take, and the cards around it flow out of the way.
+    private func resizeHandle(_ tile: BentoTile) -> some View {
+        ResizeCorner()
+            .stroke(Design.Palette.secondaryText, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .frame(width: 14, height: 14)
+            .padding(7)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.space))
+                    .onChanged { value in
+                        if resizeStart == nil {
+                            resizeStart = tile.size
+                            working = tiles
+                        }
+                        guard let start = resizeStart else { return }
+                        let pitch = Self.cell + Self.gap
+                        let columns = Int(((Self.span(start.columns) + value.translation.width + Self.gap) / pitch).rounded())
+                        let rows = Int(((Self.span(start.rows) + value.translation.height + Self.gap) / pitch).rounded())
+                        guard let size = BentoTileSize.nearest(columns: max(columns, 1), rows: max(rows, 1),
+                                                               in: tile.kind.sizes),
+                              let index = working?.firstIndex(where: { $0.id == tile.id }),
+                              working?[index].size != size else { return }
+                        working?[index].size = size
+                    }
+                    .onEnded { _ in
+                        resizeStart = nil
+                        commit()
+                    }
+            )
+            .accessibilityLabel("Resize \(tile.kind.label)")
+    }
+
+    /// A card's size, and for a module card how it draws itself.
+    private func options(_ tile: BentoTile) -> some View {
+        Menu {
+            if !tile.kind.styles.isEmpty {
+                Picker("Style", selection: binding(tile.id, \.style, default: tile.style)) {
+                    ForEach(tile.kind.styles, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.inline)
+            }
+            Picker("Size", selection: binding(tile.id, \.size, default: tile.size)) {
+                ForEach(tile.kind.sizes, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            badgeFace("ellipsis")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("\(tile.kind.label) options")
+    }
+
+    private func binding<Value>(_ id: UUID, _ keyPath: WritableKeyPath<BentoTile, Value>,
+                                default fallback: Value) -> Binding<Value> {
+        Binding {
+            tiles.first { $0.id == id }?[keyPath: keyPath] ?? fallback
+        } set: { value in
+            edit { list in
+                if let index = list.firstIndex(where: { $0.id == id }) { list[index][keyPath: keyPath] = value }
+            }
+        }
+    }
+
+    private func badge(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { badgeFace(symbol) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+    }
+
+    private func badgeFace(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 9, weight: .heavy))
+            .foregroundStyle(Design.Palette.primaryText)
+            .frame(width: 20, height: 20)
+            .background(Circle().fill(Self.badgeFill))
+            .overlay(Circle().strokeBorder(Design.Palette.separator, lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+            .contentShape(Circle())
+    }
+
+    private static let badgeFill = Color(nsColor: NSColor(name: nil) {
+        $0.isDark ? NSColor(white: 0.32, alpha: 1) : NSColor(white: 0.9, alpha: 1)
+    })
+
+    /// Under the grid in edit mode: add a card, go back to the designed arrangement, done.
+    private var editBar: some View {
+        HStack(spacing: Design.Space.m) {
+            Menu {
+                ForEach(BentoTileKind.allCases, id: \.self) { kind in
+                    Button(kind.label, systemImage: kind.symbolName) {
+                        edit { $0.append(BentoTile(kind: kind)) }
+                    }
+                }
+            } label: {
+                pill("plus", "Add Card")
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            Button { edit { $0 = BentoLayout.defaultTiles } } label: {
+                pill("arrow.counterclockwise", "Reset")
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 0)
+            Text("Drag to move · Drag a corner to resize")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Design.Palette.tertiaryText)
+            Spacer(minLength: 0)
+            Button { layout?.isEditing = false } label: {
+                pill(nil, "Done", isProminent: true)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+        }
+    }
+
+    private func pill(_ symbol: String?, _ title: String, isProminent: Bool = false) -> some View {
+        HStack(spacing: Design.Space.xs) {
+            if let symbol {
+                Image(systemName: symbol).font(.system(size: 11, weight: .bold))
+            }
+            Text(title).font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(isProminent ? Color.white : Design.Palette.primaryText)
+        .padding(.horizontal, Design.Space.l)
+        .padding(.vertical, Design.Space.s)
+        .background(Capsule().fill(isProminent ? AnyShapeStyle(Design.Palette.accent)
+                                               : AnyShapeStyle(BentoCard<EmptyView>.surface)))
+        .contentShape(Capsule())
+    }
+
+    /// A change to the arrangement, saved and animated.
+    private func edit(_ change: (inout [BentoTile]) -> Void) {
+        var list = settings.settings.panel.bentoTiles
+        change(&list)
+        let sanitized = BentoLayout.sanitized(list)
+        settings.update { $0.panel.bentoTiles = sanitized }
+    }
+
+    private func commit() {
+        guard let working else { return }
+        settings.update { $0.panel.bentoTiles = working }
+        self.working = nil
     }
 
     // MARK: Cards
 
-    private var cpu: some View {
-        let cpu = engine.cpu.value
-        let system = engine.system.value
-        // Each core's own load beside its kind. A core the system did not classify is
-        // drawn as a performance core: that is what a chip without the split has.
-        let cores = cpu.map { cpu in
-            cpu.perCore.indices.map { index in
-                (kind: index < cpu.coreKinds.count ? cpu.coreKinds[index] : .unknown,
-                 busy: cpu.perCore[index].busy)
+    @ViewBuilder
+    private func tileView(_ tile: BentoTile, size: CGSize) -> some View {
+        switch tile.kind {
+        case .settings:
+            action("Settings", symbol: "gearshape.fill",
+                   colors: [Color(nsColor: .systemGray), Color(nsColor: .secondaryLabelColor)],
+                   size: size, perform: actions.openSettings)
+                .keyboardShortcut(",", modifiers: .command)
+        case .quit:
+            action("Quit", symbol: "power",
+                   colors: [Color(nsColor: .systemRed), Color(nsColor: .systemPink)],
+                   size: size, perform: actions.quit)
+                .keyboardShortcut("q", modifiers: .command)
+        default:
+            if tile.style == .graphic, tile.size == tile.kind.defaultSize {
+                designed(tile.kind)
+            } else if let module = tile.kind.module {
+                flexible(tile, module: module, size: size)
             }
-        } ?? []
-        // The chip alone: its cores carry the load, and the detail beside the panel
-        // carries the figures.
+        }
+    }
+
+    /// The card as it was designed, at its designed size.
+    @ViewBuilder
+    private func designed(_ kind: BentoTileKind) -> some View {
+        switch kind {
+        case .cpu: cpu
+        case .memory: memory
+        case .gpu: gpu
+        case .disk: disk
+        case .battery: battery
+        case .network: network
+        case .thermal: thermal
+        case .system: system
+        case .settings, .quit: EmptyView()
+        }
+    }
+
+    private var cpu: some View {
         // What is using the CPU belongs with the CPU: the five busiest processes under
         // the chip, each icon over its share, and the count in the caption.
-        let processes = processList
-        let busiest = processes.map {
-            Array($0.list.processes.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(5))
-        } ?? []
-        return card(.cpu, width: Self.span(2), height: Self.span(2),
-                    caption: processes.map { "\(formatter.count($0.list.totalProcessCount)) processes" }) {
+        card(.cpu, width: Self.span(2), height: Self.span(2), caption: processCaption) {
             VStack(spacing: Design.Space.m) {
-                ChipGraphic(name: system?.chipName,
-                            performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
-                            efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
-                            performanceColors: palette(.cpu, onCard: false),
-                            efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
-                    .frame(width: 140, height: 140)
-                if busiest.isEmpty {
-                    // Nothing yet, not even from last time: the row's shape, so the chip
-                    // does not move when the processes arrive.
-                    HStack(spacing: Design.Space.l) {
-                        ForEach(0..<5, id: \.self) { _ in
-                            VStack(spacing: 2) {
-                                Circle().fill(Design.Palette.track).frame(width: 16, height: 16)
-                                Capsule().fill(Design.Palette.track).frame(width: 18, height: 6)
-                                    .frame(height: 11)
-                            }
-                        }
-                    }
-                    .accessibilityHidden(true)
-                } else {
-                    HStack(spacing: Design.Space.l) {
-                        ForEach(busiest, id: \.pid) { process in
-                            VStack(spacing: 2) {
-                                ProcessIcon(process: process, size: 16)
-                                Text(formatter.unclampedPercent(process.cpuPercent, decimals: 0))
-                                    .font(.system(size: 9, weight: .semibold).monospacedDigit())
-                                    .foregroundStyle(Design.Palette.secondaryText)
-                                    .lineLimit(1)
-                                    .fixedSize()
-                            }
-                        }
-                    }
-                    .lastKnown(processes?.isLastKnown == true)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Busiest processes: " + busiest.map(\.name).joined(separator: ", "))
-                }
+                chip.frame(width: 140, height: 140)
+                busiestRow
             }
         }
     }
 
     private var memory: some View {
-        let memory = engine.memory.value
-        let used = memory.map { $0.totalBytes > 0 ? Double($0.usedBytes) / Double($0.totalBytes) : 0 }
-        // Free is what the fill leaves: everything not counted as used, the way the SSD
-        // reports its available space.
-        let free = memory.map { $0.totalBytes > $0.usedBytes ? $0.totalBytes - $0.usedBytes : 0 }
-        // The biggest users, ranked by what they hold rather than by how busy they are:
-        // the process sample keeps the largest idle ones for exactly this.
-        let processes = processList
-        let top = processes.map {
-            Array($0.list.processes.sorted { $0.memoryBytes > $1.memoryBytes }.prefix(5))
-        } ?? []
-        return card(.memory, width: Self.span(2), height: Self.span(2),
-                    caption: memory.map { "\(Self.marketingCapacity($0.totalBytes)) Memory" } ?? "Memory") {
+        card(.memory, width: Self.span(2), height: Self.span(2), caption: memoryCaption) {
             VStack(spacing: Design.Space.m) {
-                MemoryGraphic(label: free.map { "\(formatter.memory($0)) free" },
-                              fraction: used ?? 0, load: palette(.memory, onCard: false)[0])
-                    .frame(width: 200, height: 56)
-                if top.isEmpty {
-                    // The list's shape until there is one to show.
-                    VStack(spacing: 2) {
-                        ForEach(0..<5, id: \.self) { _ in
-                            HStack(spacing: Design.Space.xs) {
-                                Circle().fill(Design.Palette.track).frame(width: 13, height: 13)
-                                Capsule().fill(Design.Palette.track).frame(width: 90, height: 7)
-                                Spacer(minLength: Design.Space.s)
-                                Capsule().fill(Design.Palette.track).frame(width: 34, height: 7)
-                            }
-                            .frame(height: 15)
-                        }
-                    }
-                    .padding(.horizontal, Design.Space.xs)
-                    .accessibilityHidden(true)
-                } else {
-                    VStack(spacing: 2) {
-                        ForEach(top, id: \.pid) { process in
-                            HStack(spacing: Design.Space.xs) {
-                                ProcessIcon(process: process, size: 13)
-                                Text(process.name)
-                                    .font(.system(size: 10.5, weight: .medium))
-                                    .foregroundStyle(Design.Palette.primaryText)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                Spacer(minLength: Design.Space.s)
-                                Text(formatter.memory(process.memoryBytes))
-                                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
-                                    .foregroundStyle(Design.Palette.secondaryText)
-                            }
-                            .frame(height: 15)
-                        }
-                    }
-                    .padding(.horizontal, Design.Space.xs)
-                    .lastKnown(processes?.isLastKnown == true)
-                }
+                memoryStick.frame(width: 200, height: 56)
+                memoryList
             }
         }
     }
 
     private var gpu: some View {
-        let device = engine.gpu.value?.primary
-        let cores = device?.coreCount ?? engine.system.value?.gpuCoreCount
-        let load = device?.utilization
-        // What the GPU holds of the shared memory, against the most macOS will let it
-        // have: not memory of its own, a share of the one pool the Memory card shows.
-        var memory: GPUChannel?
-        if let used = device?.vramUsedBytes, let total = device?.vramTotalBytes, total > 0 {
-            memory = GPUChannel(name: "Memory", value: Double(used) / Double(total),
-                                detail: "\(formatter.memory(used)) of \(formatter.memory(total))")
-        }
-        let caption = cores.map { cores in
-            "\(cores)-core GPU" + (load.map { " · \(formatter.percent($0))" } ?? "")
-        }
-        return card(.gpu, width: Self.span(2), height: Self.span(2), caption: caption ?? "GPU") {
+        card(.gpu, width: Self.span(2), height: Self.span(2), caption: gpuCaption(withLoad: true)) {
             VStack(spacing: Design.Space.m) {
-                if let cores, cores > 0 {
-                    GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu, onCard: false),
-                           size: CGSize(width: 200, height: 106))
-                } else {
-                    bigNumber(.gpu, nil, size: 24)
-                }
-                // The die already draws the overall load, so the meters carry what it
-                // cannot: the GPU's memory, then the renderer and tiler the driver reports.
-                // macOS reports the GPU only as a whole, never core by core.
-                GPUMeters(channels: [memory,
-                                     device?.rendererUtilization.map { GPUChannel(name: "Renderer", value: $0) },
-                                     device?.tilerUtilization.map { GPUChannel(name: "Tiler", value: $0) }]
-                              .compactMap { $0 },
-                          colors: palette(.gpu), formatter: formatter)
-                    .padding(.horizontal, Design.Space.xs)
+                gpuDie(CGSize(width: 200, height: 106))
+                gpuMeters
             }
         }
     }
 
     private var disk: some View {
-        let disk = engine.disk.value
-        let root = disk?.rootVolume
-        return card(.disk, width: Self.span(2), height: Self.span(1),
-                    caption: root.map { "\(formatter.storage($0.totalBytes)) SSD" } ?? "SSD") {
+        card(.disk, width: Self.span(2), height: Self.span(1), caption: diskCaption) {
             VStack(spacing: Design.Space.s) {
-                // How full the disk is, from the same available space as the label printed
-                // on it so the two agree, the way Finder and System Settings count it.
-                SSDGraphic(fraction: root.map { $0.totalBytes > 0
-                               ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 } ?? 0,
-                           colors: palette(.disk, onCard: false),
-                           label: root.map { "\(formatter.storage($0.availableBytes)) free" })
-                    .frame(width: 200, height: 44)
-                HStack(spacing: Design.Space.xl) {
-                    diskRate("Read", disk?.readBytesPerSecond)
-                    diskRate("Write", disk?.writeBytesPerSecond)
-                }
+                ssd.frame(width: 200, height: 44)
+                diskRates
             }
         }
     }
@@ -269,60 +451,32 @@ struct BentoGrid: View {
                     caption: power.map(batteryCaption) ?? "Battery") {
             HStack(spacing: Design.Space.l) {
                 if let power, !power.hasBattery {
-                    Image(systemName: "powerplug.fill")
-                        .font(.system(size: 30, weight: .semibold))
-                        .foregroundStyle(gradient(.battery))
+                    batteryObject
                     bigNumber(.battery, "AC", size: 28)
                 } else {
-                    let fraction = (power?.percentage ?? 0) / 100
-                    let isLow = power != nil && fraction <= 0.2 && power?.isCharging == false
-                    BatteryGraphic(fraction: fraction, isCharging: power?.isCharging ?? false,
-                                   charge: isLow ? Color(nsColor: .systemRed) : palette(.battery)[0])
-                        .frame(width: 86, height: 40)
-                    bigNumber(.battery, power?.percentage.map { formatter.percentValue($0) }, size: 30,
-                              colors: isLow ? [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)] : nil)
+                    batteryObject.frame(width: 86, height: 40)
+                    bigNumber(.battery, batteryReading, size: 30, colors: batteryColors)
                 }
             }
         }
     }
 
     private var network: some View {
-        let isLastKnown = engine.network.value == nil && engine.lastKnown.network.value != nil
-        let network = engine.network.value ?? engine.lastKnown.network.value
-        return card(.network, width: Self.span(2), height: Self.span(1),
-                    caption: network.map { $0.wifi?.ssid ?? $0.connectionType.label } ?? "Network") {
+        card(.network, width: Self.span(2), height: Self.span(1), caption: networkCaption) {
             HStack(spacing: Design.Space.l) {
-                // Wi-Fi when that is the connection, the generic network glyph otherwise.
-                Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
-                    .font(.system(size: 36, weight: .semibold))
-                    .foregroundStyle(gradient(.network))
-                // Upload over download, in Activity Monitor's colours for the two
-                // directions: red going out, blue coming in.
-                VStack(alignment: .leading, spacing: 0) {
-                    rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
-                         colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)])
-                    rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
-                         colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)])
-                }
-                .lastKnown(isLastKnown)
+                networkSymbol
+                networkRates
             }
         }
     }
 
     private var thermal: some View {
         let thermal = engine.thermal.value
-        let celsius = thermal?.cpuCelsius
-        let caption = thermal.map { celsius == nil ? "No sensor" : "CPU · \($0.pressure.label)" }
-        return card(.thermal, width: Self.span(1), height: Self.span(2),
-                    caption: caption ?? "Temperature") {
+        return card(.thermal, width: Self.span(1), height: Self.span(2), caption: thermalCaption) {
             VStack(spacing: Design.Space.m) {
-                // Red whatever the metric's colour: on a thermometer red is the reading,
-                // and the top of the scale is where it means danger.
-                ThermometerGraphic(fraction: celsius.map { min(max(($0 - 30) / 70, 0), 1) } ?? 0,
-                                   colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)])
-                    .frame(width: 30, height: 140)
-                bigNumber(.thermal, celsius.map { formatter.temperature($0) } ?? thermal?.pressure.label,
-                          size: celsius == nil ? 17 : 26)
+                thermometer.frame(width: 30, height: 140)
+                bigNumber(.thermal, temperatureReading ?? thermal?.pressure.label,
+                          size: thermal?.cpuCelsius == nil ? 17 : 26)
             }
         }
     }
@@ -330,31 +484,544 @@ struct BentoGrid: View {
     /// The facts About This Mac gives: how long it has been up, what it is, and what it
     /// runs, with the computer's own name under them.
     private var system: some View {
-        let system = engine.system.value
-        return card(.system, width: Self.span(2), height: Self.span(1),
-                    caption: system.map(\.computerName).flatMap { $0.isEmpty ? nil : $0 } ?? "System") {
+        card(.system, width: Self.span(2), height: Self.span(1), caption: systemCaption) {
+            systemSummary
+        }
+    }
+
+    // MARK: Cards at any size
+
+    /// A module card's parts, for drawing it at a size or in a style other than the one
+    /// it was designed at.
+    private struct Parts {
+        /// The card's object, drawn at `native` and scaled to whatever room it gets.
+        var object: AnyView
+        var native: CGSize
+        var reading: String?
+        var readingColors: [Color]?
+        /// What the reading is: "CPU", "free", "uptime".
+        var label: String
+        /// The readings that support it, for the larger sizes.
+        var detail: AnyView?
+        /// The detail already carries the reading, so the two are not shown together.
+        var detailHasReading = false
+        var caption: String?
+        /// The caption of a one-cell card, which has no room for the reading itself.
+        var shortCaption: String?
+        /// Over the chart, the reading the line is drawn from, where that differs: the
+        /// memory chart is of what is used, the SSD's of what is read.
+        var chartReading: String?
+        var chartLabel: String?
+
+        /// A long, low object, the memory stick or the SSD, which prints its reading on
+        /// itself: wherever it is drawn large enough to read, the number is not repeated.
+        var isFlat: Bool { native.width / native.height > 2.5 }
+    }
+
+    private func parts(_ module: PanelModule) -> Parts {
+        switch module {
+        case .cpu:
+            let reading = engine.cpu.value.map { formatter.percent($0.total.busy) }
+            return Parts(object: AnyView(chip), native: CGSize(width: 140, height: 140),
+                         reading: reading, label: "CPU", detail: AnyView(busiestRow),
+                         caption: processCaption, shortCaption: reading.map { "\($0) CPU" })
+        case .memory:
+            let free = memoryFree.map { formatter.memory($0) }
+            return Parts(object: AnyView(memoryStick), native: CGSize(width: 200, height: 56),
+                         reading: free, label: "free", detail: AnyView(memoryList),
+                         caption: memoryCaption, shortCaption: free.map { "\($0) free" },
+                         chartReading: engine.memory.value.map { formatter.percent($0.usedFraction) },
+                         chartLabel: "used")
+        case .gpu:
+            let reading = engine.gpu.value?.primary?.utilization.map { formatter.percent($0) }
+            return Parts(object: AnyView(gpuDie(CGSize(width: 200, height: 106))),
+                         native: CGSize(width: 200, height: 106),
+                         reading: reading, label: "GPU", detail: AnyView(gpuMeters),
+                         caption: gpuCaption(withLoad: false), shortCaption: reading.map { "\($0) GPU" })
+        case .disk:
+            let free = engine.disk.value?.rootVolume.map { formatter.storage($0.availableBytes) }
+            return Parts(object: AnyView(ssd), native: CGSize(width: 200, height: 44),
+                         reading: free, label: "free", detail: AnyView(diskRates),
+                         caption: diskCaption, shortCaption: free.map { "\($0) free" },
+                         chartReading: engine.disk.value.map { formatter.diskRate($0.readBytesPerSecond) },
+                         chartLabel: "read")
+        case .battery:
+            let hasBattery = engine.power.value?.hasBattery != false
+            return Parts(object: AnyView(batteryObject),
+                         native: hasBattery ? CGSize(width: 86, height: 40) : CGSize(width: 40, height: 40),
+                         reading: hasBattery ? batteryReading : "AC", readingColors: batteryColors,
+                         label: hasBattery ? "charged" : "power adapter",
+                         caption: engine.power.value.map(batteryCaption) ?? "Battery",
+                         shortCaption: hasBattery ? batteryReading : "AC")
+        case .network:
+            let network = engine.network.value ?? engine.lastKnown.network.value
+            let down = network.map { formatter.networkRate($0.downloadBytesPerSecond) }
+            return Parts(object: AnyView(networkSymbol), native: CGSize(width: 46, height: 36),
+                         reading: down, readingColors: Self.downColors, label: "download",
+                         detail: AnyView(networkRates), detailHasReading: true,
+                         caption: networkCaption, shortCaption: down.map { "↓ \($0)" })
+        case .thermal:
+            return Parts(object: AnyView(thermometer), native: CGSize(width: 30, height: 140),
+                         reading: temperatureReading ?? engine.thermal.value?.pressure.label,
+                         label: "CPU", caption: thermalCaption, shortCaption: temperatureReading)
+        case .system, .processes:
+            let uptime = engine.system.value.map { formatter.uptime($0.uptime) }
+            return Parts(object: AnyView(Image(systemName: "laptopcomputer")
+                                            .font(.system(size: 44, weight: .regular))
+                                            .foregroundStyle(gradient(.system))),
+                         native: CGSize(width: 64, height: 44),
+                         reading: uptime, label: "uptime",
+                         detail: AnyView(systemSummary), detailHasReading: true,
+                         caption: systemCaption, shortCaption: uptime.map { "Up \($0)" })
+        }
+    }
+
+    private func flexible(_ tile: BentoTile, module: PanelModule, size: CGSize) -> some View {
+        let parts = parts(module)
+        // Inside the card's padding, above its caption.
+        let box = CGSize(width: size.width - 16, height: size.height - 40)
+        let caption = tile.size == .small && tile.style == .graphic ? parts.shortCaption : parts.caption
+        return card(module, width: size.width, height: size.height, caption: caption) {
+            switch tile.style {
+            case .graphic: graphicLayout(tile.size, parts, module, box)
+            case .number: numberLayout(tile.size, parts, module, tile.kind)
+            case .chart: chartLayout(tile.size, parts, module, box)
+            }
+        }
+    }
+
+    /// The object leads, the reading beside or under it as the shape allows, and the
+    /// supporting readings and the history where there is room for them.
+    @ViewBuilder
+    private func graphicLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
+                               _ box: CGSize) -> some View {
+        switch size {
+        case .small:
+            fit(parts, in: box)
+        case .wide where parts.isFlat:
+            fit(parts, in: box)
+        case .wide:
             HStack(spacing: Design.Space.l) {
-                VStack(spacing: 0) {
-                    bigNumber(.system, system.map { formatter.uptime($0.uptime) }, size: 26)
-                    Text("uptime")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Design.Palette.secondaryText)
+                fit(parts, in: CGSize(width: box.width * 0.5, height: box.height))
+                if parts.detailHasReading, let detail = parts.detail { detail } else { reading(parts, module, size: 26) }
+            }
+        case .tall:
+            VStack(spacing: Design.Space.m) {
+                fit(parts, in: CGSize(width: box.width, height: box.height - 44))
+                bigNumber(module, parts.reading, size: 24, colors: parts.readingColors)
+            }
+        case .large:
+            VStack(spacing: Design.Space.m) {
+                fit(parts, in: CGSize(width: box.width, height: box.height - 70))
+                if let detail = parts.detail, parts.detailHasReading || parts.isFlat {
+                    detail
+                } else {
+                    reading(parts, module, size: 30, alignment: .center)
                 }
-                if let system {
-                    Rectangle()
-                        .fill(Design.Palette.separator)
-                        .frame(width: 1, height: 36)
-                    VStack(alignment: .leading, spacing: 2) {
-                        // "MacBook Pro (16-inch, 2021)" is the family, then its year.
-                        Text(system.modelName.components(separatedBy: " (").first ?? system.modelName)
-                            .font(.system(size: 13, weight: .semibold))
+            }
+        case .wideLarge where parts.isFlat, .extraWide where parts.isFlat:
+            VStack(spacing: Design.Space.m) {
+                fit(parts, in: CGSize(width: min(box.width, 320), height: 72))
+                parts.detail
+            }
+        case .wideLarge, .extraWide:
+            HStack(spacing: Design.Space.xl) {
+                fit(parts, in: CGSize(width: box.width * 0.42, height: box.height))
+                VStack(alignment: .leading, spacing: Design.Space.l) {
+                    if !parts.detailHasReading { reading(parts, module, size: 32) }
+                    parts.detail
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        case .tallLarge:
+            VStack(spacing: Design.Space.m) {
+                fit(parts, in: CGSize(width: box.width, height: parts.isFlat ? 72 : 110))
+                if let detail = parts.detail { detail } else { reading(parts, module, size: 30, alignment: .center) }
+                Spacer(minLength: 0)
+                sparkline(module, height: 70)
+            }
+        }
+    }
+
+    /// The reading leads, as large as the card allows, over what it is.
+    @ViewBuilder
+    private func numberLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
+                              _ kind: BentoTileKind) -> some View {
+        let symbol = Image(systemName: kind == .network ? "wifi" : kind.symbolName)
+            .foregroundStyle(gradient(parts.readingColors ?? palette(module)))
+        switch size {
+        case .small:
+            reading(parts, module, size: 26, alignment: .center)
+        case .wide:
+            HStack(spacing: Design.Space.l) {
+                symbol.font(.system(size: 28, weight: .semibold))
+                reading(parts, module, size: 36)
+            }
+        case .tall:
+            VStack(spacing: Design.Space.m) {
+                symbol.font(.system(size: 30, weight: .semibold))
+                reading(parts, module, size: 30, alignment: .center)
+            }
+        case .large:
+            VStack(spacing: Design.Space.s) {
+                symbol.font(.system(size: 26, weight: .semibold))
+                reading(parts, module, size: 50, alignment: .center)
+            }
+        case .wideLarge, .extraWide:
+            HStack(spacing: Design.Space.xl) {
+                VStack(alignment: .leading, spacing: Design.Space.s) {
+                    symbol.font(.system(size: 26, weight: .semibold))
+                    reading(parts, module, size: 52)
+                }
+                if let detail = parts.detail {
+                    detail.frame(maxWidth: .infinity)
+                }
+            }
+        case .tallLarge:
+            VStack(spacing: Design.Space.l) {
+                symbol.font(.system(size: 28, weight: .semibold))
+                reading(parts, module, size: 50, alignment: .center)
+                parts.detail
+            }
+        }
+    }
+
+    /// The reading over its history, the line filling what the card has left.
+    private func chartLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
+                             _ box: CGSize) -> some View {
+        let isSmall = size == .small || size == .wide
+        let number: CGFloat = size == .small ? 18 : isSmall ? 22 : 28
+        return VStack(alignment: .leading, spacing: Design.Space.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
+                bigNumber(module, parts.chartReading ?? parts.reading, size: number,
+                          colors: parts.readingColors)
+                // A one-cell card has room for the number alone.
+                if size != .small {
+                    Text(parts.chartLabel ?? parts.label)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(Design.Palette.secondaryText)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            sparkline(module, height: max(box.height - number - 10, 24), tint: parts.readingColors?.first)
+        }
+    }
+
+    /// The object at its own proportions, as large as `box` allows.
+    private func fit(_ parts: Parts, in box: CGSize) -> some View {
+        let scale = max(0.1, min(box.width / parts.native.width, box.height / parts.native.height, 1.6))
+        return parts.object
+            .frame(width: parts.native.width, height: parts.native.height)
+            .scaleEffect(scale)
+            .frame(width: parts.native.width * scale, height: parts.native.height * scale)
+    }
+
+    private func reading(_ parts: Parts, _ module: PanelModule, size: CGFloat,
+                         alignment: HorizontalAlignment = .leading) -> some View {
+        VStack(alignment: alignment, spacing: 0) {
+            bigNumber(module, parts.reading, size: size, colors: parts.readingColors)
+            Text(parts.label)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(Design.Palette.secondaryText)
+                .lineLimit(1)
+        }
+    }
+
+    /// The module's recent history, in the colour of the reading over it.
+    @ViewBuilder
+    private func sparkline(_ module: PanelModule, height: CGFloat, tint: Color? = nil) -> some View {
+        if let series = module.historySeries {
+            Sparkline(ChartSeries(series.key, from: engine.history, tint: tint ?? palette(module)[0],
+                                  domain: series.domain),
+                      settings: settings.settings.charts, height: height)
+        }
+    }
+
+    // MARK: Objects and readings
+
+    private var chip: some View {
+        let cpu = engine.cpu.value
+        // Each core's own load beside its kind. A core the system did not classify is
+        // drawn as a performance core: that is what a chip without the split has.
+        let cores = cpu.map { cpu in
+            cpu.perCore.indices.map { index in
+                (kind: index < cpu.coreKinds.count ? cpu.coreKinds[index] : .unknown,
+                 busy: cpu.perCore[index].busy)
+            }
+        } ?? []
+        return ChipGraphic(name: engine.system.value?.chipName,
+                           performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
+                           efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
+                           performanceColors: palette(.cpu, onCard: false),
+                           efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
+    }
+
+    private var processCaption: String? {
+        processList.map { "\(formatter.count($0.list.totalProcessCount)) processes" }
+    }
+
+    /// The five busiest processes, each icon over its share.
+    @ViewBuilder
+    private var busiestRow: some View {
+        let processes = processList
+        let busiest = processes.map {
+            Array($0.list.processes.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(5))
+        } ?? []
+        if busiest.isEmpty {
+            // Nothing yet, not even from last time: the row's shape, so the chip does not
+            // move when the processes arrive.
+            HStack(spacing: Design.Space.l) {
+                ForEach(0..<5, id: \.self) { _ in
+                    VStack(spacing: 2) {
+                        Circle().fill(Design.Palette.track).frame(width: 16, height: 16)
+                        Capsule().fill(Design.Palette.track).frame(width: 18, height: 6)
+                            .frame(height: 11)
+                    }
+                }
+            }
+            .accessibilityHidden(true)
+        } else {
+            HStack(spacing: Design.Space.l) {
+                ForEach(busiest, id: \.pid) { process in
+                    VStack(spacing: 2) {
+                        ProcessIcon(process: process, size: 16)
+                        Text(formatter.unclampedPercent(process.cpuPercent, decimals: 0))
+                            .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(Design.Palette.secondaryText)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                }
+            }
+            .lastKnown(processes?.isLastKnown == true)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Busiest processes: " + busiest.map(\.name).joined(separator: ", "))
+        }
+    }
+
+    /// Free is what the fill leaves: everything not counted as used, the way the SSD
+    /// reports its available space.
+    private var memoryFree: UInt64? {
+        engine.memory.value.map { $0.totalBytes > $0.usedBytes ? $0.totalBytes - $0.usedBytes : 0 }
+    }
+
+    private var memoryCaption: String {
+        engine.memory.value.map { "\(Self.marketingCapacity($0.totalBytes)) Memory" } ?? "Memory"
+    }
+
+    private var memoryStick: some View {
+        let memory = engine.memory.value
+        let used = memory.map { $0.totalBytes > 0 ? Double($0.usedBytes) / Double($0.totalBytes) : 0 }
+        return MemoryGraphic(label: memoryFree.map { "\(formatter.memory($0)) free" },
+                             fraction: used ?? 0, load: palette(.memory, onCard: false)[0])
+    }
+
+    /// The biggest users, ranked by what they hold rather than by how busy they are: the
+    /// process sample keeps the largest idle ones for exactly this.
+    @ViewBuilder
+    private var memoryList: some View {
+        let processes = processList
+        let top = processes.map {
+            Array($0.list.processes.sorted { $0.memoryBytes > $1.memoryBytes }.prefix(5))
+        } ?? []
+        if top.isEmpty {
+            // The list's shape until there is one to show.
+            VStack(spacing: 2) {
+                ForEach(0..<5, id: \.self) { _ in
+                    HStack(spacing: Design.Space.xs) {
+                        Circle().fill(Design.Palette.track).frame(width: 13, height: 13)
+                        Capsule().fill(Design.Palette.track).frame(width: 90, height: 7)
+                        Spacer(minLength: Design.Space.s)
+                        Capsule().fill(Design.Palette.track).frame(width: 34, height: 7)
+                    }
+                    .frame(height: 15)
+                }
+            }
+            .padding(.horizontal, Design.Space.xs)
+            .accessibilityHidden(true)
+        } else {
+            VStack(spacing: 2) {
+                ForEach(top, id: \.pid) { process in
+                    HStack(spacing: Design.Space.xs) {
+                        ProcessIcon(process: process, size: 13)
+                        Text(process.name)
+                            .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(Design.Palette.primaryText)
-                        Text("\(system.osName) \(system.osVersion)")
-                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: Design.Space.s)
+                        Text(formatter.memory(process.memoryBytes))
+                            .font(.system(size: 10, weight: .semibold).monospacedDigit())
                             .foregroundStyle(Design.Palette.secondaryText)
                     }
-                    .lineLimit(1)
+                    .frame(height: 15)
                 }
+            }
+            .padding(.horizontal, Design.Space.xs)
+            .lastKnown(processes?.isLastKnown == true)
+        }
+    }
+
+    private func gpuCaption(withLoad: Bool) -> String {
+        let device = engine.gpu.value?.primary
+        guard let cores = device?.coreCount ?? engine.system.value?.gpuCoreCount else { return "GPU" }
+        let load = withLoad ? device?.utilization.map { " · \(formatter.percent($0))" } : nil
+        return "\(cores)-core GPU" + (load ?? "")
+    }
+
+    @ViewBuilder
+    private func gpuDie(_ size: CGSize) -> some View {
+        let device = engine.gpu.value?.primary
+        if let cores = device?.coreCount ?? engine.system.value?.gpuCoreCount, cores > 0 {
+            GPUDie(cores: cores, load: device?.utilization ?? 0, colors: palette(.gpu, onCard: false),
+                   size: size)
+        } else {
+            bigNumber(.gpu, nil, size: 24)
+        }
+    }
+
+    /// The die already draws the overall load, so the meters carry what it cannot: the
+    /// GPU's memory, then the renderer and tiler the driver reports. macOS reports the
+    /// GPU only as a whole, never core by core.
+    private var gpuMeters: some View {
+        let device = engine.gpu.value?.primary
+        // What the GPU holds of the shared memory, against the most macOS will let it
+        // have: not memory of its own, a share of the one pool the Memory card shows.
+        var memory: GPUChannel?
+        if let used = device?.vramUsedBytes, let total = device?.vramTotalBytes, total > 0 {
+            memory = GPUChannel(name: "Memory", value: Double(used) / Double(total),
+                                detail: "\(formatter.memory(used)) of \(formatter.memory(total))")
+        }
+        return GPUMeters(channels: [memory,
+                                    device?.rendererUtilization.map { GPUChannel(name: "Renderer", value: $0) },
+                                    device?.tilerUtilization.map { GPUChannel(name: "Tiler", value: $0) }]
+                             .compactMap { $0 },
+                         colors: palette(.gpu), formatter: formatter)
+            .padding(.horizontal, Design.Space.xs)
+    }
+
+    private var diskCaption: String {
+        engine.disk.value?.rootVolume.map { "\(formatter.storage($0.totalBytes)) SSD" } ?? "SSD"
+    }
+
+    /// How full the disk is, from the same available space as the label printed on it so
+    /// the two agree, the way Finder and System Settings count it.
+    private var ssd: some View {
+        let root = engine.disk.value?.rootVolume
+        return SSDGraphic(fraction: root.map { $0.totalBytes > 0
+                              ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 } ?? 0,
+                          colors: palette(.disk, onCard: false),
+                          label: root.map { "\(formatter.storage($0.availableBytes)) free" })
+    }
+
+    private var diskRates: some View {
+        HStack(spacing: Design.Space.xl) {
+            diskRate("Read", engine.disk.value?.readBytesPerSecond)
+            diskRate("Write", engine.disk.value?.writeBytesPerSecond)
+        }
+    }
+
+    private var batteryReading: String? {
+        engine.power.value?.percentage.map { formatter.percentValue($0) }
+    }
+
+    /// Red at 20% and under while not charging, the way the system's own battery goes.
+    private var batteryIsLow: Bool {
+        guard let power = engine.power.value else { return false }
+        return (power.percentage ?? 0) / 100 <= 0.2 && !power.isCharging
+    }
+
+    private var batteryColors: [Color]? {
+        batteryIsLow ? [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)] : nil
+    }
+
+    @ViewBuilder
+    private var batteryObject: some View {
+        let power = engine.power.value
+        if let power, !power.hasBattery {
+            Image(systemName: "powerplug.fill")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(gradient(.battery))
+        } else {
+            BatteryGraphic(fraction: (power?.percentage ?? 0) / 100, isCharging: power?.isCharging ?? false,
+                           charge: batteryIsLow ? Color(nsColor: .systemRed) : palette(.battery)[0])
+        }
+    }
+
+    private static let upColors = [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)]
+    private static let downColors = [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)]
+
+    private var networkCaption: String {
+        (engine.network.value ?? engine.lastKnown.network.value)
+            .map { $0.wifi?.ssid ?? $0.connectionType.label } ?? "Network"
+    }
+
+    /// Wi-Fi when that is the connection, the generic network glyph otherwise.
+    private var networkSymbol: some View {
+        let network = engine.network.value ?? engine.lastKnown.network.value
+        return Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
+            .font(.system(size: 36, weight: .semibold))
+            .foregroundStyle(gradient(.network))
+    }
+
+    /// Upload over download, in Activity Monitor's colours for the two directions: red
+    /// going out, blue coming in. The last rates, greyed, while the live ones return.
+    private var networkRates: some View {
+        let isLastKnown = engine.network.value == nil && engine.lastKnown.network.value != nil
+        let network = engine.network.value ?? engine.lastKnown.network.value
+        return VStack(alignment: .leading, spacing: 0) {
+            rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
+                 colors: Self.upColors)
+            rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
+                 colors: Self.downColors)
+        }
+        .lastKnown(isLastKnown)
+    }
+
+    private var temperatureReading: String? {
+        engine.thermal.value?.cpuCelsius.map { formatter.temperature($0) }
+    }
+
+    private var thermalCaption: String {
+        engine.thermal.value.map { $0.cpuCelsius == nil ? "No sensor" : "CPU · \($0.pressure.label)" }
+            ?? "Temperature"
+    }
+
+    /// Red whatever the metric's colour: on a thermometer red is the reading, and the top
+    /// of the scale is where it means danger.
+    private var thermometer: some View {
+        ThermometerGraphic(fraction: engine.thermal.value?.cpuCelsius.map { min(max(($0 - 30) / 70, 0), 1) } ?? 0,
+                           colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)])
+    }
+
+    private var systemCaption: String {
+        engine.system.value.map(\.computerName).flatMap { $0.isEmpty ? nil : $0 } ?? "System"
+    }
+
+    private var systemSummary: some View {
+        let system = engine.system.value
+        return HStack(spacing: Design.Space.l) {
+            VStack(spacing: 0) {
+                bigNumber(.system, system.map { formatter.uptime($0.uptime) }, size: 26)
+                Text("uptime")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Design.Palette.secondaryText)
+            }
+            if let system {
+                Rectangle()
+                    .fill(Design.Palette.separator)
+                    .frame(width: 1, height: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    // "MacBook Pro (16-inch, 2021)" is the family, then its year.
+                    Text(system.modelName.components(separatedBy: " (").first ?? system.modelName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Design.Palette.primaryText)
+                    Text("\(system.osName) \(system.osVersion)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Design.Palette.secondaryText)
+                }
+                .lineLimit(1)
             }
         }
     }
@@ -368,21 +1035,33 @@ struct BentoGrid: View {
         return engine.lastKnown.processes.value.map { ($0, true) }
     }
 
-    /// One of the panel's two actions as a card of its own, one cell: a symbol in its
-    /// gradient over its name, the whole card the button.
-    private func action(_ title: String, symbol: String, colors: [Color],
+    /// One of the panel's two actions as a card of its own: a symbol in its gradient over
+    /// its name, or beside it on a wide card, the whole card the button.
+    private func action(_ title: String, symbol: String, colors: [Color], size: CGSize,
                         perform: @escaping @MainActor () -> Void) -> some View {
         let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let icon = Image(systemName: symbol)
+            .font(.system(size: 24, weight: .semibold))
+            .foregroundStyle(gradient(colors))
         return Button(action: perform) {
-            VStack(spacing: Design.Space.s) {
-                Image(systemName: symbol)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(gradient(colors))
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Design.Palette.secondaryText)
+            Group {
+                if size.width > size.height {
+                    HStack(spacing: Design.Space.m) {
+                        icon
+                        Text(title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Design.Palette.secondaryText)
+                    }
+                } else {
+                    VStack(spacing: Design.Space.s) {
+                        icon
+                        Text(title)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Design.Palette.secondaryText)
+                    }
+                }
             }
-            .frame(width: Self.cell, height: Self.cell)
+            .frame(width: size.width, height: size.height)
         }
         .buttonStyle(BentoActionStyle())
         .background(shape.fill(BentoCard<EmptyView>.surface))
@@ -565,6 +1244,8 @@ private struct BentoCard<Content: View>: View {
         .contentShape(shape)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
         .onContinuousHover { phase in
+            // While the cards are being arranged, the detail would only be in the way.
+            guard layout?.isEditing != true else { return }
             switch phase {
             case .active: layout?.rowHover?(module, frame)
             case .ended: layout?.rowHover?(module, nil)
@@ -1316,6 +1997,17 @@ struct ThermometerGraphic: View {
 }
 
 // MARK: - Shape primitives
+
+/// The curved corner a card is resized by, the way Control Center draws it.
+private struct ResizeCorner: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY),
+                          control: CGPoint(x: rect.maxX, y: rect.maxY))
+        return path
+    }
+}
 
 /// The bottom `fraction` of a rect, animatable so a new reading rises rather than jumps.
 private struct FillFromBottom: Shape {

@@ -134,6 +134,8 @@ public final class PanelController: NSObject, NSWindowDelegate {
         hideDetail()
         hoveredRow = nil
         previousPointer = nil
+        // Edit mode is a moment's arranging, not a state the panel reopens in.
+        layout?.isEditing = false
         guard let window, isVisible else { return }
         presentation &+= 1
         let generation = presentation
@@ -202,6 +204,10 @@ public final class PanelController: NSObject, NSWindowDelegate {
         }
         layout.detailHover = { [weak self] hovering in
             self?.detailHover(hovering)
+        }
+        layout.onBeginEditing = { [weak self] in
+            self?.hoveredRow = nil
+            self?.hideDetail()
         }
         let root = PanelRootView(engine: engine, settings: settings, updates: updates,
                                  layout: layout)

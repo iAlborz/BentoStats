@@ -403,6 +403,9 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     /// The panel's layout. The one choice of how the panel looks that is left to the
     /// user, because the three are different ways of reading it rather than tweaks.
     public var style: PanelStyle
+    /// The bento style's cards, in order, each with its size and style. Arranged in the
+    /// panel itself, in its edit mode.
+    public var bentoTiles: [BentoTile]
 
     /// Fixed layout, previously the `width` setting. 380pt gives a detail grid three
     /// columns and a process name room beside its icon, and still leaves the panel
@@ -419,10 +422,12 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public static let staysOpenOnFocusLoss = false
 
     public init(collapsedModules: Set<PanelModule> = PanelSettings.defaultCollapsed,
-                showsHistoryChart: Bool = true, style: PanelStyle = .list) {
+                showsHistoryChart: Bool = true, style: PanelStyle = .list,
+                bentoTiles: [BentoTile] = BentoLayout.defaultTiles) {
         self.collapsedModules = Self.accordion(collapsedModules)
         self.showsHistoryChart = showsHistoryChart
         self.style = style
+        self.bentoTiles = BentoLayout.sanitized(bentoTiles)
     }
 
     /// The collapsed set after a click on `module`'s header.
@@ -469,7 +474,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public var visibleModules: [PanelModule] { PanelModule.allCases }
 
     private enum CodingKeys: String, CodingKey {
-        case collapsedModules, showsHistoryChart, style
+        case collapsedModules, showsHistoryChart, style, bentoTiles
     }
 
     /// Decoded leniently, and settings files written before the panel pane was removed
@@ -480,6 +485,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         collapsedModules = Self.accordion(c.value(.collapsedModules, or: PanelSettings.defaultCollapsed))
         showsHistoryChart = c.value(.showsHistoryChart, or: true)
         style = c.value(.style, or: .list)
+        bentoTiles = BentoLayout.sanitized(c.value(.bentoTiles, or: BentoLayout.defaultTiles))
     }
 }
 
