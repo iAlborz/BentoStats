@@ -426,7 +426,11 @@ struct BentoGrid: View {
     /// colour in light appearance: white is a fine choice for the dark panel and an
     /// invisible number on a light one.
     private func palette(_ module: PanelModule, onCard: Bool = true) -> [Color] {
-        if let custom = settings.settings.theme.color(for: module.requiredSource) {
+        Self.palette(module, theme: settings.settings.theme, onCard: onCard)
+    }
+
+    static func palette(_ module: PanelModule, theme: ThemeSettings, onCard: Bool = true) -> [Color] {
+        if let custom = theme.color(for: module.requiredSource) {
             let color = onCard ? Self.legibleOnCard(custom) : Color(themeColor: custom)
             return [color, color]
         }
@@ -452,6 +456,9 @@ struct BentoGrid: View {
             !appearance.isDark && luminance > 0.75 ? .labelColor : color
         })
     }
+
+    /// The cards' own surface, for anything drawn to match them.
+    static var surface: Color { BentoCard<EmptyView>.surface }
 
     /// Installed memory the way it is sold: 34,359,738,368 bytes is "32 GB", not the
     /// "34.4 GB" a decimal formatter makes of it.
@@ -1192,7 +1199,7 @@ private struct SSDPins: Shape {
 
 /// A battery at the proportions of the system glyph, large: an outlined body and a
 /// terminal, the charge inset inside it.
-private struct BatteryGraphic: View {
+struct BatteryGraphic: View {
     let fraction: Double
     let isCharging: Bool
     let charge: Color
@@ -1357,7 +1364,7 @@ private struct ThermometerScale: Shape {
 }
 
 /// A process's icon: its app's own, or a gear for a process with no app around it.
-private struct ProcessIcon: View {
+struct ProcessIcon: View {
     let process: ProcessRow
     let size: CGFloat
 

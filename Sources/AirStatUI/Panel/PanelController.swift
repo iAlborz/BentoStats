@@ -625,7 +625,8 @@ public final class PanelController: NSObject, NSWindowDelegate {
         x = min(x, visible.maxX - fitting.width - margin)
         // SwiftUI measures the row from the panel's top edge, and screen y runs upwards.
         // The detail's own top padding goes back on so its header sits level with the row.
-        let rowTop = panel.maxY - row.minY + Design.Space.xs
+        let padding = settings.settings.panel.style == .bento ? BentoDetail.inset : Design.Space.xs
+        let rowTop = panel.maxY - row.minY + padding
         let y = min(max(rowTop - height, visible.minY + margin), visible.maxY - height - margin)
 
         let frame = NSRect(x: x.rounded(), y: y.rounded(), width: fitting.width, height: height)

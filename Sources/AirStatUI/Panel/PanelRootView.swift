@@ -176,18 +176,24 @@ struct PanelDetailView: View {
 
     var body: some View {
         if let module = layout.detailModule {
-            let formatter = MetricFormatter(settings: settings.settings.general)
-            let summary = PanelSummary.make(for: module, engine: engine, formatter: formatter)
-            PanelModuleView(module: module, engine: engine, settings: settings,
-                            presentation: .detail,
-                            captionColumnWidth: PanelSummary.captionColumnWidth(for: [summary]))
-                // A fresh view per module, so a chart range picked for one module does
-                // not carry over to the next.
-                .id(module)
-                .padding(.vertical, Design.Space.xs)
-                .frame(width: PanelSettings.width)
-                .contentShape(Rectangle())
-                .onHover { layout.detailHover?($0) }
+            Group {
+                if settings.settings.panel.style == .bento {
+                    BentoDetail(module: module, engine: engine, settings: settings)
+                } else {
+                    let formatter = MetricFormatter(settings: settings.settings.general)
+                    let summary = PanelSummary.make(for: module, engine: engine, formatter: formatter)
+                    PanelModuleView(module: module, engine: engine, settings: settings,
+                                    presentation: .detail,
+                                    captionColumnWidth: PanelSummary.captionColumnWidth(for: [summary]))
+                        .padding(.vertical, Design.Space.xs)
+                        .frame(width: PanelSettings.width)
+                }
+            }
+            // A fresh view per module, so a chart range picked for one module does
+            // not carry over to the next.
+            .id(module)
+            .contentShape(Rectangle())
+            .onHover { layout.detailHover?($0) }
         }
     }
 }
