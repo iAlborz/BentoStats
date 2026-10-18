@@ -153,7 +153,7 @@ struct BentoGrid: View {
             VStack(spacing: Design.Space.m) {
                 if let cores, cores > 0 {
                     GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu, onCard: false),
-                           size: CGSize(width: 196, height: 98))
+                           size: CGSize(width: 196, height: 106))
                 } else {
                     bigNumber(.gpu, nil, size: 24)
                 }
@@ -555,8 +555,9 @@ private struct ChipGraphic: View {
         }
     }
 
-    private static let silver = LinearGradient(colors: [Color(white: 0.97), Color(white: 0.66)],
-                                               startPoint: .top, endPoint: .bottom)
+    /// The brushed silver the chips' lettering is set in, the CPU's and the GPU's.
+    static let silver = LinearGradient(colors: [Color(white: 0.97), Color(white: 0.66)],
+                                       startPoint: .top, endPoint: .bottom)
 
     @ViewBuilder
     private func lettering(side: CGFloat, scale: CGFloat) -> some View {
@@ -760,7 +761,8 @@ private struct Ticks: Shape {
 
 /// The GPU as a packaged chip: the CPU chip's face, gold legs standing off all four
 /// edges, and its cores laid out as on the die, in four clusters with a wider channel
-/// between them, so a 32-core GPU reads as four blocks of eight.
+/// between them, so a 32-core GPU reads as four blocks of eight. The channel across the
+/// middle carries the chip's name, the Apple logo and "GPU" in the CPU chip's silver.
 ///
 /// Blocks switch on one by one as the load rises, in reading order across the whole
 /// grid: at 18% of 32 cores, the first six. macOS reports the GPU only as a whole, so
@@ -780,6 +782,8 @@ private struct GPUDie: View {
     private static let gap: CGFloat = 3
     /// Between the clusters.
     private static let channel: CGFloat = 8
+    /// The channel across the middle, which carries the label.
+    private static let band: CGFloat = 20
 
     var body: some View {
         let columns = cores % 8 == 0 || cores > 8 ? min(cores, 8) : cores
@@ -789,7 +793,7 @@ private struct GPUDie: View {
         let rowSplit = rows >= 2 && rows % 2 == 0 ? rows / 2 : nil
         let package = CGSize(width: size.width - Self.leg * 2, height: size.height - Self.leg * 2)
         let across = Self.gap * CGFloat(columns - 1) + (columnSplit == nil ? 0 : Self.channel - Self.gap)
-        let down = Self.gap * CGFloat(rows - 1) + (rowSplit == nil ? 0 : Self.channel - Self.gap)
+        let down = Self.gap * CGFloat(rows - 1) + (rowSplit == nil ? 0 : Self.band - Self.gap)
         let block = CGSize(width: (package.width - Self.inset * 2 - across) / CGFloat(columns),
                            height: (package.height - Self.inset * 2 - down) / CGFloat(rows))
         let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
@@ -803,7 +807,11 @@ private struct GPUDie: View {
             VStack(spacing: 0) {
                 ForEach(0..<rows, id: \.self) { row in
                     if row > 0 {
-                        Color.clear.frame(height: row == rowSplit ? Self.channel : Self.gap)
+                        if row == rowSplit {
+                            label.frame(height: Self.band)
+                        } else {
+                            Color.clear.frame(height: Self.gap)
+                        }
                     }
                     HStack(spacing: 0) {
                         ForEach(0..<columns, id: \.self) { column in
@@ -824,6 +832,18 @@ private struct GPUDie: View {
         }
         .frame(width: size.width, height: size.height)
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: lit)
+    }
+
+    /// The logo and "GPU", set as the CPU chip's "M1" is.
+    private var label: some View {
+        HStack(alignment: .center, spacing: 2) {
+            Image(systemName: "applelogo")
+                .font(.system(size: 12, weight: .regular))
+            Text("GPU")
+                .font(.system(size: 14, weight: .semibold))
+                .tracking(0.5)
+        }
+        .foregroundStyle(ChipGraphic.silver)
     }
 }
 
