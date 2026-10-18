@@ -78,4 +78,15 @@ struct BentoLayoutTests {
         #expect(BentoTileSize.nearest(columns: 4, rows: 3, in: BentoTileKind.cpu.sizes) == .extraWide)
         #expect(BentoTileSize.nearest(columns: 2, rows: 2, in: BentoTileKind.quit.sizes) == .wide)
     }
+
+    @Test("the MacBook style is saved and read back, and opens the card detail on hover")
+    func macBookStyle() throws {
+        var panel = PanelSettings()
+        panel.style = .macbook
+        let decoded = try JSONDecoder().decode(PanelSettings.self, from: JSONEncoder().encode(panel))
+        #expect(decoded.style == .macbook)
+        #expect(PanelStyle.macbook.usesCardDetail)
+        #expect(PanelStyle.bento.usesCardDetail)
+        #expect(!PanelStyle.list.usesCardDetail)
+    }
 }
