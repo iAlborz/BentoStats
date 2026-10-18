@@ -9,7 +9,7 @@ import AirStatKit
 /// card's colour over a short caption, and the module's history last. The card answers
 /// "how is it now"; the detail answers "and what else", so no figure appears in both.
 ///
-/// Temperatures are red wherever they appear, as the card's thermometer is. A part's
+/// Temperatures are thermometers wherever they appear, red as the card's is. A part's
 /// temperature sits with the part: the GPU's with the GPU, the battery's with
 /// the battery, the SSD's with the SSD. The Temperature card is the CPU's, so its detail
 /// carries the CPU's hottest sensor, the enclosure and the fans.
@@ -171,9 +171,9 @@ struct BentoDetail: View {
 
     private func gpuTemperatures() -> [Stat] {
         guard let thermal = engine.thermal.value, let celsius = thermal.gpuCelsius else { return [] }
-        var items = [Stat(formatter.temperature(celsius), "Temperature", colors: Self.heat)]
+        var items = [temperature(celsius, "Temperature")]
         if let hottest = Self.hottest(thermal, .gpu, ifMoreThanOne: true) {
-            items.append(Stat(formatter.temperature(hottest), "Hotspot", colors: Self.heat))
+            items.append(temperature(hottest, "Hotspot"))
         }
         return items
     }
@@ -206,7 +206,7 @@ struct BentoDetail: View {
         var totals = [Stat(formatter.storage(disk.totalReadBytes), "Read since boot"),
                       Stat(formatter.storage(disk.totalWriteBytes), "Written since boot")]
         if let thermal = engine.thermal.value, let celsius = Self.hottest(thermal, .storage) {
-            totals.append(Stat(formatter.temperature(celsius), "Temperature", colors: Self.heat))
+            totals.append(temperature(celsius, "Temperature"))
         }
         return totals
     }
@@ -253,7 +253,7 @@ struct BentoDetail: View {
             }
             if let celsius = power.temperatureCelsius
                 ?? engine.thermal.value.flatMap({ Self.hottest($0, .battery) }) {
-                items.append(Stat(formatter.temperature(celsius), "Temperature", colors: Self.heat))
+                items.append(temperature(celsius, "Temperature"))
             }
         }
         if let watts = power.adapterWatts {
@@ -330,10 +330,10 @@ struct BentoDetail: View {
     private func sensors(_ thermal: ThermalSnapshot) -> [Stat] {
         var sensors: [Stat] = []
         if let hottest = Self.hottest(thermal, .cpu, ifMoreThanOne: true) {
-            sensors.append(Stat(formatter.temperature(hottest), "CPU hotspot", colors: Self.heat))
+            sensors.append(temperature(hottest, "CPU hotspot"))
         }
         if let enclosure = Self.hottest(thermal, .ambient) {
-            sensors.append(Stat(formatter.temperature(enclosure), "Enclosure", colors: Self.heat))
+            sensors.append(temperature(enclosure, "Enclosure"))
         }
         return sensors
     }
@@ -365,15 +365,23 @@ struct BentoDetail: View {
         var fraction: Double?
         var colors: [Color]?
         var size: CGFloat
+        /// A temperature, drawn with a thermometer beside the value.
+        var celsius: Double?
 
         init(_ value: String, _ caption: String, fraction: Double? = nil,
-             colors: [Color]? = nil, size: CGFloat = 20) {
+             colors: [Color]? = nil, size: CGFloat = 20, celsius: Double? = nil) {
             self.value = value
             self.caption = caption
             self.fraction = fraction
             self.colors = colors
             self.size = size
+            self.celsius = celsius
         }
+    }
+
+    /// A temperature as a thermometer and its reading, red as the card's thermometer is.
+    private func temperature(_ celsius: Double, _ caption: String) -> Stat {
+        Stat(formatter.temperature(celsius), caption, colors: Self.heat, celsius: celsius)
     }
 
     /// Readings as tiles, three across, or two across for two or four of them.
@@ -394,7 +402,25 @@ struct BentoDetail: View {
 
     private func statTile(_ stat: Stat) -> some View {
         let colors = stat.colors ?? palette
-        return VStack(spacing: Design.Space.xs) {
+        return HStack(spacing: Design.Space.m) {
+            if let celsius = stat.celsius {
+                // The card's scale: 30°C empty, 100°C full.
+                ThermometerGraphic(fraction: min(max((celsius - 30) / 70, 0), 1),
+                                   colors: colors, scale: 0.5)
+                    .frame(width: 14, height: 50)
+                    .padding(.trailing, Design.Space.xxs)
+            }
+            reading(stat, colors: colors)
+        }
+        .padding(.horizontal, Design.Space.m)
+        .frame(maxWidth: .infinity)
+        .frame(height: 68)
+        .background(surface)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func reading(_ stat: Stat, colors: [Color]) -> some View {
+        VStack(spacing: Design.Space.xs) {
             Text(stat.value)
                 .font(.system(size: stat.size, weight: .bold).monospacedDigit())
                 .foregroundStyle(gradient(colors))
@@ -415,11 +441,6 @@ struct BentoDetail: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .padding(.horizontal, Design.Space.m)
-        .frame(maxWidth: .infinity)
-        .frame(height: 68)
-        .background(surface)
-        .accessibilityElement(children: .combine)
     }
 
     /// A tile for anything that is not one reading, its caption under it as on the cards.

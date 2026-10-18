@@ -802,8 +802,9 @@ private struct Ticks: Shape {
 
 /// The GPU as a packaged chip: the CPU chip's face, gold legs standing off all four
 /// edges, and its cores laid out as on the die, in four clusters with a wider channel
-/// between them, so a 32-core GPU reads as four blocks of eight. The channel across the
-/// middle carries the chip's name, "GPU" in the CPU chip's silver.
+/// between them, so a 32-core GPU reads as four blocks of eight. The chip's name,
+/// "GPU" in the CPU chip's silver, is set across the middle over the cores, so the
+/// clusters close up around it and the cores get the whole face.
 ///
 /// Blocks switch on one by one as the load rises, in reading order across the whole
 /// grid: at 18% of 32 cores, the first six. macOS reports the GPU only as a whole, so
@@ -819,12 +820,10 @@ private struct GPUDie: View {
     /// How far the legs stand off the package.
     private static let leg: CGFloat = 4
     /// From the package's edge to the blocks.
-    private static let inset: CGFloat = 4
+    private static let inset: CGFloat = 5
     private static let gap: CGFloat = 2
     /// Between the clusters.
     private static let channel: CGFloat = 4
-    /// The channel across the middle, which carries the label.
-    private static let band: CGFloat = 26
 
     var body: some View {
         let columns = cores % 8 == 0 || cores > 8 ? min(cores, 8) : cores
@@ -834,7 +833,7 @@ private struct GPUDie: View {
         let rowSplit = rows >= 2 && rows % 2 == 0 ? rows / 2 : nil
         let package = CGSize(width: size.width - Self.leg * 2, height: size.height - Self.leg * 2)
         let across = Self.gap * CGFloat(columns - 1) + (columnSplit == nil ? 0 : Self.channel - Self.gap)
-        let down = Self.gap * CGFloat(rows - 1) + (rowSplit == nil ? 0 : Self.band - Self.gap)
+        let down = Self.gap * CGFloat(rows - 1) + (rowSplit == nil ? 0 : Self.channel - Self.gap)
         let block = CGSize(width: (package.width - Self.inset * 2 - across) / CGFloat(columns),
                            height: (package.height - Self.inset * 2 - down) / CGFloat(rows))
         let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
@@ -848,11 +847,7 @@ private struct GPUDie: View {
             VStack(spacing: 0) {
                 ForEach(0..<rows, id: \.self) { row in
                     if row > 0 {
-                        if row == rowSplit {
-                            label.frame(height: Self.band)
-                        } else {
-                            Color.clear.frame(height: Self.gap)
-                        }
+                        Color.clear.frame(height: row == rowSplit ? Self.channel : Self.gap)
                     }
                     HStack(spacing: 0) {
                         ForEach(0..<columns, id: \.self) { column in
@@ -870,17 +865,21 @@ private struct GPUDie: View {
                     }
                 }
             }
+            label
         }
         .frame(width: size.width, height: size.height)
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: lit)
     }
 
-    /// "GPU", set in the CPU chip's silver.
+    /// "GPU", set in the CPU chip's silver, with a dark halo so it reads over lit cores
+    /// and dark ones alike.
     private var label: some View {
         Text("GPU")
-            .font(.system(size: 20, weight: .semibold))
-            .tracking(1)
+            .font(.system(size: 32, weight: .semibold))
+            .tracking(1.5)
             .foregroundStyle(ChipGraphic.silver)
+            .shadow(color: .black.opacity(0.7), radius: 3)
+            .shadow(color: .black.opacity(0.4), radius: 8)
     }
 }
 
@@ -1236,29 +1235,31 @@ struct BatteryGraphic: View {
 
 /// A thermometer standing up: a bulb at the foot, a tube with graduations, the column
 /// rising from the bulb to the reading.
-private struct ThermometerGraphic: View {
+struct ThermometerGraphic: View {
     let fraction: Double
     let colors: [Color]
+    /// Tube, bulb and scale at a fraction of their full size, for a smaller tile.
+    var scale: CGFloat = 1
 
     var body: some View {
         let tube = Capsule(style: .continuous)
         let mercury = LinearGradient(colors: colors.reversed(), startPoint: .top, endPoint: .bottom)
-        VStack(spacing: -6) {
+        VStack(spacing: -6 * scale) {
             ZStack {
                 tube.fill(colors[0].opacity(0.2))
                 FillFromBottom(fraction: fraction).fill(mercury).clipShape(tube)
             }
-            .frame(width: 12)
+            .frame(width: 12 * scale)
             .overlay(alignment: .trailing) {
                 ZStack {
                     ThermometerScale(danger: false).fill(Design.Palette.tertiaryText)
                     ThermometerScale(danger: true).fill(Color(nsColor: .systemRed))
                 }
-                .frame(width: 6)
-                .padding(.vertical, 6)
-                .offset(x: 10)
+                .frame(width: 6 * scale)
+                .padding(.vertical, 6 * scale)
+                .offset(x: 10 * scale)
             }
-            Circle().fill(colors[0]).frame(width: 28, height: 28)
+            Circle().fill(colors[0]).frame(width: 28 * scale, height: 28 * scale)
         }
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
     }
@@ -1352,7 +1353,9 @@ private struct ThermometerScale: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let span = CGFloat(Self.highest - Self.lowest)
-        for degrees in stride(from: Self.lowest + Self.step, through: Self.highest, by: Self.step)
+        // A short tube keeps only the tens: marks every two degrees would run together.
+        let step = rect.height < 80 ? 10 : Self.step
+        for degrees in stride(from: Self.lowest + step, through: Self.highest, by: step)
         where (degrees >= Self.dangerFrom) == danger {
             let y = rect.maxY - rect.height * CGFloat(degrees - Self.lowest) / span
             // Every ten degrees runs the full width; the marks between are shorter.

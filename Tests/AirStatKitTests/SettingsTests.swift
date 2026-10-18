@@ -182,14 +182,27 @@ struct SettingsDecodingTests {
 @Suite("Required sources track what is actually on screen")
 struct RequiredSourceTests {
 
-    @Test("only menu bar sources are needed when the panel is closed")
+    @Test("only menu bar sources are needed when the panel is closed and draws no charts")
     func menuBarOnly() {
         var settings = Settings()
         settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
+        settings.panel.showsHistoryChart = false
         let sources = settings.requiredSources(panelVisible: false, desktopWidgetVisible: false)
         #expect(sources.contains(.cpu))
         #expect(!sources.contains(.power))     // nothing on screen needs the battery
         #expect(!sources.contains(.processes)) // the expensive one stays off
+    }
+
+    @Test("charted modules keep sampling while the panel is closed, so the day has no holes")
+    func chartedModulesKeepSampling() {
+        var settings = Settings()
+        settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
+        let sources = settings.requiredSources(panelVisible: false, desktopWidgetVisible: false)
+        #expect(sources.contains(.power))
+        #expect(sources.contains(.disk))
+        #expect(sources.contains(.network))
+        #expect(sources.contains(.thermal))
+        #expect(!sources.contains(.processes)) // not charted, and the expensive one
     }
 
     @Test("opening the panel pulls in its modules")

@@ -1078,6 +1078,14 @@ public struct Settings: Sendable, Codable, Equatable {
         for item in menuBar.enabledItems { sources.insert(item.metric.requiredSource) }
         if panelVisible {
             for module in panel.visibleModules { sources.insert(module.requiredSource) }
+        } else if panel.showsHistoryChart {
+            // The panel's charts draw the last day by the clock, and a minute nobody
+            // sampled is a hole in it. So the charted modules keep sampling while the
+            // panel is closed. The process list is not charted and is the expensive
+            // one, so it still waits for the panel.
+            for module in panel.visibleModules where module != .processes {
+                sources.insert(module.requiredSource)
+            }
         }
         if desktopWidgetVisible {
             for module in desktopWidget.modules { sources.insert(module.requiredSource) }
