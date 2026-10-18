@@ -14,11 +14,11 @@ import AirStatKit
 ///
 ///     ┌─────────┬─────────┬─────────┐
 ///     │         │         │   SSD   │
-///     │   CPU   │   GPU   ├─────────┤
+///     │   CPU   │ Memory  ├─────────┤
 ///     │         │         │ Battery │
 ///     ├─────────┼─────────┼────┬────┤
-///     │         │ Memory  │    │ ⚙︎  │
-///     │ Network ├────┬────┤Temp├────┤
+///     │         │  Wi-Fi  │    │ ⚙︎  │
+///     │   GPU   ├────┬────┤Temp├────┤
 ///     │         │Proc│ Up │    │ ⏻  │
 ///     └─────────┴────┴────┴────┴────┘
 ///
@@ -53,10 +53,10 @@ struct BentoGrid: View {
     var body: some View {
         // Three column pairs, each stacked top to bottom.
         HStack(alignment: .top, spacing: Self.gap) {
-            VStack(spacing: Self.gap) { cpu; network }
+            VStack(spacing: Self.gap) { cpu; gpu }
             VStack(spacing: Self.gap) {
-                gpu
                 memory
+                network
                 HStack(spacing: Self.gap) { processes; system }
             }
             VStack(spacing: Self.gap) {
@@ -112,11 +112,38 @@ struct BentoGrid: View {
         // Free is what the fill leaves: everything not counted as used, the way the SSD
         // reports its available space.
         let free = memory.map { $0.totalBytes > $0.usedBytes ? $0.totalBytes - $0.usedBytes : 0 }
-        return card(.memory, width: Self.span(2), height: Self.span(1),
+        // The biggest users, ranked by what they hold rather than by how busy they are:
+        // the process sample keeps the largest idle ones for exactly this.
+        let top = engine.processes.value.map {
+            Array($0.processes.sorted { $0.memoryBytes > $1.memoryBytes }.prefix(5))
+        } ?? []
+        return card(.memory, width: Self.span(2), height: Self.span(2),
                     caption: memory.map { "\(Self.marketingCapacity($0.totalBytes)) Memory" } ?? "Memory") {
-            MemoryGraphic(label: free.map { "\(formatter.memory($0)) free" },
-                          fraction: used ?? 0, load: palette(.memory, onCard: false)[0])
-                .frame(width: 200, height: 56)
+            VStack(spacing: Design.Space.m) {
+                MemoryGraphic(label: free.map { "\(formatter.memory($0)) free" },
+                              fraction: used ?? 0, load: palette(.memory, onCard: false)[0])
+                    .frame(width: 200, height: 56)
+                if !top.isEmpty {
+                    VStack(spacing: 2) {
+                        ForEach(top, id: \.pid) { process in
+                            HStack(spacing: Design.Space.xs) {
+                                ProcessIcon(process: process, size: 13)
+                                Text(process.name)
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundStyle(Design.Palette.primaryText)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                Spacer(minLength: Design.Space.s)
+                                Text(formatter.memory(process.memoryBytes))
+                                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                                    .foregroundStyle(Design.Palette.secondaryText)
+                            }
+                            .frame(height: 15)
+                        }
+                    }
+                    .padding(.horizontal, Design.Space.xs)
+                }
+            }
         }
     }
 
@@ -201,20 +228,20 @@ struct BentoGrid: View {
 
     private var network: some View {
         let network = engine.network.value
-        return card(.network, width: Self.span(2), height: Self.span(2),
+        return card(.network, width: Self.span(2), height: Self.span(1),
                     caption: network.map { $0.wifi?.ssid ?? $0.connectionType.label } ?? "Network") {
-            VStack(spacing: Design.Space.l) {
+            HStack(spacing: Design.Space.l) {
                 // Wi-Fi when that is the connection, the generic network glyph otherwise.
                 Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
-                    .font(.system(size: 60, weight: .semibold))
+                    .font(.system(size: 36, weight: .semibold))
                     .foregroundStyle(gradient(.network))
                 // Upload over download, in Activity Monitor's colours for the two
                 // directions: red going out, blue coming in.
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
-                         colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)], size: 26)
+                         colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)])
                     rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
-                         colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)], size: 26)
+                         colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)])
                 }
             }
         }
@@ -1296,6 +1323,27 @@ private struct ThermometerScale: Shape {
     }
 }
 
+/// A process's icon: its app's own, or a gear for a process with no app around it.
+private struct ProcessIcon: View {
+    let process: ProcessRow
+    let size: CGFloat
+
+    var body: some View {
+        switch PanelAppIcon.icon(for: process) {
+        case .bundle(let image):
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: size, height: size)
+        case .executable:
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: size * 0.72))
+                .foregroundStyle(Design.Palette.secondaryText)
+                .frame(width: size, height: size)
+        }
+    }
+}
+
 /// The top processes' icons in a row: the app's own icon, or a gear for a process
 /// with no app around it.
 private struct ProcessIconRow: View {
@@ -1304,18 +1352,7 @@ private struct ProcessIconRow: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(processes, id: \.pid) { process in
-                switch PanelAppIcon.icon(for: process) {
-                case .bundle(let image):
-                    Image(nsImage: image)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: 14, height: 14)
-                case .executable:
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Design.Palette.secondaryText)
-                        .frame(width: 14, height: 14)
-                }
+                ProcessIcon(process: process, size: 14)
             }
         }
         .accessibilityElement(children: .ignore)
