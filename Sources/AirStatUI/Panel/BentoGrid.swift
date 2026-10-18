@@ -9,17 +9,17 @@ import AirStatKit
 /// cards are the ones that matter most and the small ones fill in around them, which is
 /// a design decision, not something a layout algorithm makes. The grid is square cells,
 /// six across and four down, which puts the panel at 3:2, landscape, and every card
-/// spans a whole number of them — 1×1, 2×1, 1×2, 2×2 or 2×3 — so no card is a size of
-/// its own. The panel's two actions take a cell each:
+/// spans a whole number of them — 1×1, 2×1, 1×2 or 2×2 — so no card is a size of its
+/// own. The panel's two actions take a cell each:
 ///
 ///     ┌─────────┬─────────┬─────────┐
 ///     │         │         │   SSD   │
 ///     │   CPU   │   GPU   ├─────────┤
 ///     │         │         │ Battery │
-///     │         ├─────────┼────┬────┤
+///     ├─────────┼─────────┼────┬────┤
 ///     │         │ Memory  │    │ ⚙︎  │
-///     ├─────────┼────┬────┤Temp├────┤
-///     │ Network │Proc│ Up │    │ ⏻  │
+///     │ Network ├────┬────┤Temp├────┤
+///     │         │Proc│ Up │    │ ⏻  │
 ///     └─────────┴────┴────┴────┴────┘
 ///
 /// Each card follows Apple's: one object or one big number in the middle, set in the
@@ -85,7 +85,6 @@ struct BentoGrid: View {
 
     private var cpu: some View {
         let cpu = engine.cpu.value
-        let busy = cpu?.total.busy
         let system = engine.system.value
         // Each core's own load beside its kind. A core the system did not classify is
         // drawn as a performance core: that is what a chip without the split has.
@@ -95,29 +94,15 @@ struct BentoGrid: View {
                  busy: cpu.perCore[index].busy)
             }
         } ?? []
-        let caption = system.map { system in
-            system.efficiencyCores > 0
-                ? "\(system.physicalCores)-core CPU · \(system.performanceCores)P + \(system.efficiencyCores)E"
-                : "\(system.physicalCores)-core CPU"
-        }
-        let efficiencyColors = [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)]
-        return card(.cpu, width: Self.span(2), height: Self.span(3), caption: caption ?? "CPU") {
-            VStack(spacing: Design.Space.l) {
-                ChipGraphic(name: system?.chipName,
-                            performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
-                            efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
-                            performanceColors: palette(.cpu, onCard: false),
-                            efficiencyColors: efficiencyColors)
-                    .frame(width: 200, height: 200)
-                bigNumber(.cpu, busy.map { formatter.percent($0) }, size: 32)
-                // The two kinds of core, each in the colour its blocks fill with.
-                if let performance = cpu?.performanceBusy, let efficiency = cpu?.efficiencyBusy {
-                    HStack(spacing: Design.Space.l) {
-                        coreShare("Performance", performance, color: palette(.cpu)[0])
-                        coreShare("Efficiency", efficiency, color: efficiencyColors[0])
-                    }
-                }
-            }
+        // The chip alone: its cores carry the load, and the detail beside the panel
+        // carries the figures.
+        return card(.cpu, width: Self.span(2), height: Self.span(2), caption: nil) {
+            ChipGraphic(name: system?.chipName,
+                        performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
+                        efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
+                        performanceColors: palette(.cpu, onCard: false),
+                        efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
+                .frame(width: 202, height: 202)
         }
     }
 
@@ -153,7 +138,7 @@ struct BentoGrid: View {
             VStack(spacing: Design.Space.m) {
                 if let cores, cores > 0 {
                     GPUDie(cores: cores, load: load ?? 0, colors: palette(.gpu, onCard: false),
-                           size: CGSize(width: 196, height: 106))
+                           size: CGSize(width: 200, height: 106))
                 } else {
                     bigNumber(.gpu, nil, size: 24)
                 }
@@ -216,20 +201,20 @@ struct BentoGrid: View {
 
     private var network: some View {
         let network = engine.network.value
-        return card(.network, width: Self.span(2), height: Self.span(1),
+        return card(.network, width: Self.span(2), height: Self.span(2),
                     caption: network.map { $0.wifi?.ssid ?? $0.connectionType.label } ?? "Network") {
-            HStack(spacing: Design.Space.l) {
+            VStack(spacing: Design.Space.l) {
                 // Wi-Fi when that is the connection, the generic network glyph otherwise.
                 Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
-                    .font(.system(size: 36, weight: .semibold))
+                    .font(.system(size: 60, weight: .semibold))
                     .foregroundStyle(gradient(.network))
                 // Upload over download, in Activity Monitor's colours for the two
                 // directions: red going out, blue coming in.
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
                     rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
-                         colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)])
+                         colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)], size: 26)
                     rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
-                         colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)])
+                         colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)], size: 26)
                 }
             }
         }
@@ -301,21 +286,8 @@ struct BentoGrid: View {
         .accessibilityLabel(title)
     }
 
-    /// One kind of core's share of the load: a dot in its colour, its name, its figure.
-    private func coreShare(_ name: String, _ busy: Double, color: Color) -> some View {
-        HStack(spacing: Design.Space.xs) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text(name)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Design.Palette.secondaryText)
-            Text(formatter.percent(busy))
-                .font(.system(size: 10, weight: .semibold).monospacedDigit())
-                .foregroundStyle(Design.Palette.primaryText)
-        }
-    }
-
     private func card<Content: View>(_ module: PanelModule, width: CGFloat, height: CGFloat,
-                                     caption: String, footer: AnyView? = nil,
+                                     caption: String?, footer: AnyView? = nil,
                                      @ViewBuilder content: () -> Content) -> some View {
         BentoCard(module: module, caption: caption, footer: footer, ring: palette(module)[0],
                   isActive: layout?.detailModule == module, layout: layout,
@@ -352,13 +324,14 @@ struct BentoGrid: View {
         }
     }
 
-    private func rate(_ symbol: String, _ value: String?, colors: [Color]) -> some View {
+    private func rate(_ symbol: String, _ value: String?, colors: [Color],
+                      size: CGFloat = 21) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: size * 0.72, weight: .bold))
                 .foregroundStyle(gradient(colors))
-                .frame(width: 16)
-            bigNumber(.network, value, size: 21, colors: colors)
+                .frame(width: size * 0.76)
+            bigNumber(.network, value, size: size, colors: colors)
         }
     }
 
@@ -431,7 +404,8 @@ struct BentoGrid: View {
 /// in its own colour while that detail is open.
 private struct BentoCard<Content: View>: View {
     let module: PanelModule
-    let caption: String
+    /// Nil for a card whose content says it all.
+    let caption: String?
     /// Drawn in the caption's place when a card has something better to say there.
     let footer: AnyView?
     let ring: Color
@@ -455,7 +429,7 @@ private struct BentoCard<Content: View>: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let footer {
                 footer
-            } else {
+            } else if let caption {
                 Text(caption)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Design.Palette.secondaryText)
@@ -701,7 +675,7 @@ private struct GPUMeters: View {
     let formatter: MetricFormatter
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             ForEach(Array(channels.enumerated()), id: \.offset) { _, channel in
                 VStack(spacing: 3) {
                     HStack {
@@ -762,7 +736,7 @@ private struct Ticks: Shape {
 /// The GPU as a packaged chip: the CPU chip's face, gold legs standing off all four
 /// edges, and its cores laid out as on the die, in four clusters with a wider channel
 /// between them, so a 32-core GPU reads as four blocks of eight. The channel across the
-/// middle carries the chip's name, the Apple logo and "GPU" in the CPU chip's silver.
+/// middle carries the chip's name, "GPU" in the CPU chip's silver.
 ///
 /// Blocks switch on one by one as the load rises, in reading order across the whole
 /// grid: at 18% of 32 cores, the first six. macOS reports the GPU only as a whole, so
@@ -778,12 +752,12 @@ private struct GPUDie: View {
     /// How far the legs stand off the package.
     private static let leg: CGFloat = 4
     /// From the package's edge to the blocks.
-    private static let inset: CGFloat = 6
-    private static let gap: CGFloat = 3
+    private static let inset: CGFloat = 4
+    private static let gap: CGFloat = 2
     /// Between the clusters.
-    private static let channel: CGFloat = 8
+    private static let channel: CGFloat = 4
     /// The channel across the middle, which carries the label.
-    private static let band: CGFloat = 20
+    private static let band: CGFloat = 26
 
     var body: some View {
         let columns = cores % 8 == 0 || cores > 8 ? min(cores, 8) : cores
@@ -834,16 +808,12 @@ private struct GPUDie: View {
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: lit)
     }
 
-    /// The logo and "GPU", set as the CPU chip's "M1" is.
+    /// "GPU", set in the CPU chip's silver.
     private var label: some View {
-        HStack(alignment: .center, spacing: 2) {
-            Image(systemName: "applelogo")
-                .font(.system(size: 12, weight: .regular))
-            Text("GPU")
-                .font(.system(size: 14, weight: .semibold))
-                .tracking(0.5)
-        }
-        .foregroundStyle(ChipGraphic.silver)
+        Text("GPU")
+            .font(.system(size: 20, weight: .semibold))
+            .tracking(1)
+            .foregroundStyle(ChipGraphic.silver)
     }
 }
 
@@ -874,13 +844,13 @@ private struct ChipLegs: Shape {
 }
 
 /// One GPU core on the die: a dark block with a hairline edge, filled and glowing in
-/// the card's colour while lit. Square-cornered, as the CPU's cores are.
+/// the card's colour while lit. All but square-cornered.
 private struct GPUBlock: View {
     let isLit: Bool
     let colors: [Color]
 
     var body: some View {
-        let block = RoundedRectangle(cornerRadius: 1, style: .continuous)
+        let block = RoundedRectangle(cornerRadius: 0.5, style: .continuous)
         ZStack {
             block.fill(Color.white.opacity(0.07))
             if isLit {
