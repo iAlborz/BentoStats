@@ -18,9 +18,13 @@ import AirStatKit
 ///     │         │         │ Battery │
 ///     ├─────────┼─────────┼────┬────┤
 ///     │         │  Wi-Fi  │    │ ⚙︎  │
-///     │   GPU   ├────┬────┤Temp├────┤
-///     │         │Proc│ Up │    │ ⏻  │
-///     └─────────┴────┴────┴────┴────┘
+///     │   GPU   ├─────────┤Temp├────┤
+///     │         │ System  │    │ ⏻  │
+///     └─────────┴─────────┴────┴────┘
+///
+/// The CPU and Memory cards each carry the processes that answer their question, the
+/// busiest under the chip and the biggest under the module, so processes have no card
+/// of their own.
 ///
 /// Each card follows Apple's: one object or one big number in the middle, set in the
 /// card's own colour, and a short caption under it, on plain white cards over light
@@ -57,7 +61,7 @@ struct BentoGrid: View {
             VStack(spacing: Self.gap) {
                 memory
                 network
-                HStack(spacing: Self.gap) { processes; system }
+                system
             }
             VStack(spacing: Self.gap) {
                 disk
@@ -96,13 +100,38 @@ struct BentoGrid: View {
         } ?? []
         // The chip alone: its cores carry the load, and the detail beside the panel
         // carries the figures.
-        return card(.cpu, width: Self.span(2), height: Self.span(2), caption: nil) {
-            ChipGraphic(name: system?.chipName,
-                        performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
-                        efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
-                        performanceColors: palette(.cpu, onCard: false),
-                        efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
-                .frame(width: 202, height: 202)
+        // What is using the CPU belongs with the CPU: the five busiest processes under
+        // the chip, each icon over its share, and the count in the caption.
+        let processes = engine.processes.value
+        let busiest = processes.map {
+            Array($0.processes.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(5))
+        } ?? []
+        return card(.cpu, width: Self.span(2), height: Self.span(2),
+                    caption: processes.map { "\(formatter.count($0.totalProcessCount)) processes" }) {
+            VStack(spacing: Design.Space.m) {
+                ChipGraphic(name: system?.chipName,
+                            performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
+                            efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
+                            performanceColors: palette(.cpu, onCard: false),
+                            efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
+                    .frame(width: 140, height: 140)
+                if !busiest.isEmpty {
+                    HStack(spacing: Design.Space.l) {
+                        ForEach(busiest, id: \.pid) { process in
+                            VStack(spacing: 2) {
+                                ProcessIcon(process: process, size: 16)
+                                Text(formatter.unclampedPercent(process.cpuPercent, decimals: 0))
+                                    .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                                    .foregroundStyle(Design.Palette.secondaryText)
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Busiest processes: " + busiest.map(\.name).joined(separator: ", "))
+                }
+            }
         }
     }
 
@@ -265,27 +294,35 @@ struct BentoGrid: View {
         }
     }
 
-    private var processes: some View {
-        let processes = engine.processes.value
-        let top = processes.map { Array($0.processes.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(5)) } ?? []
-        return card(.processes, width: Self.span(1), height: Self.span(1), caption: "processes",
-                    footer: top.isEmpty ? nil : AnyView(ProcessIconRow(processes: top))) {
-            VStack(spacing: 0) {
-                bigNumber(.processes, processes.map { formatter.count($0.totalProcessCount) }, size: 28)
-                // The caption is the icon row, so the count is labelled here.
-                if !top.isEmpty {
-                    Text("processes")
+    /// The facts About This Mac gives: how long it has been up, what it is, and what it
+    /// runs, with the computer's own name under them.
+    private var system: some View {
+        let system = engine.system.value
+        return card(.system, width: Self.span(2), height: Self.span(1),
+                    caption: system.map(\.computerName).flatMap { $0.isEmpty ? nil : $0 } ?? "System") {
+            HStack(spacing: Design.Space.l) {
+                VStack(spacing: 0) {
+                    bigNumber(.system, system.map { formatter.uptime($0.uptime) }, size: 26)
+                    Text("uptime")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Design.Palette.secondaryText)
                 }
+                if let system {
+                    Rectangle()
+                        .fill(Design.Palette.separator)
+                        .frame(width: 1, height: 36)
+                    VStack(alignment: .leading, spacing: 2) {
+                        // "MacBook Pro (16-inch, 2021)" is the family, then its year.
+                        Text(system.modelName.components(separatedBy: " (").first ?? system.modelName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Design.Palette.primaryText)
+                        Text("\(system.osName) \(system.osVersion)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Design.Palette.secondaryText)
+                    }
+                    .lineLimit(1)
+                }
             }
-        }
-    }
-
-    private var system: some View {
-        let system = engine.system.value
-        return card(.system, width: Self.span(1), height: Self.span(1), caption: "uptime") {
-            bigNumber(.system, system.map { formatter.uptime($0.uptime) }, size: 22)
         }
     }
 
@@ -314,9 +351,9 @@ struct BentoGrid: View {
     }
 
     private func card<Content: View>(_ module: PanelModule, width: CGFloat, height: CGFloat,
-                                     caption: String?, footer: AnyView? = nil,
+                                     caption: String?,
                                      @ViewBuilder content: () -> Content) -> some View {
-        BentoCard(module: module, caption: caption, footer: footer, ring: palette(module)[0],
+        BentoCard(module: module, caption: caption, ring: palette(module)[0],
                   isActive: layout?.detailModule == module, layout: layout,
                   size: CGSize(width: width, height: height), content: content())
     }
@@ -433,8 +470,6 @@ private struct BentoCard<Content: View>: View {
     let module: PanelModule
     /// Nil for a card whose content says it all.
     let caption: String?
-    /// Drawn in the caption's place when a card has something better to say there.
-    let footer: AnyView?
     let ring: Color
     /// Its detail is open beside the panel.
     let isActive: Bool
@@ -454,9 +489,7 @@ private struct BentoCard<Content: View>: View {
         VStack(spacing: Design.Space.s) {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let footer {
-                footer
-            } else if let caption {
+            if let caption {
                 Text(caption)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Design.Palette.secondaryText)
@@ -1344,18 +1377,3 @@ private struct ProcessIcon: View {
     }
 }
 
-/// The top processes' icons in a row: the app's own icon, or a gear for a process
-/// with no app around it.
-private struct ProcessIconRow: View {
-    let processes: [ProcessRow]
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(processes, id: \.pid) { process in
-                ProcessIcon(process: process, size: 14)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Top processes: " + processes.map(\.name).joined(separator: ", "))
-    }
-}
