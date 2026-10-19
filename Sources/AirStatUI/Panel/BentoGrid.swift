@@ -282,9 +282,9 @@ struct BentoGrid: View {
     /// A card's size, and for a module card how it draws itself.
     private func options(_ tile: BentoTile) -> some View {
         Menu {
-            if !tile.kind.styles.isEmpty {
+            if !tile.kind.styles(for: tile.size).isEmpty {
                 Picker("Style", selection: binding(tile.id, \.style, default: tile.style)) {
-                    ForEach(tile.kind.styles, id: \.self) { Text($0.label).tag($0) }
+                    ForEach(tile.kind.styles(for: tile.size), id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.inline)
             }
@@ -392,7 +392,9 @@ struct BentoGrid: View {
 
     private func commit() {
         guard let working else { return }
-        settings.update { $0.panel.bentoTiles = working }
+        // A resize can land on a size the card's style is not offered at.
+        let sanitized = BentoLayout.sanitized(working)
+        settings.update { $0.panel.bentoTiles = sanitized }
         self.working = nil
     }
 
@@ -500,7 +502,7 @@ struct BentoGrid: View {
         card(.network, width: Self.span(2), height: Self.span(1), header: networkHeader) {
             HStack(spacing: Design.Space.l) {
                 networkSymbol
-                networkRates
+                networkRates()
             }
         }
     }
@@ -599,7 +601,7 @@ struct BentoGrid: View {
             return Parts(object: AnyView(networkSymbol), native: CGSize(width: 46, height: 36),
                          reading: down, readingColors: Self.downColors,
                          label: up.map { "download · ↑ \($0) up" } ?? "download",
-                         detail: AnyView(networkRates), detailIsReading: true,
+                         detail: AnyView(networkRates()), detailIsReading: true,
                          header: networkHeader, shortHeader: CardHeader("Down", down))
         case .thermal:
             return Parts(object: AnyView(thermometer), native: CGSize(width: 30, height: 140),
@@ -619,7 +621,12 @@ struct BentoGrid: View {
 
     private func flexible(_ tile: BentoTile, module: PanelModule, size: CGSize) -> some View {
         let parts = parts(module)
-        let header = tile.size == .small && tile.style == .graphic ? parts.shortHeader : parts.header
+        let header: CardHeader? = switch tile.style {
+        // The number is in the object, so there is nothing left to say over it.
+        case .inset: nil
+        case .graphic, .graphicChart: tile.size == .small ? parts.shortHeader : parts.header
+        case .number, .chart: parts.header
+        }
         // Inside the card's padding, under its header.
         let box = CGSize(width: size.width - 16, height: size.height - (header == nil ? 23 : 42))
         return card(module, width: size.width, height: size.height, header: header) {
@@ -627,6 +634,8 @@ struct BentoGrid: View {
             case .graphic: graphicLayout(tile.size, parts, module, box)
             case .number: numberLayout(tile.size, parts, module, tile.kind, box)
             case .chart: chartLayout(tile.size, parts, module, box)
+            case .graphicChart: graphicChartLayout(tile.size, parts, module, box)
+            case .inset: insetLayout(parts, box)
             }
         }
     }
@@ -637,6 +646,58 @@ struct BentoGrid: View {
     private func graphicLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
                                _ box: CGSize) -> some View {
         switch size {
+        case .tall where module == .network:
+            // Both directions, smaller, under the symbol.
+            VStack(spacing: Design.Space.m) {
+                fit(parts, in: CGSize(width: box.width, height: box.height - 56))
+                networkRates(size: 15, fitting: box.width)
+            }
+        case .wideLarge where module == .network:
+            VStack(spacing: Design.Space.m) {
+                HStack(spacing: Design.Space.xl) {
+                    fit(parts, in: CGSize(width: 90, height: 64))
+                    networkRates()
+                }
+                sparkline(module, height: max(box.height - 72, 40))
+            }
+        case .large where module == .disk, .wideLarge where module == .disk:
+            // The drive, its rates, and its history under them.
+            let object = CGSize(width: min(box.width, 320), height: 64)
+            VStack(spacing: Design.Space.s) {
+                fit(parts, in: object)
+                diskRates
+                sparkline(module, height: max(box.height - fitted(parts, in: object).height - 29, 30))
+            }
+        case .large where module == .battery:
+            // A smaller battery beside its charge, and the charge's history under them.
+            VStack(spacing: Design.Space.m) {
+                HStack(spacing: Design.Space.l) {
+                    fit(parts, in: CGSize(width: 96, height: 46))
+                    reading(parts, module, size: 30, width: box.width - 110)
+                }
+                sparkline(module, height: max(box.height - 66, 40))
+            }
+        case .extraWide where !parts.isFlat:
+            // Split at the grid line between the second cell and the third, so the halves
+            // line up with the cards around it: the object in one, its readings in the other.
+            let half = (box.width - 16) / 2
+            HStack(spacing: 16) {
+                fit(parts, in: CGSize(width: half, height: box.height))
+                    .frame(width: half)
+                VStack(alignment: .leading, spacing: Design.Space.m) {
+                    if module == .cpu {
+                        // The load beside its history.
+                        HStack(spacing: Design.Space.m) {
+                            reading(parts, module, size: 32, width: half * 0.4)
+                            sparkline(module, height: 46)
+                        }
+                    } else if !parts.detailIsReading {
+                        reading(parts, module, size: 32, width: half)
+                    }
+                    parts.wideDetail ?? parts.detail
+                }
+                .frame(width: half, alignment: .leading)
+            }
         case .small:
             fit(parts, in: box)
         case .wide where parts.isFlat:
@@ -699,6 +760,61 @@ struct BentoGrid: View {
         }
     }
 
+    /// The object with its history: over it on a one-cell card, beside it on a wide one,
+    /// and on a large one with its readings beside the object and the chart under both.
+    @ViewBuilder
+    private func graphicChartLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
+                                    _ box: CGSize) -> some View {
+        switch size {
+        case .small:
+            VStack(spacing: Design.Space.s) {
+                fit(parts, in: CGSize(width: box.width, height: box.height * 0.45))
+                sparkline(module, height: max(box.height * 0.5, 20))
+            }
+        case .wide:
+            HStack(spacing: Design.Space.l) {
+                fit(parts, in: CGSize(width: box.width * 0.4, height: box.height))
+                sparkline(module, height: box.height * 0.8)
+            }
+        default:
+            VStack(spacing: Design.Space.m) {
+                HStack(spacing: Design.Space.l) {
+                    fit(parts, in: CGSize(width: 64, height: 50))
+                    if parts.detailIsReading, let detail = parts.detail {
+                        detail
+                    } else {
+                        reading(parts, module, size: 26, width: box.width - 80)
+                    }
+                }
+                sparkline(module, height: max(box.height - 66, 40))
+            }
+        }
+    }
+
+    /// The reading written inside the object, the way the system's battery can show it:
+    /// in the label colour with a halo of the card's, so it reads over the charge and over
+    /// the empty part alike.
+    private func insetLayout(_ parts: Parts, _ box: CGSize) -> some View {
+        let power = engine.power.value
+        let object = ZStack {
+            BatteryGraphic(fraction: (power?.percentage ?? 0) / 100, isCharging: false,
+                           charge: batteryIsLow ? Color(nsColor: .systemRed) : palette(.battery)[0])
+            HStack(spacing: 1) {
+                if power?.isCharging == true {
+                    Image(systemName: "bolt.fill").font(.system(size: 11, weight: .heavy))
+                }
+                Text(parts.reading ?? MetricFormatter.unavailable)
+                    .font(.system(size: 17, weight: .heavy).monospacedDigit())
+            }
+            .foregroundStyle(Design.Palette.primaryText)
+            .shadow(color: BentoCard<EmptyView>.surface, radius: 1)
+            .shadow(color: BentoCard<EmptyView>.surface, radius: 1)
+            // Centred on the body, not on the body and its terminal.
+            .offset(x: -3)
+        }
+        return fit(AnyView(object), native: parts.native, in: box)
+    }
+
     /// The reading leads, as large as the card allows, over what it is.
     @ViewBuilder
     private func numberLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
@@ -755,7 +871,18 @@ struct BentoGrid: View {
         // A narrow card has room for the number alone.
         let isNarrow = size.columns == 1
         let number: CGFloat = size == .small ? 18 : size == .wide || size == .tall ? 22 : 28
+        let network = engine.network.value ?? engine.lastKnown.network.value
         return VStack(alignment: .leading, spacing: Design.Space.xs) {
+            if module == .network, !isNarrow {
+                // Both directions over the chart.
+                HStack(spacing: Design.Space.l) {
+                    rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
+                         colors: Self.downColors, size: number * 0.8)
+                    rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
+                         colors: Self.upColors, size: number * 0.8)
+                    Spacer(minLength: 0)
+                }
+            } else {
             HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
                 bigNumber(module, parts.chartReading ?? parts.reading, size: number,
                           colors: parts.readingColors, fitting: isNarrow ? box.width : box.width * 0.55)
@@ -767,17 +894,33 @@ struct BentoGrid: View {
                 }
                 Spacer(minLength: 0)
             }
+            }
             sparkline(module, height: max(box.height - number - 10, 24), tint: parts.readingColors?.first)
         }
     }
 
     /// The object at its own proportions, as large as `box` allows.
     private func fit(_ parts: Parts, in box: CGSize) -> some View {
-        let scale = max(0.1, min(box.width / parts.native.width, box.height / parts.native.height, 2.5))
-        return parts.object
-            .frame(width: parts.native.width, height: parts.native.height)
+        fit(parts.object, native: parts.native, in: box)
+    }
+
+    private func fit(_ object: AnyView, native: CGSize, in box: CGSize) -> some View {
+        let size = Self.fitted(native, in: box)
+        let scale = size.width / native.width
+        return object
+            .frame(width: native.width, height: native.height)
             .scaleEffect(scale)
-            .frame(width: parts.native.width * scale, height: parts.native.height * scale)
+            .frame(width: size.width, height: size.height)
+    }
+
+    /// The size the object is drawn at in `box`.
+    private func fitted(_ parts: Parts, in box: CGSize) -> CGSize {
+        Self.fitted(parts.native, in: box)
+    }
+
+    private static func fitted(_ native: CGSize, in box: CGSize) -> CGSize {
+        let scale = max(0.1, min(box.width / native.width, box.height / native.height, 2.5))
+        return CGSize(width: native.width * scale, height: native.height * scale)
     }
 
     private func reading(_ parts: Parts, _ module: PanelModule, size: CGFloat,
@@ -794,11 +937,13 @@ struct BentoGrid: View {
         }
     }
 
-    /// The module's recent history, in the colour of the reading over it.
+    /// The module's recent history, in the colour of the reading over it. The network's
+    /// line is its download, so it takes the download's blue wherever it is drawn.
     @ViewBuilder
     private func sparkline(_ module: PanelModule, height: CGFloat, tint: Color? = nil) -> some View {
         if let series = module.historySeries {
-            Sparkline(ChartSeries(series.key, from: engine.history, tint: tint ?? palette(module)[0],
+            let colour = tint ?? (module == .network ? Self.downColors[0] : palette(module)[0])
+            Sparkline(ChartSeries(series.key, from: engine.history, tint: colour,
                                   domain: series.domain),
                       settings: settings.settings.charts, height: height)
         }
@@ -1051,14 +1196,14 @@ struct BentoGrid: View {
 
     /// Upload over download, in Activity Monitor's colours for the two directions: red
     /// going out, blue coming in. The last rates, greyed, while the live ones return.
-    private var networkRates: some View {
+    private func networkRates(size: CGFloat = 21, fitting width: CGFloat? = nil) -> some View {
         let isLastKnown = engine.network.value == nil && engine.lastKnown.network.value != nil
         let network = engine.network.value ?? engine.lastKnown.network.value
         return VStack(alignment: .leading, spacing: 0) {
             rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
-                 colors: Self.upColors)
+                 colors: Self.upColors, size: size, fitting: width)
             rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
-                 colors: Self.downColors)
+                 colors: Self.downColors, size: size, fitting: width)
         }
         .lastKnown(isLastKnown)
     }
@@ -1196,13 +1341,14 @@ struct BentoGrid: View {
     }
 
     private func rate(_ symbol: String, _ value: String?, colors: [Color],
-                      size: CGFloat = 21) -> some View {
+                      size: CGFloat = 21, fitting width: CGFloat? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
             Image(systemName: symbol)
                 .font(.system(size: size * 0.72, weight: .bold))
                 .foregroundStyle(gradient(colors))
                 .frame(width: size * 0.76)
-            bigNumber(.network, value, size: size, colors: colors)
+            bigNumber(.network, value, size: size, colors: colors,
+                      fitting: width.map { $0 - size * 0.76 - Design.Space.xs })
         }
     }
 

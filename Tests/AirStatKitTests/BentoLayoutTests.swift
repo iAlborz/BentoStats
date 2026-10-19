@@ -89,4 +89,36 @@ struct BentoLayoutTests {
         #expect(PanelStyle.bento.usesCardDetail)
         #expect(!PanelStyle.list.usesCardDetail)
     }
+
+    @Test("the CPU offers its number alone only on the small cards")
+    func cpuNumberOnlySmall() {
+        for size in BentoTileSize.allCases {
+            let small = [BentoTileSize.small, .wide, .tall].contains(size)
+            #expect(BentoTileKind.cpu.styles(for: size).contains(.number) == small, "\(size)")
+        }
+    }
+
+    @Test("network, SSD and battery stop short of the largest cards, and offer their extra ways")
+    func sizesAndVariants() {
+        #expect(!BentoTileKind.network.sizes.contains(.extraWide))
+        #expect(!BentoTileKind.network.sizes.contains(.tallLarge))
+        #expect(!BentoTileKind.disk.sizes.contains(.extraWide))
+        #expect(!BentoTileKind.disk.sizes.contains(.tallLarge))
+        #expect(BentoTileKind.battery.sizes == [.small, .wide, .tall, .large])
+        #expect(BentoTileKind.network.styles(for: .large).contains(.graphicChart))
+        #expect(!BentoTileKind.network.styles(for: .wide).contains(.graphicChart))
+        #expect(BentoTileKind.battery.styles(for: .wide).contains(.graphicChart))
+        #expect(BentoTileKind.battery.styles(for: .small).contains(.inset))
+        #expect(!BentoTileKind.battery.styles(for: .large).contains(.inset))
+    }
+
+    @Test("a stored card at a size or style no longer offered comes back as one that is")
+    func sanitizedDropsRetiredSizesAndStyles() {
+        let tiles = BentoLayout.sanitized([BentoTile(kind: .cpu, size: .large, style: .number),
+                                           BentoTile(kind: .network, size: .extraWide),
+                                           BentoTile(kind: .battery, size: .wide, style: .inset)])
+        #expect(tiles[0].style == .graphic)
+        #expect(tiles[1].size == BentoTileKind.network.defaultSize)
+        #expect(tiles[2].style == .graphic)
+    }
 }

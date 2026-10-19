@@ -44,19 +44,49 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
         }
     }
 
-    /// An action is a button, one cell or two; a module card takes any size.
+    /// The sizes the card is drawn well at. An action is a button, one cell or two. The
+    /// network, the SSD and the battery have little to fill the tallest and widest cards
+    /// with, so they stop short of them.
     public var sizes: [BentoTileSize] {
-        isAction ? [.small, .wide] : BentoTileSize.allCases
+        switch self {
+        case .settings, .quit: return [.small, .wide]
+        case .network, .disk: return [.small, .wide, .tall, .large, .wideLarge]
+        case .battery: return [.small, .wide, .tall, .large]
+        default: return BentoTileSize.allCases
+        }
     }
 
-    /// An action has nothing to count, so it has no styles to choose from, and the
-    /// system card has no history to chart.
-    public var styles: [BentoTileStyle] {
+    /// The ways the card can draw itself at `size`.
+    ///
+    /// An action has nothing to count, so it has none, and the system card has no
+    /// history to chart. The CPU's load as a lone number reads on a small card and looks
+    /// lost on a large one, where the chip says it better. Some sizes offer an extra way:
+    /// the network's and the battery's object beside their chart, and on a one-cell
+    /// battery its charge written inside it.
+    public func styles(for size: BentoTileSize) -> [BentoTileStyle] {
         switch self {
-        case .settings, .quit: return []
-        case .system: return [.graphic, .number]
-        default: return BentoTileStyle.allCases
+        case .settings, .quit:
+            return []
+        case .system:
+            return [.graphic, .number]
+        case .cpu:
+            return [.small, .wide, .tall].contains(size) ? [.graphic, .number, .chart] : [.graphic, .chart]
+        case .network:
+            return size == .large ? [.graphic, .graphicChart, .number, .chart] : [.graphic, .number, .chart]
+        case .battery:
+            switch size {
+            case .small: return [.graphic, .inset, .graphicChart, .number, .chart]
+            case .wide: return [.graphic, .graphicChart, .number, .chart]
+            default: return [.graphic, .number, .chart]
+            }
+        default:
+            return [.graphic, .number, .chart]
         }
+    }
+
+    /// Every style the card offers at one size or another.
+    public var styles: [BentoTileStyle] {
+        BentoTileStyle.allCases.filter { style in sizes.contains { styles(for: $0).contains(style) } }
     }
 
     /// The card a new one of this kind starts as.
@@ -112,12 +142,18 @@ public enum BentoTileStyle: String, Sendable, Codable, CaseIterable, Equatable, 
     case number
     /// The reading over the last while, as a line.
     case chart
+    /// The object beside or over its chart.
+    case graphicChart
+    /// The reading written inside the object: the battery's charge in the battery.
+    case inset
 
     public var label: String {
         switch self {
         case .graphic: return "Graphic"
         case .number: return "Number"
         case .chart: return "Chart"
+        case .graphicChart: return "Graphic + Chart"
+        case .inset: return "Number Inside"
         }
     }
 }
@@ -218,7 +254,8 @@ public enum BentoLayout {
         var result = tiles.map { tile -> BentoTile in
             var tile = tile
             if !tile.kind.sizes.contains(tile.size) { tile.size = tile.kind.defaultSize }
-            if !tile.kind.styles.isEmpty, !tile.kind.styles.contains(tile.style) { tile.style = .graphic }
+            let styles = tile.kind.styles(for: tile.size)
+            if !styles.isEmpty, !styles.contains(tile.style) { tile.style = .graphic }
             return tile
         }
         for action in [BentoTileKind.settings, .quit] where !result.contains(where: { $0.kind == action }) {

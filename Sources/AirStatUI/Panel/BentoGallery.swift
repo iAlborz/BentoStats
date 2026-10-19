@@ -1,8 +1,9 @@
 import SwiftUI
 import AirStatKit
 
-/// The debug layout: one bento card in every size it can take, drawn from live readings,
-/// with the card and its style picked above, so every combination can be looked at.
+/// The debug layout: one bento card in every size it offers the picked style at, drawn
+/// from live readings, with the card and its style picked above, so every combination can
+/// be looked at.
 ///
 /// The cards are the bento grid's own, packed the same way, so what shows here is what
 /// the panel draws. Each is marked with its size. Pointing at one opens its detail.
@@ -18,13 +19,22 @@ struct BentoGallery: View {
     private static let order: [BentoTileSize] = [.extraWide, .large, .tallLarge, .wideLarge, .tall,
                                                   .wide, .small]
 
+    /// The style picked, or the card's first where it has no such style.
+    private var shownStyle: BentoTileStyle {
+        kind.styles.contains(style) ? style : kind.styles.first ?? .graphic
+    }
+
+    /// Every size the card offers the style at.
     private var tiles: [BentoTile] {
-        Self.order.filter(kind.sizes.contains).enumerated().map { index, size in
+        let sizes = Self.order.filter { size in
+            kind.sizes.contains(size)
+                && (kind.styles(for: size).isEmpty || kind.styles(for: size).contains(shownStyle))
+        }
+        return sizes.enumerated().map { index, size in
             // Fixed identities, so switching the style redraws the cards rather than
             // replacing them.
             BentoTile(id: UUID(uuidString: String(format: "00000000-0000-0000-0001-%012d", index))!,
-                      kind: kind, size: size,
-                      style: kind.styles.contains(style) ? style : .graphic)
+                      kind: kind, size: size, style: shownStyle)
         }
     }
 
@@ -34,8 +44,8 @@ struct BentoGallery: View {
                 Picker("Card", selection: $kind) {
                     ForEach(BentoTileKind.allCases, id: \.self) { Text(Self.shortLabel($0)).tag($0) }
                 }
-                Picker("Style", selection: $style) {
-                    ForEach(BentoTileStyle.allCases, id: \.self) { Text($0.label).tag($0) }
+                Picker("Style", selection: Binding(get: { shownStyle }, set: { style = $0 })) {
+                    ForEach(kind.styles, id: \.self) { Text($0.label).tag($0) }
                 }
                 .disabled(kind.styles.isEmpty)
             }
