@@ -79,6 +79,8 @@ public struct PanelRootView: View {
                     BentoGrid(engine: engine, settings: settings, layout: layout)
                 } else if style == .macbook {
                     MacBookView(engine: engine, settings: settings, layout: layout)
+                } else if style == .debug {
+                    BentoGallery(engine: engine, settings: settings, layout: layout)
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
                         let captionColumnWidth = captionColumnWidth
@@ -133,8 +135,8 @@ public struct PanelRootView: View {
         // Past it the controller caps the window and the list scrolls under a footer
         // that stays on screen.
         .frame(maxHeight: .infinity, alignment: .top)
-        .frame(width: style == .bento ? BentoGrid.width : style == .macbook ? MacBookView.width
-                                                                          : PanelSettings.width)
+        .frame(width: style == .bento || style == .debug ? BentoGrid.width
+                      : style == .macbook ? MacBookView.width : PanelSettings.width)
         .environment(\.metricFormatter, MetricFormatter(settings: settings.settings.general))
     }
 

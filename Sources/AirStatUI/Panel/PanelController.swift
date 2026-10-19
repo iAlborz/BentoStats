@@ -785,6 +785,17 @@ final class PanelWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// A press makes the panel key before it is handled rather than while it is: the panel
+    /// opens without the keyboard, and a press that made it key on its way in reached
+    /// SwiftUI as a press its gestures never saw, so pressing and holding a bento card or
+    /// Control-clicking one did nothing until something else had been clicked first.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown || event.type == .rightMouseDown, !isKeyWindow {
+            makeKey()
+        }
+        super.sendEvent(event)
+    }
+
     /// The responder-chain half of Escape-to-dismiss, for when the key window is the
     /// panel but focus sits on a control that swallows the key event.
     override func cancelOperation(_ sender: Any?) { onCancel?() }

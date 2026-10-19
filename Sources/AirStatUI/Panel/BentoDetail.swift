@@ -338,21 +338,13 @@ struct BentoDetail: View {
         return sensors
     }
 
-    /// The card shows the uptime, the family, the macOS version and the computer's
-    /// name. This is the rest of what identifies this Mac.
+    /// The card shows the uptime, exactly which Mac it is, and the macOS version. This is
+    /// the rest of what identifies it: its names and the build it runs.
     @ViewBuilder
     private func system(_ system: SystemInfoSnapshot) -> some View {
-        stats([Self.variant(of: system.modelName).map { Stat($0, "Model", size: 16) },
-               Stat(system.modelIdentifier, "Identifier", size: 16),
-               Stat(system.osBuild, "\(system.osName) build", size: 16),
-               Stat(system.hostName, "Host name", size: 16)].compactMap { $0 })
-    }
-
-    /// "16-inch, 2021" out of "MacBook Pro (16-inch, 2021)": the card has the family.
-    private static func variant(of model: String) -> String? {
-        guard let open = model.firstIndex(of: "("), let close = model.lastIndex(of: ")"),
-              open < close else { return nil }
-        return String(model[model.index(after: open)..<close])
+        stats([Stat(system.computerName, "Computer name", size: 16)].filter { !$0.value.isEmpty })
+        stats([Stat(system.osBuild, "\(system.osName) build", size: 16),
+               Stat(system.hostName, "Host name", size: 16)])
     }
 
     // MARK: Pieces

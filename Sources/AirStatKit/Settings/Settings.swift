@@ -380,6 +380,9 @@ public enum PanelStyle: String, Sendable, Codable, CaseIterable, Equatable {
     /// The inside of a MacBook seen from above, every part showing how hard it is
     /// working and how hot it is, with the bento detail on hover.
     case macbook
+    /// Every bento card in every size, one card and style at a time, for checking how
+    /// each one lays out.
+    case debug
 
     public var label: String {
         switch self {
@@ -387,11 +390,12 @@ public enum PanelStyle: String, Sendable, Codable, CaseIterable, Equatable {
         case .list: return "List"
         case .bento: return "Bento"
         case .macbook: return "MacBook"
+        case .debug: return "Debug"
         }
     }
 
     /// Whether hovering opens the bento-style detail of tiles rather than a module row.
-    public var usesCardDetail: Bool { self == .bento || self == .macbook }
+    public var usesCardDetail: Bool { self == .bento || self == .macbook || self == .debug }
 }
 
 /// What the panel remembers between openings.
