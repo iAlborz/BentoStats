@@ -566,7 +566,7 @@ private struct HoverRegion: ViewModifier {
 
 /// A fan's blades, curved, turning at a pace set by how fast the real fan is running:
 /// a slow drift at idle, a blur at full speed, still when the fan is stopped.
-private struct SpinningFan: View {
+struct SpinningFan: View {
     /// 0...1, idle to flat out.
     let fraction: Double
     let isSpinning: Bool
@@ -582,7 +582,7 @@ private struct SpinningFan: View {
 
     var body: some View {
         ZStack {
-            FanBlades().fill(Color.white.opacity(0.22))
+            FanBlades().fill(Color.white.opacity(0.38))
             FanBlades().stroke(Color.black.opacity(0.15), lineWidth: 0.5)
             Circle().fill(Color(white: 0.35)).frame(width: 34, height: 34)
             Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1).frame(width: 34, height: 34)

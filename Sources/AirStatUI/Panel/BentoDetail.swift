@@ -155,7 +155,7 @@ struct BentoDetail: View {
         stats([Stat(memory.memoryPressure.label,
                     "Pressure · \(formatter.percent(memory.pressureFraction))",
                     fraction: memory.pressureFraction,
-                    colors: Self.pressureColors(memory.memoryPressure)),
+                    colors: BentoGrid.pressureColors(memory.memoryPressure)),
                Stat(formatter.memory(memory.swapUsedBytes), swap)])
         tile(caption: "What's in memory") { composition(memory) }
         history()
@@ -644,14 +644,6 @@ struct BentoDetail: View {
     }
 
     private static let heat = [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)]
-
-    private static func pressureColors(_ level: MemoryPressureLevel) -> [Color] {
-        switch level {
-        case .normal: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)]
-        case .warning: [Color(nsColor: .systemYellow), Color(nsColor: .systemOrange)]
-        case .critical: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)]
-        }
-    }
 
     private func gradient(_ colors: [Color]) -> LinearGradient {
         LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)

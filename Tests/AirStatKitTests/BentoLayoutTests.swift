@@ -26,13 +26,23 @@ struct BentoLayoutTests {
         #expect(placed[.quit] == BentoPlacement(column: 5, row: 3, columns: 1, rows: 1))
     }
 
+    @Test("every card has two to five designs, the first its default, all its own")
+    func designsPerCard() {
+        for kind in BentoTileKind.allCases {
+            #expect((2...5).contains(kind.variants.count), "\(kind)")
+            #expect(kind.defaultVariant == kind.variants[0])
+            #expect(kind.variants.allSatisfy { $0.kind == kind })
+        }
+        #expect(BentoLayout.defaultTiles.allSatisfy { $0.variant == $0.kind.defaultVariant })
+    }
+
     @Test("no arrangement overlaps or runs off the grid")
     func neverOverlaps() {
         var generator = SystemRandomNumberGenerator()
         for _ in 0..<200 {
             let tiles = (0..<Int.random(in: 1...14, using: &generator)).map { _ in
                 let kind = BentoTileKind.allCases.randomElement(using: &generator)!
-                return BentoTile(kind: kind, size: kind.sizes.randomElement(using: &generator)!)
+                return BentoTile(kind: kind, variant: kind.variants.randomElement(using: &generator)!)
             }
             let packed = BentoLayout.pack(tiles)
             var cells = Set<[Int]>()
@@ -51,18 +61,21 @@ struct BentoLayoutTests {
 
     @Test("a smaller card fills the hole a larger one left")
     func fillsHoles() {
-        let tiles = [BentoTile(kind: .cpu, size: .extraWide), BentoTile(kind: .gpu, size: .large),
-                     BentoTile(kind: .settings, size: .small)]
+        let tiles = [BentoTile(kind: .cpu, variant: .cpuChipHistory), BentoTile(kind: .gpu, variant: .gpuDie),
+                     BentoTile(kind: .settings)]
         let placed = place(tiles)
         #expect(placed[.gpu] == BentoPlacement(column: 4, row: 0, columns: 2, rows: 2))
         #expect(placed[.settings] == BentoPlacement(column: 0, row: 2, columns: 1, rows: 1))
     }
 
-    @Test("Settings and Quit always stay, and a size a card cannot take is replaced")
+    @Test("Settings and Quit always stay, and a card cannot wear another card's design")
     func sanitizedKeepsTheWayOut() {
-        let tiles = BentoLayout.sanitized([BentoTile(kind: .cpu), BentoTile(kind: .quit, size: .large)])
+        var stray = BentoTile(kind: .cpu)
+        stray.variant = .memoryPressure
+        let tiles = BentoLayout.sanitized([stray, BentoTile(kind: .quit, variant: .quitWide)])
         #expect(tiles.contains { $0.kind == .settings })
-        #expect(tiles.first { $0.kind == .quit }?.size == .small)
+        #expect(tiles[0].variant == .cpuChip)
+        #expect(tiles[1].variant == .quitWide)
     }
 
     @Test("settings written before the editable grid load the designed layout")
@@ -72,7 +85,18 @@ struct BentoLayoutTests {
         #expect(panel.bentoTiles == BentoLayout.defaultTiles)
     }
 
-    @Test("a size snaps to the nearest one the card can take")
+    @Test("a card saved as a size and style becomes the design of that size")
+    func sizesBecomeDesigns() throws {
+        let id = UUID()
+        let wide = #"{"id":"\#(id)","kind":"cpu","size":"wide","style":"number"}"#
+        #expect(try JSONDecoder().decode(BentoTile.self, from: Data(wide.utf8)).variant == .cpuLoad)
+        let gone = #"{"id":"\#(id)","kind":"network","size":"extraWide","style":"graphic"}"#
+        #expect(try JSONDecoder().decode(BentoTile.self, from: Data(gone.utf8)).variant == .networkSpeeds)
+        let tile = BentoTile(kind: .battery, variant: .batteryInside)
+        #expect(try JSONDecoder().decode(BentoTile.self, from: JSONEncoder().encode(tile)) == tile)
+    }
+
+    @Test("a size snaps to the nearest one the card's designs come in")
     func nearestSize() {
         #expect(BentoTileSize.nearest(columns: 3, rows: 1, in: BentoTileKind.cpu.sizes) == .wide)
         #expect(BentoTileSize.nearest(columns: 4, rows: 3, in: BentoTileKind.cpu.sizes) == .extraWide)
@@ -88,37 +112,5 @@ struct BentoLayoutTests {
         #expect(PanelStyle.macbook.usesCardDetail)
         #expect(PanelStyle.bento.usesCardDetail)
         #expect(!PanelStyle.list.usesCardDetail)
-    }
-
-    @Test("the CPU offers its number alone only on the small cards")
-    func cpuNumberOnlySmall() {
-        for size in BentoTileSize.allCases {
-            let small = [BentoTileSize.small, .wide, .tall].contains(size)
-            #expect(BentoTileKind.cpu.styles(for: size).contains(.number) == small, "\(size)")
-        }
-    }
-
-    @Test("network, SSD and battery stop short of the largest cards, and offer their extra ways")
-    func sizesAndVariants() {
-        #expect(!BentoTileKind.network.sizes.contains(.extraWide))
-        #expect(!BentoTileKind.network.sizes.contains(.tallLarge))
-        #expect(!BentoTileKind.disk.sizes.contains(.extraWide))
-        #expect(!BentoTileKind.disk.sizes.contains(.tallLarge))
-        #expect(BentoTileKind.battery.sizes == [.small, .wide, .tall, .large])
-        #expect(BentoTileKind.network.styles(for: .large).contains(.graphicChart))
-        #expect(!BentoTileKind.network.styles(for: .wide).contains(.graphicChart))
-        #expect(BentoTileKind.battery.styles(for: .wide).contains(.graphicChart))
-        #expect(BentoTileKind.battery.styles(for: .small).contains(.inset))
-        #expect(!BentoTileKind.battery.styles(for: .large).contains(.inset))
-    }
-
-    @Test("a stored card at a size or style no longer offered comes back as one that is")
-    func sanitizedDropsRetiredSizesAndStyles() {
-        let tiles = BentoLayout.sanitized([BentoTile(kind: .cpu, size: .large, style: .number),
-                                           BentoTile(kind: .network, size: .extraWide),
-                                           BentoTile(kind: .battery, size: .wide, style: .inset)])
-        #expect(tiles[0].style == .graphic)
-        #expect(tiles[1].size == BentoTileKind.network.defaultSize)
-        #expect(tiles[2].style == .graphic)
     }
 }

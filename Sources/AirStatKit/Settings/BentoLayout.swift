@@ -44,58 +44,18 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
         }
     }
 
-    /// The sizes the card is drawn well at. An action is a button, one cell or two. The
-    /// network, the SSD and the battery have little to fill the tallest and widest cards
-    /// with, so they stop short of them.
+    /// The card's designs, the one it starts as first. Each is drawn as it was designed,
+    /// at its own size: two to five per card, rather than every size in every style.
+    public var variants: [BentoVariant] {
+        BentoVariant.allCases.filter { $0.kind == self }
+    }
+
+    public var defaultVariant: BentoVariant { variants[0] }
+
+    /// The sizes the card's designs come in, in the order they are listed.
     public var sizes: [BentoTileSize] {
-        switch self {
-        case .settings, .quit: return [.small, .wide]
-        case .network, .disk: return [.small, .wide, .tall, .large, .wideLarge]
-        case .battery: return [.small, .wide, .tall, .large]
-        default: return BentoTileSize.allCases
-        }
-    }
-
-    /// The ways the card can draw itself at `size`.
-    ///
-    /// An action has nothing to count, so it has none, and the system card has no
-    /// history to chart. The CPU's load as a lone number reads on a small card and looks
-    /// lost on a large one, where the chip says it better. Some sizes offer an extra way:
-    /// the network's and the battery's object beside their chart, and on a one-cell
-    /// battery its charge written inside it.
-    public func styles(for size: BentoTileSize) -> [BentoTileStyle] {
-        switch self {
-        case .settings, .quit:
-            return []
-        case .system:
-            return [.graphic, .number]
-        case .cpu:
-            return [.small, .wide, .tall].contains(size) ? [.graphic, .number, .chart] : [.graphic, .chart]
-        case .network:
-            return size == .large ? [.graphic, .graphicChart, .number, .chart] : [.graphic, .number, .chart]
-        case .battery:
-            switch size {
-            case .small: return [.graphic, .inset, .graphicChart, .number, .chart]
-            case .wide: return [.graphic, .graphicChart, .number, .chart]
-            default: return [.graphic, .number, .chart]
-            }
-        default:
-            return [.graphic, .number, .chart]
-        }
-    }
-
-    /// Every style the card offers at one size or another.
-    public var styles: [BentoTileStyle] {
-        BentoTileStyle.allCases.filter { style in sizes.contains { styles(for: $0).contains(style) } }
-    }
-
-    /// The card a new one of this kind starts as.
-    public var defaultSize: BentoTileSize {
-        switch self {
-        case .cpu, .memory, .gpu: return .large
-        case .thermal: return .tall
-        case .settings, .quit: return .small
-        default: return .wide
+        variants.reduce(into: []) { sizes, variant in
+            if !sizes.contains(variant.size) { sizes.append(variant.size) }
         }
     }
 }
@@ -134,43 +94,135 @@ public enum BentoTileSize: String, Sendable, Codable, CaseIterable, Equatable, H
     }
 }
 
-/// How a module card draws itself.
-public enum BentoTileStyle: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    /// The object: the chip, the memory stick, the thermometer.
-    case graphic
-    /// The reading as a big number.
-    case number
-    /// The reading over the last while, as a line.
-    case chart
-    /// The object beside or over its chart.
-    case graphicChart
-    /// The reading written inside the object: the battery's charge in the battery.
-    case inset
+/// One design of one card: what it shows and the size it shows it at.
+///
+/// Each is laid out by hand for its size, the way the panel's first cards were, rather
+/// than put together from parts at whatever size it is given. The first of each card's
+/// is the one it starts as, and the one the designed arrangement uses.
+public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
+    case cpuChip, cpuChipSmall, cpuLoad, cpuChipHistory
+    case memoryModule, memoryStick, memoryPressure, memoryWide
+    case gpuDie, gpuDieSmall, gpuLoad, gpuDieHistory
+    case networkSpeeds, networkSpeedsSmall, networkHistory
+    case diskDrive, diskSpace, diskHistory
+    case batteryCharge, batteryInside, batteryHistory, batteryChargeHistory
+    case thermalThermometer, thermalSmall, thermalSensors, thermalFans
+    case systemAbout, systemUptime, systemDetails
+    case settings, settingsWide
+    case quit, quitWide
 
+    public var kind: BentoTileKind {
+        switch self {
+        case .cpuChip, .cpuChipSmall, .cpuLoad, .cpuChipHistory: return .cpu
+        case .memoryModule, .memoryStick, .memoryPressure, .memoryWide: return .memory
+        case .gpuDie, .gpuDieSmall, .gpuLoad, .gpuDieHistory: return .gpu
+        case .networkSpeeds, .networkSpeedsSmall, .networkHistory: return .network
+        case .diskDrive, .diskSpace, .diskHistory: return .disk
+        case .batteryCharge, .batteryInside, .batteryHistory, .batteryChargeHistory: return .battery
+        case .thermalThermometer, .thermalSmall, .thermalSensors, .thermalFans: return .thermal
+        case .systemAbout, .systemUptime, .systemDetails: return .system
+        case .settings, .settingsWide: return .settings
+        case .quit, .quitWide: return .quit
+        }
+    }
+
+    public var size: BentoTileSize {
+        switch self {
+        case .cpuChipSmall, .gpuDieSmall, .memoryPressure, .networkSpeedsSmall, .diskSpace,
+             .batteryInside, .thermalSmall, .systemUptime, .settings, .quit:
+            return .small
+        case .cpuLoad, .gpuLoad, .memoryStick, .networkSpeeds, .diskDrive, .batteryCharge,
+             .batteryChargeHistory, .thermalFans, .systemAbout, .settingsWide, .quitWide:
+            return .wide
+        case .thermalThermometer:
+            return .tall
+        case .cpuChip, .memoryModule, .gpuDie, .networkHistory, .diskHistory, .batteryHistory,
+             .thermalSensors, .systemDetails:
+            return .large
+        case .cpuChipHistory, .memoryWide, .gpuDieHistory:
+            return .extraWide
+        }
+    }
+
+    /// What it shows, for the card's menu in edit mode.
     public var label: String {
         switch self {
-        case .graphic: return "Graphic"
-        case .number: return "Number"
-        case .chart: return "Chart"
-        case .graphicChart: return "Graphic + Chart"
-        case .inset: return "Number Inside"
+        case .cpuChip: return "Chip and Busiest"
+        case .cpuChipSmall: return "Chip"
+        case .cpuLoad: return "Load"
+        case .cpuChipHistory: return "Chip, Load and History"
+        case .memoryModule: return "Module and Top Users"
+        case .memoryStick: return "Module"
+        case .memoryPressure: return "Pressure"
+        case .memoryWide: return "Module, Pressure and Top Users"
+        case .gpuDie: return "Die and Meters"
+        case .gpuDieSmall: return "Die"
+        case .gpuLoad: return "Load"
+        case .gpuDieHistory: return "Die, Load and History"
+        case .networkSpeeds: return "Speeds"
+        case .networkSpeedsSmall: return "Speeds, Small"
+        case .networkHistory: return "Speeds and History"
+        case .diskDrive: return "Drive and Speeds"
+        case .diskSpace: return "Space"
+        case .diskHistory: return "Drive and History"
+        case .batteryCharge: return "Battery"
+        case .batteryInside: return "Charge Inside"
+        case .batteryHistory: return "Battery and History"
+        case .batteryChargeHistory: return "Charge and History"
+        case .thermalThermometer: return "Thermometer"
+        case .thermalSmall: return "Thermometer, Small"
+        case .thermalSensors: return "All Sensors"
+        case .thermalFans: return "Fans"
+        case .systemAbout: return "Uptime and Model"
+        case .systemUptime: return "Uptime"
+        case .systemDetails: return "About This Mac"
+        case .settings, .quit: return "Small"
+        case .settingsWide, .quitWide: return "Wide"
         }
     }
 }
 
 /// One card of the bento panel.
-public struct BentoTile: Sendable, Codable, Equatable, Hashable, Identifiable {
+public struct BentoTile: Sendable, Equatable, Hashable, Identifiable {
     public var id: UUID
     public var kind: BentoTileKind
-    public var size: BentoTileSize
-    public var style: BentoTileStyle
+    public var variant: BentoVariant
 
-    public init(id: UUID = UUID(), kind: BentoTileKind, size: BentoTileSize? = nil,
-                style: BentoTileStyle = .graphic) {
+    public var size: BentoTileSize { variant.size }
+
+    public init(id: UUID = UUID(), kind: BentoTileKind, variant: BentoVariant? = nil) {
         self.id = id
         self.kind = kind
-        self.size = size ?? kind.defaultSize
-        self.style = style
+        self.variant = variant.flatMap { $0.kind == kind ? $0 : nil } ?? kind.defaultVariant
+    }
+}
+
+extension BentoTile: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, variant
+        /// Written before designs, when a card was any size in any style.
+        case size
+    }
+
+    /// A card saved before designs keeps its size where one of its designs has it.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        kind = try c.decode(BentoTileKind.self, forKey: .kind)
+        if let variant = try? c.decode(BentoVariant.self, forKey: .variant), variant.kind == kind {
+            self.variant = variant
+        } else if let size = try? c.decode(BentoTileSize.self, forKey: .size) {
+            variant = kind.variants.first { $0.size == size } ?? kind.defaultVariant
+        } else {
+            variant = kind.defaultVariant
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(variant, forKey: .variant)
     }
 }
 
@@ -207,12 +259,10 @@ public enum BentoLayout {
     ///
     /// Fixed identifiers, so two default settings compare equal.
     public static let defaultTiles: [BentoTile] = [
-        (BentoTileKind.cpu, BentoTileSize.large), (.memory, .large), (.disk, .wide),
-        (.battery, .wide), (.gpu, .large), (.network, .wide), (.thermal, .tall),
-        (.settings, .small), (.system, .wide), (.quit, .small),
-    ].enumerated().map { index, tile in
+        BentoTileKind.cpu, .memory, .disk, .battery, .gpu, .network, .thermal, .settings, .system, .quit,
+    ].enumerated().map { index, kind in
         BentoTile(id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!,
-                  kind: tile.0, size: tile.1)
+                  kind: kind)
     }
 
     /// Each card's place, in the order given, and how many rows the grid needs.
@@ -248,14 +298,12 @@ public enum BentoLayout {
         return (placements, occupied.count)
     }
 
-    /// A stored arrangement made safe to draw: sizes each kind can take, and Settings
-    /// and Quit always present, since without them the panel has no way out.
+    /// A stored arrangement made safe to draw: each card in a design of its own, and
+    /// Settings and Quit always present, since without them the panel has no way out.
     public static func sanitized(_ tiles: [BentoTile]) -> [BentoTile] {
         var result = tiles.map { tile -> BentoTile in
             var tile = tile
-            if !tile.kind.sizes.contains(tile.size) { tile.size = tile.kind.defaultSize }
-            let styles = tile.kind.styles(for: tile.size)
-            if !styles.isEmpty, !styles.contains(tile.style) { tile.style = .graphic }
+            if tile.variant.kind != tile.kind { tile.variant = tile.kind.defaultVariant }
             return tile
         }
         for action in [BentoTileKind.settings, .quit] where !result.contains(where: { $0.kind == action }) {

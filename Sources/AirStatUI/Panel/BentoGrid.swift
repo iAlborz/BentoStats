@@ -43,7 +43,7 @@ struct BentoGrid: View {
     /// Cards to draw in place of the user's arrangement, which cannot then be edited:
     /// the debug layout's gallery.
     var showing: [BentoTile]? = nil
-    /// Marks each card with its size, for the gallery.
+    /// Names each card's design and size under the pointer, for the gallery.
     var labelsSizes = false
 
     private static let inset: CGFloat = 12
@@ -72,6 +72,8 @@ struct BentoGrid: View {
     @State private var drag: TileDrag?
     @State private var resizeStart: BentoTileSize?
     @State private var jiggle = false
+    /// The card under the pointer in the gallery, which shows its design's name.
+    @State private var labelled: UUID?
     /// Set while a card is held by its body or its corner, and cleared however the
     /// gesture ends. A resize can end in cancellation rather than release, the card
     /// changing size under the pointer, and a cancelled gesture never reaches `onEnded`.
@@ -160,8 +162,8 @@ struct BentoGrid: View {
                 if isEditing { editControls(tile, frame: frame) }
             }
             .overlay(alignment: .bottomLeading) {
-                if labelsSizes {
-                    Text(tile.size.label)
+                if labelsSizes, labelled == tile.id {
+                    Text("\(tile.variant.label) · \(tile.size.label)")
                         .font(.system(size: 10, weight: .bold).monospacedDigit())
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
@@ -170,6 +172,10 @@ struct BentoGrid: View {
                         .padding(6)
                         .allowsHitTesting(false)
                 }
+            }
+            .onHover { inside in
+                guard labelsSizes else { return }
+                if inside { labelled = tile.id } else if labelled == tile.id { labelled = nil }
             }
             .contextMenu {
                 if !isEditing, canEdit {
@@ -189,7 +195,7 @@ struct BentoGrid: View {
     }
 
     /// Over a card in edit mode: the surface it is dragged by, the minus that removes it,
-    /// the menu for its size and style, and the corner it is resized by.
+    /// the menu of its designs, and the corner it is resized by.
     private func editControls(_ tile: BentoTile, frame: CGRect) -> some View {
         Color.clear
             .contentShape(Rectangle())
@@ -208,7 +214,7 @@ struct BentoGrid: View {
                 options(tile).padding(Design.Space.s)
             }
             .overlay(alignment: .bottomTrailing) {
-                resizeHandle(tile)
+                if tile.kind.sizes.count > 1 { resizeHandle(tile) }
             }
     }
 
@@ -249,8 +255,8 @@ struct BentoGrid: View {
         self.drag?.lastSwap = point
     }
 
-    /// The corner a card is resized by: dragged, it snaps to the nearest size the card
-    /// can take, and the cards around it flow out of the way.
+    /// The corner a card is resized by: dragged, it snaps to the nearest size one of the
+    /// card's designs comes in, and the cards around it flow out of the way.
     private func resizeHandle(_ tile: BentoTile) -> some View {
         ResizeCorner()
             .stroke(Design.Palette.secondaryText, style: StrokeStyle(lineWidth: 3, lineCap: .round))
@@ -272,24 +278,21 @@ struct BentoGrid: View {
                         guard let size = BentoTileSize.nearest(columns: max(columns, 1), rows: max(rows, 1),
                                                                in: tile.kind.sizes),
                               let index = working?.firstIndex(where: { $0.id == tile.id }),
-                              working?[index].size != size else { return }
-                        working?[index].size = size
+                              working?[index].size != size,
+                              let variant = tile.kind.variants.first(where: { $0.size == size }) else { return }
+                        working?[index].variant = variant
                     }
             )
             .accessibilityLabel("Resize \(tile.kind.label)")
     }
 
-    /// A card's size, and for a module card how it draws itself.
+    /// The card's designs, by what each shows and its size.
     private func options(_ tile: BentoTile) -> some View {
         Menu {
-            if !tile.kind.styles(for: tile.size).isEmpty {
-                Picker("Style", selection: binding(tile.id, \.style, default: tile.style)) {
-                    ForEach(tile.kind.styles(for: tile.size), id: \.self) { Text($0.label).tag($0) }
+            Picker("Design", selection: binding(tile.id, \.variant, default: tile.variant)) {
+                ForEach(tile.kind.variants, id: \.self) { variant in
+                    Text("\(variant.label)   \(variant.size.label)").tag(variant)
                 }
-                .pickerStyle(.inline)
-            }
-            Picker("Size", selection: binding(tile.id, \.size, default: tile.size)) {
-                ForEach(tile.kind.sizes, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.inline)
         } label: {
@@ -355,7 +358,7 @@ struct BentoGrid: View {
             }
             .buttonStyle(.plain)
             Spacer(minLength: 0)
-            Text("Drag to move · Drag a corner to resize")
+            Text("Drag to move · Drag a corner or use ••• for another design")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Design.Palette.tertiaryText)
             Spacer(minLength: 0)
@@ -392,7 +395,6 @@ struct BentoGrid: View {
 
     private func commit() {
         guard let working else { return }
-        // A resize can land on a size the card's style is not offered at.
         let sanitized = BentoLayout.sanitized(working)
         settings.update { $0.panel.bentoTiles = sanitized }
         self.working = nil
@@ -402,41 +404,50 @@ struct BentoGrid: View {
 
     @ViewBuilder
     private func tileView(_ tile: BentoTile, size: CGSize) -> some View {
-        switch tile.kind {
-        case .settings:
+        switch tile.variant {
+        case .settings, .settingsWide:
             action("Settings", symbol: "gearshape.fill",
                    colors: [Color(nsColor: .systemGray), Color(nsColor: .secondaryLabelColor)],
                    size: size, perform: actions.openSettings)
                 .keyboardShortcut(",", modifiers: .command)
-        case .quit:
+        case .quit, .quitWide:
             action("Quit", symbol: "power",
                    colors: [Color(nsColor: .systemRed), Color(nsColor: .systemPink)],
                    size: size, perform: actions.quit)
                 .keyboardShortcut("q", modifiers: .command)
-        default:
-            if tile.style == .graphic, tile.size == tile.kind.defaultSize {
-                designed(tile.kind)
-            } else if let module = tile.kind.module {
-                flexible(tile, module: module, size: size)
-            }
+        case .cpuChip: cpu
+        case .cpuChipSmall: cpuChipSmall
+        case .cpuLoad: cpuLoad
+        case .cpuChipHistory: cpuChipHistory
+        case .memoryModule: memory
+        case .memoryStick: memoryModuleCard
+        case .memoryPressure: memoryPressure
+        case .memoryWide: memoryWide
+        case .gpuDie: gpu
+        case .gpuDieSmall: gpuDieSmall
+        case .gpuLoad: gpuLoad
+        case .gpuDieHistory: gpuDieHistory
+        case .networkSpeeds: network
+        case .networkSpeedsSmall: networkSpeedsSmall
+        case .networkHistory: networkHistory
+        case .diskDrive: disk
+        case .diskSpace: diskSpace
+        case .diskHistory: diskHistory
+        case .batteryCharge: battery
+        case .batteryInside: batteryInside
+        case .batteryHistory: batteryHistory
+        case .batteryChargeHistory: batteryChargeHistory
+        case .thermalThermometer: thermal
+        case .thermalSmall: thermalSmall
+        case .thermalSensors: thermalSensors
+        case .thermalFans: thermalFans
+        case .systemAbout: system
+        case .systemUptime: systemUptime
+        case .systemDetails: systemDetails
         }
     }
 
-    /// The card as it was designed, at its designed size.
-    @ViewBuilder
-    private func designed(_ kind: BentoTileKind) -> some View {
-        switch kind {
-        case .cpu: cpu
-        case .memory: memory
-        case .gpu: gpu
-        case .disk: disk
-        case .battery: battery
-        case .network: network
-        case .thermal: thermal
-        case .system: system
-        case .settings, .quit: EmptyView()
-        }
-    }
+    // MARK: The designed cards
 
     private var cpu: some View {
         // What is using the CPU belongs with the CPU: the five busiest processes under
@@ -526,384 +537,487 @@ struct BentoGrid: View {
         }
     }
 
-    // MARK: Cards at any size
+    // MARK: CPU designs
 
-    /// A module card's parts, for drawing it at a size or in a style other than the one
-    /// it was designed at.
-    private struct Parts {
-        /// The card's object, drawn at `native` and scaled to whatever room it gets.
-        var object: AnyView
-        var native: CGSize
-        var reading: String?
-        var readingColors: [Color]?
-        /// What the reading is, where the header does not already say: "free", "uptime".
-        var label: String?
-        /// The readings that support it, for the larger sizes.
-        var detail: AnyView?
-        /// A fuller detail for a card with width to spare: names where the narrow one has
-        /// only icons.
-        var wideDetail: AnyView?
-        /// The detail is the reading laid out its own way, so the two are not shown together.
-        var detailIsReading = false
-        var header: CardHeader?
-        /// The header of a one-cell card, which has no room for the reading below it.
-        var shortHeader: CardHeader?
-        /// Over the chart, the reading the line is drawn from, where that differs: the
-        /// memory chart is of what is used, the SSD's of what is read.
-        var chartReading: String?
-        var chartLabel: String?
-
-        /// A long, low object, the memory stick or the SSD, which prints its reading on
-        /// itself: wherever it is drawn large enough to read, the number is not repeated.
-        var isFlat: Bool { native.width / native.height > 2.5 }
-    }
-
-    private func parts(_ module: PanelModule) -> Parts {
-        switch module {
-        case .cpu:
-            let reading = engine.cpu.value.map { formatter.percent($0.total.busy) }
-            return Parts(object: AnyView(chip), native: CGSize(width: 140, height: 140),
-                         reading: reading, label: nil, detail: AnyView(busiestRow),
-                         wideDetail: AnyView(busiestList),
-                         header: cpuHeader, shortHeader: CardHeader("CPU", reading))
-        case .memory:
-            let free = memoryFree.map { formatter.memory($0) }
-            return Parts(object: AnyView(memoryStick), native: CGSize(width: 200, height: 56),
-                         reading: free, label: "free", detail: AnyView(memoryList),
-                         header: memoryHeader, shortHeader: free.map { CardHeader("Free", $0) },
-                         chartReading: engine.memory.value.map { formatter.percent($0.usedFraction) },
-                         chartLabel: "used")
-        case .gpu:
-            let reading = engine.gpu.value?.primary?.utilization.map { formatter.percent($0) }
-            return Parts(object: AnyView(gpuDie(CGSize(width: 200, height: 106))),
-                         native: CGSize(width: 200, height: 106),
-                         reading: reading, label: nil, detail: AnyView(gpuMeters),
-                         header: gpuHeader, shortHeader: CardHeader("GPU", reading))
-        case .disk:
-            let free = engine.disk.value?.rootVolume.map { formatter.storage($0.availableBytes) }
-            return Parts(object: AnyView(ssd), native: CGSize(width: 200, height: 44),
-                         reading: free, label: "free", detail: AnyView(diskRates),
-                         header: diskHeader, shortHeader: free.map { CardHeader("Free", $0) },
-                         chartReading: engine.disk.value.map { formatter.diskRate($0.readBytesPerSecond) },
-                         chartLabel: "read")
-        case .battery:
-            let hasBattery = engine.power.value?.hasBattery != false
-            return Parts(object: AnyView(batteryObject),
-                         native: hasBattery ? CGSize(width: 86, height: 40) : CGSize(width: 40, height: 40),
-                         reading: hasBattery ? batteryReading : "AC", readingColors: batteryColors,
-                         label: batteryState,
-                         shortHeader: CardHeader("Battery", hasBattery ? batteryReading : "AC"))
-        case .network:
-            let network = engine.network.value ?? engine.lastKnown.network.value
-            let down = network.map { formatter.networkRate($0.downloadBytesPerSecond) }
-            let up = network.map { formatter.networkRate($0.uploadBytesPerSecond) }
-            // Where the two rates are not drawn stacked, the upload goes with the label.
-            return Parts(object: AnyView(networkSymbol), native: CGSize(width: 46, height: 36),
-                         reading: down, readingColors: Self.downColors,
-                         label: up.map { "download · ↑ \($0) up" } ?? "download",
-                         detail: AnyView(networkRates()), detailIsReading: true,
-                         header: networkHeader, shortHeader: CardHeader("Down", down))
-        case .thermal:
-            return Parts(object: AnyView(thermometer), native: CGSize(width: 30, height: 140),
-                         reading: temperatureReading ?? engine.thermal.value?.pressure.label,
-                         label: nil, header: thermalHeader,
-                         shortHeader: CardHeader("CPU", temperatureReading, alert: thermalAlert))
-        case .system, .processes:
-            let uptime = engine.system.value.map { formatter.uptime($0.uptime) }
-            return Parts(object: AnyView(Image(systemName: "laptopcomputer")
-                                            .font(.system(size: 44, weight: .regular))
-                                            .foregroundStyle(gradient(.system))),
-                         native: CGSize(width: 64, height: 44),
-                         reading: uptime, label: "uptime", detail: AnyView(systemModel),
-                         shortHeader: CardHeader("Up", uptime))
+    /// The chip alone, its load over it.
+    private var cpuChipSmall: some View {
+        let box = Self.box(.cpuChipSmall, header: true)
+        return card(.cpuChipSmall, header: CardHeader("CPU", cpuLoadReading)) {
+            fit(AnyView(chip), native: CGSize(width: 140, height: 140), in: box)
         }
     }
 
-    private func flexible(_ tile: BentoTile, module: PanelModule, size: CGSize) -> some View {
-        let parts = parts(module)
-        let header: CardHeader? = switch tile.style {
-        // The number is in the object, so there is nothing left to say over it.
-        case .inset: nil
-        case .graphic, .graphicChart: tile.size == .small ? parts.shortHeader : parts.header
-        case .number, .chart: parts.header
-        }
-        // Inside the card's padding, under its header.
-        let box = CGSize(width: size.width - 16, height: size.height - (header == nil ? 23 : 42))
-        return card(module, width: size.width, height: size.height, header: header) {
-            switch tile.style {
-            case .graphic: graphicLayout(tile.size, parts, module, box)
-            case .number: numberLayout(tile.size, parts, module, tile.kind, box)
-            case .chart: chartLayout(tile.size, parts, module, box)
-            case .graphicChart: graphicChartLayout(tile.size, parts, module, box)
-            case .inset: insetLayout(parts, box)
+    /// The chip beside its load, and the load split between the two kinds of core.
+    private var cpuLoad: some View {
+        let cpu = engine.cpu.value
+        return card(.cpuLoad, header: cpuHeader) {
+            HStack(spacing: Design.Space.l) {
+                fit(AnyView(chip), native: CGSize(width: 140, height: 140), in: CGSize(width: 64, height: 64))
+                VStack(alignment: .leading, spacing: 3) {
+                    bigNumber(.cpu, cpuLoadReading, size: 30)
+                    if let p = cpu?.performanceBusy, let e = cpu?.efficiencyBusy {
+                        HStack(spacing: Design.Space.m) {
+                            share("P", formatter.percent(p), colour: palette(.cpu)[0])
+                            share("E", formatter.percent(e), colour: Color(nsColor: .systemGreen))
+                        }
+                    } else if let cpu {
+                        HStack(spacing: Design.Space.m) {
+                            share("User", formatter.percent(cpu.total.user), colour: palette(.cpu)[0])
+                            share("Sys", formatter.percent(cpu.total.system), colour: Design.Palette.tertiaryText)
+                        }
+                    }
+                }
             }
         }
     }
 
-    /// The object leads, the reading beside or under it as the shape allows, and the
-    /// supporting readings and the history where there is room for them.
-    @ViewBuilder
-    private func graphicLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
-                               _ box: CGSize) -> some View {
-        switch size {
-        case .tall where module == .network:
-            // Both directions, smaller, under the symbol.
-            VStack(spacing: Design.Space.m) {
-                fit(parts, in: CGSize(width: box.width, height: box.height - 56))
+    /// The chip in one half; in the other its load beside its history, over the busiest
+    /// processes by name.
+    private var cpuChipHistory: some View {
+        let box = Self.box(.cpuChipHistory, header: true)
+        let half = Self.half(box)
+        return card(.cpuChipHistory, header: cpuHeader) {
+            halves(box) {
+                fit(AnyView(chip), native: CGSize(width: 140, height: 140), in: CGSize(width: half, height: box.height))
+            } right: {
+                VStack(alignment: .leading, spacing: Design.Space.m) {
+                    HStack(spacing: Design.Space.m) {
+                        bigNumber(.cpu, cpuLoadReading, size: 32, fitting: half * 0.4)
+                        sparkline(.cpu, height: 46)
+                    }
+                    busiestList
+                }
+            }
+        }
+    }
+
+    // MARK: Memory designs
+
+    /// The module alone, with what is free printed on it.
+    private var memoryModuleCard: some View {
+        let box = Self.box(.memoryStick, header: true)
+        return card(.memoryStick, header: memoryHeader) {
+            fit(AnyView(memoryStick), native: CGSize(width: 200, height: 56), in: box)
+        }
+    }
+
+    /// Memory pressure as a ring, coloured the way Activity Monitor colours it.
+    private var memoryPressure: some View {
+        let memory = engine.memory.value
+        let colours = memory.map { Self.pressureColors($0.memoryPressure) } ?? palette(.memory)
+        return card(.memoryPressure, header: CardHeader("Memory")) {
+            VStack(spacing: Design.Space.xs) {
+                Ring(fraction: memory?.pressureFraction ?? 0, colors: colours, lineWidth: 7)
+                    .frame(width: 48, height: 48)
+                    .overlay {
+                        Text(memory.map { formatter.percent($0.pressureFraction) } ?? MetricFormatter.unavailable)
+                            .font(.system(size: 12, weight: .bold).monospacedDigit())
+                            .foregroundStyle(Design.Palette.primaryText)
+                    }
+                Text(memory.map { "\($0.memoryPressure.label) pressure" } ?? "Pressure")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(colours[0])
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    /// The module in one half with the pressure and swap under it; the biggest users in
+    /// the other.
+    private var memoryWide: some View {
+        let box = Self.box(.memoryWide, header: true)
+        let memory = engine.memory.value
+        return card(.memoryWide, header: memoryHeader) {
+            halves(box) {
+                VStack(spacing: Design.Space.m) {
+                    fit(AnyView(memoryStick), native: CGSize(width: 200, height: 56),
+                        in: CGSize(width: Self.half(box), height: 64))
+                    if let memory {
+                        VStack(spacing: Design.Space.xs) {
+                            HStack {
+                                Text("Pressure").foregroundStyle(Design.Palette.secondaryText)
+                                Spacer(minLength: 0)
+                                Text(memory.memoryPressure.label)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(Self.pressureColors(memory.memoryPressure)[0])
+                            }
+                            Bar(fraction: memory.pressureFraction, colors: Self.pressureColors(memory.memoryPressure))
+                                .frame(height: 5)
+                            HStack {
+                                Text("Swap").foregroundStyle(Design.Palette.secondaryText)
+                                Spacer(minLength: 0)
+                                Text(memory.swapTotalBytes > 0
+                                     ? "\(formatter.memory(memory.swapUsedBytes)) of \(formatter.memory(memory.swapTotalBytes))"
+                                     : formatter.memory(memory.swapUsedBytes))
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(Design.Palette.primaryText)
+                            }
+                            .padding(.top, Design.Space.xs)
+                        }
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .padding(.horizontal, Design.Space.xs)
+                    }
+                }
+            } right: {
+                memoryList
+            }
+        }
+    }
+
+    // MARK: GPU designs
+
+    /// The die alone, its load over it.
+    private var gpuDieSmall: some View {
+        let box = Self.box(.gpuDieSmall, header: true)
+        return card(.gpuDieSmall, header: CardHeader("GPU", gpuLoadReading)) {
+            fit(AnyView(gpuDie(CGSize(width: 200, height: 106))), native: CGSize(width: 200, height: 106), in: box)
+        }
+    }
+
+    /// The die beside its load, and how much memory it holds.
+    private var gpuLoad: some View {
+        let device = engine.gpu.value?.primary
+        return card(.gpuLoad, header: gpuHeader) {
+            HStack(spacing: Design.Space.l) {
+                fit(AnyView(gpuDie(CGSize(width: 200, height: 106))), native: CGSize(width: 200, height: 106),
+                    in: CGSize(width: 104, height: 64))
+                VStack(alignment: .leading, spacing: 3) {
+                    bigNumber(.gpu, gpuLoadReading, size: 30)
+                    if let used = device?.vramUsedBytes {
+                        Text("\(formatter.memory(used)) memory")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Design.Palette.secondaryText)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The die in one half; in the other its load beside its history, over the meters.
+    private var gpuDieHistory: some View {
+        let box = Self.box(.gpuDieHistory, header: true)
+        let half = Self.half(box)
+        return card(.gpuDieHistory, header: gpuHeader) {
+            halves(box) {
+                fit(AnyView(gpuDie(CGSize(width: 200, height: 106))), native: CGSize(width: 200, height: 106),
+                    in: CGSize(width: half, height: box.height))
+            } right: {
+                VStack(alignment: .leading, spacing: Design.Space.m) {
+                    HStack(spacing: Design.Space.m) {
+                        bigNumber(.gpu, gpuLoadReading, size: 32, fitting: half * 0.4)
+                        sparkline(.gpu, height: 46)
+                    }
+                    gpuMeters
+                }
+            }
+        }
+    }
+
+    // MARK: Network designs
+
+    /// The symbol over both directions, small. No room for the network's name as well.
+    private var networkSpeedsSmall: some View {
+        let box = Self.box(.networkSpeedsSmall, header: false)
+        return card(.networkSpeedsSmall, header: nil) {
+            VStack(spacing: Design.Space.s) {
+                Image(systemName: networkSymbolName)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(gradient(.network))
                 networkRates(size: 15, fitting: box.width)
             }
-        case .wideLarge where module == .network:
+        }
+    }
+
+    /// The symbol and both directions, and the download's history under them.
+    private var networkHistory: some View {
+        let box = Self.box(.networkHistory, header: networkHeader != nil)
+        return card(.networkHistory, header: networkHeader) {
             VStack(spacing: Design.Space.m) {
                 HStack(spacing: Design.Space.xl) {
-                    fit(parts, in: CGSize(width: 90, height: 64))
+                    Image(systemName: networkSymbolName)
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(gradient(.network))
                     networkRates()
                 }
-                sparkline(module, height: max(box.height - 72, 40))
+                sparkline(.network, height: max(box.height - 64, 40))
             }
-        case .large where module == .disk, .wideLarge where module == .disk:
-            // The drive, its rates, and its history under them.
-            let object = CGSize(width: min(box.width, 320), height: 64)
+        }
+    }
+
+    // MARK: SSD designs
+
+    /// How full the drive is, as a ring, with what is left under it.
+    private var diskSpace: some View {
+        let root = engine.disk.value?.rootVolume
+        let used = root.map { $0.totalBytes > 0 ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 }
+        return card(.diskSpace, header: diskHeader) {
+            VStack(spacing: Design.Space.xs) {
+                Ring(fraction: used ?? 0, colors: palette(.disk), lineWidth: 7)
+                    .frame(width: 48, height: 48)
+                    .overlay {
+                        Text(used.map { formatter.percent($0) } ?? MetricFormatter.unavailable)
+                            .font(.system(size: 12, weight: .bold).monospacedDigit())
+                            .foregroundStyle(Design.Palette.primaryText)
+                    }
+                Text(root.map { "\(formatter.storage($0.availableBytes)) free" } ?? "SSD")
+                    .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(Design.Palette.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    /// The drive and its rates, and the reads' history under them.
+    private var diskHistory: some View {
+        let box = Self.box(.diskHistory, header: true)
+        let drive = Self.fitted(CGSize(width: 200, height: 44), in: CGSize(width: box.width, height: 60))
+        return card(.diskHistory, header: diskHeader) {
             VStack(spacing: Design.Space.s) {
-                fit(parts, in: object)
+                fit(AnyView(ssd), native: CGSize(width: 200, height: 44), in: CGSize(width: box.width, height: 60))
                 diskRates
-                sparkline(module, height: max(box.height - fitted(parts, in: object).height - 29, 30))
+                sparkline(.disk, height: max(box.height - drive.height - 29, 30))
             }
-        case .large where module == .battery:
-            // A smaller battery beside its charge, and the charge's history under them.
+        }
+    }
+
+    // MARK: Battery designs
+
+    /// The charge written inside the battery, and how long it lasts under it.
+    private var batteryInside: some View {
+        card(.batteryInside, header: nil) {
+            VStack(spacing: Design.Space.s) {
+                fit(AnyView(batteryWithCharge), native: CGSize(width: 86, height: 40),
+                    in: CGSize(width: 94, height: 46))
+                Text(batteryState ?? "")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(Design.Palette.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    /// A smaller battery beside its charge, and the charge's history under them.
+    private var batteryHistory: some View {
+        let box = Self.box(.batteryHistory, header: false)
+        return card(.batteryHistory, header: nil) {
             VStack(spacing: Design.Space.m) {
                 HStack(spacing: Design.Space.l) {
-                    fit(parts, in: CGSize(width: 96, height: 46))
-                    reading(parts, module, size: 30, width: box.width - 110)
-                }
-                sparkline(module, height: max(box.height - 66, 40))
-            }
-        case .extraWide where !parts.isFlat:
-            // Split at the grid line between the second cell and the third, so the halves
-            // line up with the cards around it: the object in one, its readings in the other.
-            let half = (box.width - 16) / 2
-            HStack(spacing: 16) {
-                fit(parts, in: CGSize(width: half, height: box.height))
-                    .frame(width: half)
-                VStack(alignment: .leading, spacing: Design.Space.m) {
-                    if module == .cpu {
-                        // The load beside its history.
-                        HStack(spacing: Design.Space.m) {
-                            reading(parts, module, size: 32, width: half * 0.4)
-                            sparkline(module, height: 46)
-                        }
-                    } else if !parts.detailIsReading {
-                        reading(parts, module, size: 32, width: half)
+                    batteryObject.frame(width: 86, height: 40)
+                    VStack(alignment: .leading, spacing: 0) {
+                        bigNumber(.battery, batteryReading, size: 30, colors: batteryColors)
+                        Text(batteryState ?? "")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Design.Palette.secondaryText)
+                            .lineLimit(1)
                     }
-                    parts.wideDetail ?? parts.detail
                 }
-                .frame(width: half, alignment: .leading)
-            }
-        case .small:
-            fit(parts, in: box)
-        case .wide where parts.isFlat:
-            fit(parts, in: box)
-        case .wide:
-            HStack(spacing: Design.Space.l) {
-                fit(parts, in: CGSize(width: box.width * 0.45, height: box.height))
-                if parts.detailIsReading, let detail = parts.detail {
-                    detail
-                } else {
-                    reading(parts, module, size: 26, width: box.width * 0.5)
-                }
-            }
-        case .tall:
-            VStack(spacing: Design.Space.m) {
-                fit(parts, in: CGSize(width: box.width, height: box.height - 40))
-                bigNumber(module, parts.reading, size: 24, colors: parts.readingColors, fitting: box.width)
-            }
-        case .large:
-            VStack(spacing: Design.Space.m) {
-                fit(parts, in: CGSize(width: box.width, height: box.height - 76))
-                if let detail = parts.detail, parts.detailIsReading || parts.isFlat {
-                    detail
-                } else {
-                    reading(parts, module, size: 30, alignment: .center, width: box.width)
-                }
-            }
-        case .wideLarge where parts.isFlat, .extraWide where parts.isFlat:
-            VStack(spacing: Design.Space.m) {
-                fit(parts, in: CGSize(width: min(box.width, 320), height: 72))
-                parts.wideDetail ?? parts.detail
-            }
-        case .wideLarge, .extraWide:
-            HStack(spacing: Design.Space.xl) {
-                fit(parts, in: CGSize(width: box.width * 0.42, height: box.height))
-                VStack(alignment: .leading, spacing: Design.Space.l) {
-                    if !parts.detailIsReading { reading(parts, module, size: 32, width: box.width * 0.5) }
-                    parts.wideDetail ?? parts.detail
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        case .tallLarge where module.historySeries == nil:
-            // Nothing to chart, so the reading and the detail share the room.
-            VStack(spacing: Design.Space.m) {
-                fit(parts, in: CGSize(width: box.width, height: 120))
-                reading(parts, module, size: 30, alignment: .center, width: box.width)
-                parts.detail
-            }
-        case .tallLarge:
-            VStack(spacing: Design.Space.m) {
-                fit(parts, in: CGSize(width: box.width, height: parts.isFlat ? 72 : 120))
-                if let detail = parts.detail {
-                    detail
-                } else {
-                    reading(parts, module, size: 30, alignment: .center, width: box.width)
-                }
-                Spacer(minLength: 0)
-                sparkline(module, height: 90)
+                sparkline(.battery, height: max(box.height - 62, 40))
             }
         }
     }
 
-    /// The object with its history: over it on a one-cell card, beside it on a wide one,
-    /// and on a large one with its readings beside the object and the chart under both.
-    @ViewBuilder
-    private func graphicChartLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
-                                    _ box: CGSize) -> some View {
-        switch size {
-        case .small:
-            VStack(spacing: Design.Space.s) {
-                fit(parts, in: CGSize(width: box.width, height: box.height * 0.45))
-                sparkline(module, height: max(box.height * 0.5, 20))
-            }
-        case .wide:
+    /// The battery with its charge inside, beside the charge's history.
+    private var batteryChargeHistory: some View {
+        let box = Self.box(.batteryChargeHistory, header: false)
+        return card(.batteryChargeHistory, header: nil) {
             HStack(spacing: Design.Space.l) {
-                fit(parts, in: CGSize(width: box.width * 0.4, height: box.height))
-                sparkline(module, height: box.height * 0.8)
-            }
-        default:
-            VStack(spacing: Design.Space.m) {
-                HStack(spacing: Design.Space.l) {
-                    fit(parts, in: CGSize(width: 64, height: 50))
-                    if parts.detailIsReading, let detail = parts.detail {
-                        detail
-                    } else {
-                        reading(parts, module, size: 26, width: box.width - 80)
-                    }
-                }
-                sparkline(module, height: max(box.height - 66, 40))
-            }
-        }
-    }
-
-    /// The reading written inside the object, the way the system's battery can show it:
-    /// in the label colour with a halo of the card's, so it reads over the charge and over
-    /// the empty part alike.
-    private func insetLayout(_ parts: Parts, _ box: CGSize) -> some View {
-        let power = engine.power.value
-        let object = ZStack {
-            BatteryGraphic(fraction: (power?.percentage ?? 0) / 100, isCharging: false,
-                           charge: batteryIsLow ? Color(nsColor: .systemRed) : palette(.battery)[0])
-            HStack(spacing: 1) {
-                if power?.isCharging == true {
-                    Image(systemName: "bolt.fill").font(.system(size: 11, weight: .heavy))
-                }
-                Text(parts.reading ?? MetricFormatter.unavailable)
-                    .font(.system(size: 17, weight: .heavy).monospacedDigit())
-            }
-            .foregroundStyle(Design.Palette.primaryText)
-            .shadow(color: BentoCard<EmptyView>.surface, radius: 1)
-            .shadow(color: BentoCard<EmptyView>.surface, radius: 1)
-            // Centred on the body, not on the body and its terminal.
-            .offset(x: -3)
-        }
-        return fit(AnyView(object), native: parts.native, in: box)
-    }
-
-    /// The reading leads, as large as the card allows, over what it is.
-    @ViewBuilder
-    private func numberLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
-                              _ kind: BentoTileKind, _ box: CGSize) -> some View {
-        let symbol = Image(systemName: kind == .network ? "wifi" : kind.symbolName)
-            .foregroundStyle(gradient(parts.readingColors ?? palette(module)))
-        // The detail beside or under the number, unless it is the number over again.
-        let detail = parts.detailIsReading ? nil : parts.detail
-        switch size {
-        case .small:
-            reading(parts, module, size: 26, alignment: .center, width: box.width)
-        case .wide:
-            HStack(spacing: Design.Space.l) {
-                symbol.font(.system(size: 28, weight: .semibold))
-                reading(parts, module, size: 36, width: box.width - 52)
-            }
-        case .tall:
-            VStack(spacing: Design.Space.m) {
-                symbol.font(.system(size: 30, weight: .semibold))
-                reading(parts, module, size: 30, alignment: .center, width: box.width)
-            }
-        case .large:
-            VStack(spacing: Design.Space.s) {
-                symbol.font(.system(size: 26, weight: .semibold))
-                reading(parts, module, size: 50, alignment: .center, width: box.width)
-            }
-        case .wideLarge, .extraWide:
-            if let detail = parts.wideDetail ?? detail {
-                HStack(spacing: Design.Space.xl) {
-                    VStack(alignment: .leading, spacing: Design.Space.s) {
-                        symbol.font(.system(size: 26, weight: .semibold))
-                        reading(parts, module, size: 52, width: box.width * 0.45)
-                    }
-                    detail.frame(maxWidth: .infinity)
-                }
-            } else {
                 VStack(spacing: Design.Space.s) {
-                    symbol.font(.system(size: 30, weight: .semibold))
-                    reading(parts, module, size: 60, alignment: .center, width: box.width)
-                }
-            }
-        case .tallLarge:
-            VStack(spacing: Design.Space.l) {
-                symbol.font(.system(size: 28, weight: .semibold))
-                reading(parts, module, size: 50, alignment: .center, width: box.width)
-                detail
-            }
-        }
-    }
-
-    /// The reading over its history, the line filling what the card has left.
-    private func chartLayout(_ size: BentoTileSize, _ parts: Parts, _ module: PanelModule,
-                             _ box: CGSize) -> some View {
-        // A narrow card has room for the number alone.
-        let isNarrow = size.columns == 1
-        let number: CGFloat = size == .small ? 18 : size == .wide || size == .tall ? 22 : 28
-        let network = engine.network.value ?? engine.lastKnown.network.value
-        return VStack(alignment: .leading, spacing: Design.Space.xs) {
-            if module == .network, !isNarrow {
-                // Both directions over the chart.
-                HStack(spacing: Design.Space.l) {
-                    rate("arrow.down", network.map { formatter.networkRate($0.downloadBytesPerSecond) },
-                         colors: Self.downColors, size: number * 0.8)
-                    rate("arrow.up", network.map { formatter.networkRate($0.uploadBytesPerSecond) },
-                         colors: Self.upColors, size: number * 0.8)
-                    Spacer(minLength: 0)
-                }
-            } else {
-            HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
-                bigNumber(module, parts.chartReading ?? parts.reading, size: number,
-                          colors: parts.readingColors, fitting: isNarrow ? box.width : box.width * 0.55)
-                if !isNarrow, let label = parts.chartLabel ?? parts.label {
-                    Text(label)
-                        .font(.system(size: 10.5, weight: .medium))
+                    fit(AnyView(batteryWithCharge), native: CGSize(width: 86, height: 40),
+                        in: CGSize(width: 90, height: 42))
+                    Text(batteryState ?? "")
+                        .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(Design.Palette.secondaryText)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 0)
+                sparkline(.battery, height: box.height - 10)
             }
-            }
-            sparkline(module, height: max(box.height - number - 10, 24), tint: parts.readingColors?.first)
         }
     }
 
-    /// The object at its own proportions, as large as `box` allows.
-    private func fit(_ parts: Parts, in box: CGSize) -> some View {
-        fit(parts.object, native: parts.native, in: box)
+    // MARK: Temperature designs
+
+    /// A small thermometer beside the reading.
+    private var thermalSmall: some View {
+        card(.thermalSmall, header: thermalHeader) {
+            HStack(spacing: Design.Space.m) {
+                ThermometerGraphic(fraction: Self.thermometerLevel(engine.thermal.value?.cpuCelsius),
+                                   colors: Self.heat, scale: 0.45)
+                    .frame(width: 14, height: 63)
+                bigNumber(.thermal, temperatureReading ?? engine.thermal.value?.pressure.label,
+                          size: 24, fitting: 64)
+            }
+        }
     }
 
+    /// A thermometer for every part with a sensor: the CPU, the GPU, the SSD, the battery.
+    private var thermalSensors: some View {
+        let thermal = engine.thermal.value
+        let power = engine.power.value
+        let readings: [(String, Double?)] = [
+            ("CPU", thermal?.cpuCelsius), ("GPU", thermal?.gpuCelsius),
+            ("SSD", Self.hottest(thermal, .storage)),
+            ("Battery", power?.temperatureCelsius ?? Self.hottest(thermal, .battery)),
+        ]
+        let shown = readings.compactMap { name, celsius in celsius.map { (name, $0) } }
+        return card(.thermalSensors, header: nil) {
+            if shown.isEmpty {
+                bigNumber(.thermal, thermal?.pressure.label, size: 20)
+            } else {
+                HStack(spacing: 0) {
+                    ForEach(shown, id: \.0) { name, celsius in
+                        VStack(spacing: Design.Space.xs) {
+                            ThermometerGraphic(fraction: Self.thermometerLevel(celsius), colors: Self.heat, scale: 0.75)
+                                .frame(width: 22, height: 105)
+                            Text(formatter.temperature(celsius))
+                                .font(.system(size: 15, weight: .bold).monospacedDigit())
+                                .foregroundStyle(gradient(.thermal))
+                                .contentTransition(.numericText())
+                            Text(name)
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundStyle(Design.Palette.secondaryText)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The fans, spinning at their real pace, and how fast each is going.
+    private var thermalFans: some View {
+        let fans = Array((engine.thermal.value?.fans ?? []).prefix(2))
+        return card(.thermalFans, header: nil) {
+            if fans.isEmpty {
+                VStack(spacing: Design.Space.xs) {
+                    Image(systemName: "fan")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(Design.Palette.tertiaryText)
+                    Text("No fans")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Design.Palette.secondaryText)
+                }
+            } else {
+                HStack(spacing: 0) {
+                    ForEach(fans) { fan in
+                        VStack(spacing: Design.Space.xs) {
+                            ZStack {
+                                Circle().fill(Self.fanWell)
+                                // Drawn at MacBook mode's size and scaled, so the hub
+                                // and the blades keep their proportions.
+                                fit(AnyView(SpinningFan(fraction: fan.loadFraction ?? min(fan.currentRPM / 6000, 1),
+                                                        isSpinning: fan.currentRPM >= 1)),
+                                    native: CGSize(width: 128, height: 128), in: CGSize(width: 42, height: 42))
+                            }
+                            .frame(width: 46, height: 46)
+                            VStack(spacing: 0) {
+                                Text(fan.currentRPM < 1 ? "Off" : formatter.rpm(fan.currentRPM))
+                                    .font(.system(size: 14, weight: .bold).monospacedDigit())
+                                    .foregroundStyle(LinearGradient(colors: [Color(nsColor: .systemCyan),
+                                                                             Color(nsColor: .systemBlue)],
+                                                                    startPoint: .topLeading,
+                                                                    endPoint: .bottomTrailing))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                Text(fan.name)
+                                    .font(.system(size: 10.5, weight: .semibold))
+                                    .foregroundStyle(Design.Palette.secondaryText)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: System designs
+
+    /// How long the Mac has been up.
+    private var systemUptime: some View {
+        card(.systemUptime, header: nil) {
+            VStack(spacing: 2) {
+                Image(systemName: "laptopcomputer")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundStyle(gradient(.system))
+                bigNumber(.system, engine.system.value.map { formatter.uptime($0.uptime) }, size: 24,
+                          fitting: 94)
+                Text("uptime")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Design.Palette.secondaryText)
+            }
+        }
+    }
+
+    /// What About This Mac says: the model, the chip, the memory, the macOS, and the uptime.
+    @ViewBuilder
+    private var systemDetails: some View {
+        let system = engine.system.value
+        card(.systemDetails, header: nil) {
+            if let system {
+                let model = Self.model(system)
+                VStack(spacing: Design.Space.s) {
+                    Image(systemName: "laptopcomputer")
+                        .font(.system(size: 34, weight: .regular))
+                        .foregroundStyle(gradient(.system))
+                    VStack(spacing: 1) {
+                        Text(model.name)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Design.Palette.primaryText)
+                        Text(model.detail)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Design.Palette.secondaryText)
+                    }
+                    Rectangle().fill(Design.Palette.separator).frame(height: 1)
+                    VStack(spacing: 3) {
+                        detailRow("Chip", system.chipName)
+                        detailRow("Memory", Self.marketingCapacity(system.totalMemoryBytes))
+                        detailRow(system.osName, system.osVersion)
+                        detailRow("Uptime", formatter.uptime(system.uptime))
+                    }
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, Design.Space.xs)
+            } else {
+                bigNumber(.system, nil, size: 24)
+            }
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Design.Palette.secondaryText)
+            Spacer(minLength: Design.Space.s)
+            Text(value)
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .foregroundStyle(Design.Palette.primaryText)
+        }
+    }
+
+    // MARK: Layout
+
+    /// The room inside a design's card: under its header if it has one, inside its padding.
+    private static func box(_ variant: BentoVariant, header: Bool) -> CGSize {
+        CGSize(width: span(variant.size.columns) - 16, height: span(variant.size.rows) - (header ? 42 : 23))
+    }
+
+    private static func half(_ box: CGSize) -> CGFloat { (box.width - 16) / 2 }
+
+    /// A four-cell-wide card split at the grid line between its second cell and its
+    /// third, so both halves line up with the cards around it.
+    private func halves<Left: View, Right: View>(_ box: CGSize, @ViewBuilder left: () -> Left,
+                                                 @ViewBuilder right: () -> Right) -> some View {
+        HStack(spacing: 16) {
+            left().frame(width: Self.half(box))
+            right().frame(width: Self.half(box), alignment: .leading)
+        }
+    }
+
+    /// An object at its own proportions, as large as `box` allows.
     private func fit(_ object: AnyView, native: CGSize, in box: CGSize) -> some View {
         let size = Self.fitted(native, in: box)
         let scale = size.width / native.width
@@ -913,39 +1027,91 @@ struct BentoGrid: View {
             .frame(width: size.width, height: size.height)
     }
 
-    /// The size the object is drawn at in `box`.
-    private func fitted(_ parts: Parts, in box: CGSize) -> CGSize {
-        Self.fitted(parts.native, in: box)
-    }
-
+    /// The size an object is drawn at in `box`.
     private static func fitted(_ native: CGSize, in box: CGSize) -> CGSize {
         let scale = max(0.1, min(box.width / native.width, box.height / native.height, 2.5))
         return CGSize(width: native.width * scale, height: native.height * scale)
     }
 
-    private func reading(_ parts: Parts, _ module: PanelModule, size: CGFloat,
-                         alignment: HorizontalAlignment = .leading, width: CGFloat? = nil) -> some View {
-        VStack(alignment: alignment, spacing: 0) {
-            bigNumber(module, parts.reading, size: size, colors: parts.readingColors, fitting: width)
-            if let label = parts.label {
-                Text(label)
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(Design.Palette.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
+    /// A small figure with a dot of its colour: "● P 38%".
+    private func share(_ label: String, _ value: String, colour: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(colour).frame(width: 6, height: 6)
+            Text(label).foregroundStyle(Design.Palette.secondaryText)
+            Text(value).foregroundStyle(Design.Palette.primaryText)
+        }
+        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+    }
+
+    /// The module's recent history, in its colour. The network's line is its download, so
+    /// it takes the download's blue.
+    @ViewBuilder
+    private func sparkline(_ module: PanelModule, height: CGFloat) -> some View {
+        if let series = module.historySeries {
+            let colour = module == .network ? Self.downColors[0] : palette(module)[0]
+            Sparkline(ChartSeries(series.key, from: engine.history, tint: colour, domain: series.domain),
+                      settings: settings.settings.charts, height: height)
         }
     }
 
-    /// The module's recent history, in the colour of the reading over it. The network's
-    /// line is its download, so it takes the download's blue wherever it is drawn.
-    @ViewBuilder
-    private func sparkline(_ module: PanelModule, height: CGFloat, tint: Color? = nil) -> some View {
-        if let series = module.historySeries {
-            let colour = tint ?? (module == .network ? Self.downColors[0] : palette(module)[0])
-            Sparkline(ChartSeries(series.key, from: engine.history, tint: colour,
-                                  domain: series.domain),
-                      settings: settings.settings.charts, height: height)
+    private var cpuLoadReading: String? {
+        engine.cpu.value.map { formatter.percent($0.total.busy) }
+    }
+
+    private var gpuLoadReading: String? {
+        engine.gpu.value?.primary?.utilization.map { formatter.percent($0) }
+    }
+
+    private var networkSymbolName: String {
+        let network = engine.network.value ?? engine.lastKnown.network.value
+        return network?.wifi != nil || network == nil ? "wifi" : "network"
+    }
+
+    /// The battery with its charge written inside, in the label colour with a halo of the
+    /// card's so it reads over the charge and the empty part alike, and a bolt before it
+    /// while charging.
+    private var batteryWithCharge: some View {
+        let power = engine.power.value
+        return ZStack {
+            BatteryGraphic(fraction: (power?.percentage ?? 0) / 100, isCharging: false,
+                           charge: batteryIsLow ? Color(nsColor: .systemRed) : palette(.battery)[0])
+            HStack(spacing: 1) {
+                if power?.isCharging == true {
+                    Image(systemName: "bolt.fill").font(.system(size: 11, weight: .heavy))
+                }
+                Text(batteryReading ?? MetricFormatter.unavailable)
+                    .font(.system(size: 17, weight: .heavy).monospacedDigit())
+            }
+            .foregroundStyle(Design.Palette.primaryText)
+            .shadow(color: BentoCard<EmptyView>.surface, radius: 1)
+            .shadow(color: BentoCard<EmptyView>.surface, radius: 1)
+            // Centred on the body, not on the body and its terminal.
+            .offset(x: -3)
+        }
+    }
+
+    private static let heat = [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)]
+
+    /// The thermometer's scale: 30°C empty, 100°C full.
+    private static func thermometerLevel(_ celsius: Double?) -> Double {
+        celsius.map { min(max(($0 - 30) / 70, 0), 1) } ?? 0
+    }
+
+    private static func hottest(_ thermal: ThermalSnapshot?, _ category: SensorCategory) -> Double? {
+        thermal?.sensors.filter { $0.category == category }.map(\.celsius).max()
+    }
+
+    /// The dark well a fan turns in, like the chip's face: an object, dark on either card.
+    private static let fanWell = Color(nsColor: NSColor(name: nil) {
+        NSColor(white: $0.isDark ? 0.2 : 0.16, alpha: 1)
+    })
+
+    /// Memory pressure in Activity Monitor's colours: green, then yellow, then red.
+    static func pressureColors(_ level: MemoryPressureLevel) -> [Color] {
+        switch level {
+        case .normal: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)]
+        case .warning: [Color(nsColor: .systemYellow), Color(nsColor: .systemOrange)]
+        case .critical: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)]
         }
     }
 
@@ -1294,6 +1460,12 @@ struct BentoGrid: View {
         .background(shape.fill(BentoCard<EmptyView>.surface))
         .clipShape(shape)
         .accessibilityLabel(title)
+    }
+
+    private func card<Content: View>(_ variant: BentoVariant, header: CardHeader?,
+                                     @ViewBuilder content: () -> Content) -> some View {
+        card(variant.kind.module ?? .system, width: Self.span(variant.size.columns),
+             height: Self.span(variant.size.rows), header: header, content: content)
     }
 
     private func card<Content: View>(_ module: PanelModule, width: CGFloat, height: CGFloat,
@@ -2275,6 +2447,45 @@ struct ThermometerGraphic: View {
                 .offset(x: 10 * scale)
             }
             Circle().fill(colors[0]).frame(width: 28 * scale, height: 28 * scale)
+        }
+        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
+    }
+}
+
+/// A ring gauge, filling clockwise from the top in its gradient over a faint track: how
+/// hard memory is pressed, how full the drive is.
+private struct Ring: View {
+    let fraction: Double
+    let colors: [Color]
+    let lineWidth: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Design.Palette.track, lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: min(max(fraction, 0.001), 1))
+                .stroke(AngularGradient(colors: colors + [colors[0]], center: .center),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .padding(lineWidth / 2)
+        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
+    }
+}
+
+/// A slim bar filling from the left in its gradient.
+private struct Bar: View {
+    let fraction: Double
+    let colors: [Color]
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Design.Palette.track)
+                Capsule()
+                    .fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
+                    .frame(width: geometry.size.width * min(max(fraction, 0), 1))
+            }
         }
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
     }
