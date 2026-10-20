@@ -8,22 +8,30 @@ import AirStatKit
 /// for as long as the app is open. It is a single `Canvas` and at most two paths.
 public struct Sparkline: View {
     private let series: ChartSeries
+    /// A second series drawn behind the first against the same scale, so the two can be
+    /// compared by height: a network's upload under its download, a disk's writes under
+    /// its reads.
+    private let companion: ChartSeries?
     private let settings: ChartSettings
     private let height: CGFloat
 
     @Environment(\.metricFormatter) private var formatter
 
     public init(_ series: ChartSeries,
+                companion: ChartSeries? = nil,
                 settings: ChartSettings = ChartSettings(),
                 height: CGFloat = Design.Chart.sparklineHeight) {
         self.series = series
+        self.companion = companion
         self.settings = settings
         self.height = height
     }
 
+    private var all: [ChartSeries] { [series] + [companion].compactMap { $0 } }
+
     public var body: some View {
         VStack(alignment: .trailing, spacing: 0) {
-            if !series.stats.isEmpty && (scale.isDerived || scale.isExplicit) {
+            if all.contains(where: { !$0.stats.isEmpty }) && (scale.isDerived || scale.isExplicit) {
                 scaleCaption
             }
             GeometryReader { proxy in
@@ -33,12 +41,12 @@ public struct Sparkline: View {
         .frame(height: height)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(series.label) trend")
-        .accessibilityValue(ChartCaption.accessibilitySummary([series], scale: scale,
+        .accessibilityValue(ChartCaption.accessibilitySummary(all, scale: scale,
                                                               formatter: formatter))
     }
 
     private var scale: ChartScale {
-        ChartScale.resolve([series], adaptive: ChartSettings.usesAdaptiveScale)
+        ChartScale.resolve(all, adaptive: ChartSettings.usesAdaptiveScale)
     }
 
     /// The caption is not decoration and not subject to `showsValueLabels`: whenever
@@ -82,7 +90,7 @@ public struct Sparkline: View {
     private func plot(in size: CGSize) -> some View {
         let rect = ChartLayout.plotRect(in: size)
         if rect.width > 1, rect.height > 1 {
-            if series.stats.isEmpty {
+            if all.allSatisfy({ $0.stats.isEmpty }) {
                 EmptyBaseline(rect: rect)
             } else {
                 let scale = self.scale
@@ -93,6 +101,11 @@ public struct Sparkline: View {
                     // machine.
                     if ChartSettings.showsGrid && !scale.isDerived {
                         GridLayer(rect: rect, divisions: 2, interiorOnly: true)
+                    }
+                    if let companion, !companion.stats.isEmpty {
+                        SeriesLayer(plot: ChartPlot(rect: rect, scale: scale, samples: companion.samples),
+                                    size: size, tint: companion.tint,
+                                    style: settings.style, smoothed: ChartSettings.smoothsCurves)
                     }
                     SeriesLayer(plot: plot, size: size, tint: series.tint,
                                 style: settings.style, smoothed: ChartSettings.smoothsCurves)

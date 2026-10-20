@@ -441,6 +441,7 @@ struct BentoGrid: View {
         case .thermalSmall: thermalSmall
         case .thermalSensors: thermalSensors
         case .thermalFans: thermalFans
+        case .thermalCooling: thermalCooling
         case .systemAbout: system
         case .systemUptime: systemUptime
         case .systemDetails: systemDetails
@@ -539,32 +540,31 @@ struct BentoGrid: View {
 
     // MARK: CPU designs
 
-    /// The chip alone, its load over it.
+    /// The chip filled by its load, the load over it. At this size the cores would be
+    /// too small to read one by one, so the whole chip says how busy it is.
     private var cpuChipSmall: some View {
         let box = Self.box(.cpuChipSmall, header: true)
         return card(.cpuChipSmall, header: CardHeader("CPU", cpuLoadReading)) {
-            fit(AnyView(chip), native: CGSize(width: 140, height: 140), in: box)
+            fit(AnyView(chipLoad), native: CGSize(width: 140, height: 140), in: box)
         }
     }
 
-    /// The chip beside its load, and the load split between the two kinds of core.
+    /// The chip filled by its load, beside the load and a bar each for the two kinds of
+    /// core.
     private var cpuLoad: some View {
         let cpu = engine.cpu.value
-        return card(.cpuLoad, header: cpuHeader) {
+        return card(.cpuLoad, header: nil) {
             HStack(spacing: Design.Space.l) {
-                fit(AnyView(chip), native: CGSize(width: 140, height: 140), in: CGSize(width: 64, height: 64))
-                VStack(alignment: .leading, spacing: 3) {
-                    bigNumber(.cpu, cpuLoadReading, size: 30)
+                fit(AnyView(chipLoad), native: CGSize(width: 140, height: 140), in: CGSize(width: 78, height: 78))
+                VStack(alignment: .leading, spacing: Design.Space.s) {
+                    bigNumber(.cpu, cpuLoadReading, size: 28)
                     if let p = cpu?.performanceBusy, let e = cpu?.efficiencyBusy {
-                        HStack(spacing: Design.Space.m) {
-                            share("P", formatter.percent(p), colour: palette(.cpu)[0])
-                            share("E", formatter.percent(e), colour: Color(nsColor: .systemGreen))
-                        }
+                        meterRow("P", p, colors: palette(.cpu), labelWidth: 10)
+                        meterRow("E", e, colors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)],
+                                 labelWidth: 10)
                     } else if let cpu {
-                        HStack(spacing: Design.Space.m) {
-                            share("User", formatter.percent(cpu.total.user), colour: palette(.cpu)[0])
-                            share("Sys", formatter.percent(cpu.total.system), colour: Design.Palette.tertiaryText)
-                        }
+                        meterRow("User", cpu.total.user, colors: palette(.cpu), labelWidth: 30)
+                        meterRow("Sys", cpu.total.system, colors: palette(.cpu), labelWidth: 30)
                     }
                 }
             }
@@ -653,6 +653,10 @@ struct BentoGrid: View {
                                     .foregroundStyle(Design.Palette.primaryText)
                             }
                             .padding(.top, Design.Space.xs)
+                            Bar(fraction: memory.swapTotalBytes > 0
+                                    ? Double(memory.swapUsedBytes) / Double(memory.swapTotalBytes) : 0,
+                                colors: palette(.memory))
+                                .frame(height: 5)
                         }
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
                         .padding(.horizontal, Design.Space.xs)
@@ -674,20 +678,21 @@ struct BentoGrid: View {
         }
     }
 
-    /// The die beside its load, and how much memory it holds.
+    /// The die beside its load, and a bar for how much of the memory it may use it holds.
     private var gpuLoad: some View {
         let device = engine.gpu.value?.primary
         return card(.gpuLoad, header: gpuHeader) {
             HStack(spacing: Design.Space.l) {
                 fit(AnyView(gpuDie(CGSize(width: 200, height: 106))), native: CGSize(width: 200, height: 106),
                     in: CGSize(width: 104, height: 64))
-                VStack(alignment: .leading, spacing: 3) {
-                    bigNumber(.gpu, gpuLoadReading, size: 30)
-                    if let used = device?.vramUsedBytes {
-                        Text("\(formatter.memory(used)) memory")
-                            .font(.system(size: 11, weight: .semibold))
+                VStack(alignment: .leading, spacing: Design.Space.xs) {
+                    bigNumber(.gpu, gpuLoadReading, size: 26)
+                    if let used = device?.vramUsedBytes, let total = device?.vramTotalBytes, total > 0 {
+                        Text("Memory")
+                            .font(.system(size: 10.5, weight: .semibold))
                             .foregroundStyle(Design.Palette.secondaryText)
-                            .lineLimit(1)
+                        Bar(fraction: Double(used) / Double(total), colors: palette(.gpu))
+                            .frame(height: 5)
                     }
                 }
             }
@@ -932,6 +937,70 @@ struct BentoGrid: View {
         }
     }
 
+    /// The CPU's thermometer between the fans that cool it, heat pipes running from its
+    /// bulb to each, as the parts sit in the machine; their readings in a row under them.
+    private var thermalCooling: some View {
+        let fans = engine.thermal.value?.fans ?? []
+        let celsius = engine.thermal.value?.cpuCelsius
+        let box = Self.box(.thermalCooling, header: false)
+        // Laid out on the box's own points: the bulb and both fans on one line.
+        let bulb: CGFloat = 112
+        let columns: [CGFloat] = [box.width * 0.18, box.width / 2, box.width * 0.82]
+        let copper = LinearGradient(colors: [Color(red: 0.9, green: 0.6, blue: 0.36),
+                                             Color(red: 0.66, green: 0.38, blue: 0.2)],
+                                    startPoint: .top, endPoint: .bottom)
+        return card(.thermalCooling, header: nil) {
+            ZStack(alignment: .topLeading) {
+                if !fans.isEmpty {
+                    Capsule().fill(copper)
+                        .frame(width: columns[2] - columns[0], height: 8)
+                        .position(x: box.width / 2, y: bulb)
+                }
+                ThermometerGraphic(fraction: Self.thermometerLevel(celsius), colors: Self.heat, scale: 0.85)
+                    .frame(width: 26, height: 119)
+                    .position(x: columns[1], y: bulb + 12.5 - 59.5)
+                ForEach(Array(fans.prefix(2).enumerated()), id: \.offset) { index, fan in
+                    coolingFan(fan, diameter: 62)
+                        .position(x: columns[index == 0 ? 0 : 2], y: bulb)
+                }
+                coolingReading(temperatureReading ?? "—", "CPU", colors: palette(.thermal))
+                    .position(x: columns[1], y: bulb + 44)
+                ForEach(Array(fans.prefix(2).enumerated()), id: \.offset) { index, fan in
+                    coolingReading(fan.currentRPM < 1 ? "Off" : formatter.rpm(fan.currentRPM), fan.name,
+                                   colors: [Color(nsColor: .systemCyan), Color(nsColor: .systemBlue)])
+                        .position(x: columns[index == 0 ? 0 : 2], y: bulb + 44)
+                }
+            }
+            .frame(width: box.width, height: bulb + 62)
+        }
+    }
+
+    private func coolingFan(_ fan: FanInfo, diameter: CGFloat) -> some View {
+        ZStack {
+            Circle().fill(Self.fanWell)
+            fit(AnyView(SpinningFan(fraction: fan.loadFraction ?? min(fan.currentRPM / 6000, 1),
+                                    isSpinning: fan.currentRPM >= 1)),
+                native: CGSize(width: 128, height: 128),
+                in: CGSize(width: diameter - 6, height: diameter - 6))
+        }
+        .frame(width: diameter, height: diameter)
+    }
+
+    private func coolingReading(_ value: String, _ label: String, colors: [Color]) -> some View {
+        VStack(spacing: 0) {
+            Text(value)
+                .font(.system(size: 13, weight: .bold).monospacedDigit())
+                .foregroundStyle(gradient(colors))
+                .contentTransition(.numericText())
+            Text(label)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(Design.Palette.secondaryText)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .frame(width: 76)
+    }
+
     // MARK: System designs
 
     /// How long the Mac has been up.
@@ -1033,23 +1102,34 @@ struct BentoGrid: View {
         return CGSize(width: native.width * scale, height: native.height * scale)
     }
 
-    /// A small figure with a dot of its colour: "● P 38%".
-    private func share(_ label: String, _ value: String, colour: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(colour).frame(width: 6, height: 6)
-            Text(label).foregroundStyle(Design.Palette.secondaryText)
-            Text(value).foregroundStyle(Design.Palette.primaryText)
+    /// A label, a bar and its figure on one line: "P ▬▬▬▬── 38%".
+    private func meterRow(_ label: String, _ fraction: Double, colors: [Color],
+                          labelWidth: CGFloat) -> some View {
+        HStack(spacing: Design.Space.s) {
+            Text(label)
+                .foregroundStyle(Design.Palette.secondaryText)
+                .frame(width: labelWidth, alignment: .leading)
+            Bar(fraction: fraction, colors: colors)
+                .frame(height: 5)
+            Text(formatter.percent(fraction))
+                .foregroundStyle(Design.Palette.primaryText)
+                .frame(width: 30, alignment: .trailing)
         }
-        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+        .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
     }
 
-    /// The module's recent history, in its colour. The network's line is its download, so
-    /// it takes the download's blue.
+    /// The module's recent history, in its colour. Where it has two directions, both, on
+    /// one scale: the network's download in blue with its upload in orange behind it, the
+    /// drive's reads in blue with its writes in orange, as the readings over them are.
     @ViewBuilder
     private func sparkline(_ module: PanelModule, height: CGFloat) -> some View {
         if let series = module.historySeries {
-            let colour = module == .network ? Self.downColors[0] : palette(module)[0]
+            let twoWay = series.secondary != nil
+            let colour = twoWay ? Self.downColors[0] : palette(module)[0]
             Sparkline(ChartSeries(series.key, from: engine.history, tint: colour, domain: series.domain),
+                      companion: series.secondary.map {
+                          ChartSeries($0, from: engine.history, tint: Color(nsColor: .systemOrange))
+                      },
                       settings: settings.settings.charts, height: height)
         }
     }
@@ -1132,6 +1212,13 @@ struct BentoGrid: View {
                            efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
                            performanceColors: palette(.cpu, onCard: false),
                            efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
+    }
+
+    /// The chip without its cores, filled from the bottom by the whole CPU's load.
+    private var chipLoad: some View {
+        ChipGraphic(name: engine.system.value?.chipName, performance: [], efficiency: [],
+                    performanceColors: palette(.cpu, onCard: false), efficiencyColors: [],
+                    load: engine.cpu.value?.total.busy ?? 0)
     }
 
     private var cpuHeader: CardHeader {
@@ -1312,8 +1399,10 @@ struct BentoGrid: View {
 
     private var diskRates: some View {
         HStack(spacing: Design.Space.xl) {
-            diskRate("Read", engine.disk.value?.readBytesPerSecond)
-            diskRate("Write", engine.disk.value?.writeBytesPerSecond)
+            diskRate("Read", engine.disk.value?.readBytesPerSecond,
+                     symbol: "arrow.down.circle.fill", colors: Self.downColors)
+            diskRate("Write", engine.disk.value?.writeBytesPerSecond,
+                     symbol: "arrow.up.circle.fill", colors: Self.upColors)
         }
     }
 
@@ -1419,6 +1508,7 @@ struct BentoGrid: View {
     private var systemModel: some View {
         if let system = engine.system.value {
             let model = Self.model(system)
+            // Each line wraps rather than being cut short: every word of it is the point.
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.name)
                     .font(.system(size: 13, weight: .semibold))
@@ -1430,8 +1520,9 @@ struct BentoGrid: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Design.Palette.tertiaryText)
             }
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -1500,16 +1591,20 @@ struct BentoGrid: View {
         }
     }
 
-    private func diskRate(_ label: String, _ bytesPerSecond: Double?) -> some View {
-        HStack(spacing: Design.Space.xs) {
-            Text(label)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(Design.Palette.secondaryText)
+    /// A drive rate in the network's colours for the two directions: a read comes in to
+    /// the Mac, blue and down, as a download does; a write goes out, red and up.
+    private func diskRate(_ label: String, _ bytesPerSecond: Double?, symbol: String,
+                          colors: [Color]) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
             Text(bytesPerSecond.map { formatter.diskRate($0) } ?? MetricFormatter.unavailable)
-                .font(.system(size: 10, weight: .semibold).monospacedDigit())
-                .foregroundStyle(Design.Palette.primaryText)
+                .font(.system(size: 10.5, weight: .bold).monospacedDigit())
                 .contentTransition(.numericText())
         }
+        .foregroundStyle(gradient(colors))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
     }
 
     private func rate(_ symbol: String, _ value: String?, colors: [Color],
@@ -1753,13 +1848,27 @@ private struct ChipGraphic: View {
     let efficiency: [Double]
     let performanceColors: [Color]
     let efficiencyColors: [Color]
+    /// The whole CPU's load, filling the die from the bottom, in place of its cores.
+    var load: Double? = nil
+
+    private var loadColour: Color { performanceColors.first ?? .white }
 
     var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
             ZStack {
                 ChipFace()
-                if performance.isEmpty && efficiency.isEmpty {
+                if let load {
+                    ZStack {
+                        FillFromBottom(fraction: load)
+                            .fill(LinearGradient(colors: [loadColour.opacity(0.12), loadColour.opacity(0.42)],
+                                                 startPoint: .top, endPoint: .bottom))
+                        LevelEdge(fraction: load, axis: .vertical, thickness: 2).fill(loadColour)
+                    }
+                    .frame(width: side, height: side)
+                    .clipped()
+                    lettering(side: side, scale: 0.9)
+                } else if performance.isEmpty && efficiency.isEmpty {
                     // No cores read yet: the name alone, at the size it has on its own.
                     lettering(side: side, scale: 1)
                 } else {

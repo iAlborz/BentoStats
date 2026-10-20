@@ -106,7 +106,7 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
     case networkSpeeds, networkSpeedsSmall, networkHistory
     case diskDrive, diskSpace, diskHistory
     case batteryCharge, batteryInside, batteryHistory, batteryChargeHistory
-    case thermalThermometer, thermalSmall, thermalSensors, thermalFans
+    case thermalThermometer, thermalSmall, thermalSensors, thermalFans, thermalCooling
     case systemAbout, systemUptime, systemDetails
     case settings, settingsWide
     case quit, quitWide
@@ -119,7 +119,7 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
         case .networkSpeeds, .networkSpeedsSmall, .networkHistory: return .network
         case .diskDrive, .diskSpace, .diskHistory: return .disk
         case .batteryCharge, .batteryInside, .batteryHistory, .batteryChargeHistory: return .battery
-        case .thermalThermometer, .thermalSmall, .thermalSensors, .thermalFans: return .thermal
+        case .thermalThermometer, .thermalSmall, .thermalSensors, .thermalFans, .thermalCooling: return .thermal
         case .systemAbout, .systemUptime, .systemDetails: return .system
         case .settings, .settingsWide: return .settings
         case .quit, .quitWide: return .quit
@@ -137,7 +137,7 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
         case .thermalThermometer:
             return .tall
         case .cpuChip, .memoryModule, .gpuDie, .networkHistory, .diskHistory, .batteryHistory,
-             .thermalSensors, .systemDetails:
+             .thermalSensors, .thermalCooling, .systemDetails:
             return .large
         case .cpuChipHistory, .memoryWide, .gpuDieHistory:
             return .extraWide
@@ -173,6 +173,7 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
         case .thermalSmall: return "Thermometer, Small"
         case .thermalSensors: return "All Sensors"
         case .thermalFans: return "Fans"
+        case .thermalCooling: return "Fans and Thermometer"
         case .systemAbout: return "Uptime and Model"
         case .systemUptime: return "Uptime"
         case .systemDetails: return "About This Mac"
