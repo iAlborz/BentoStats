@@ -187,7 +187,7 @@ struct BentoGrid: View {
                 }
             }
             // Pressing and holding a module card starts arranging, as in Control Center.
-            // Not an action card: holding Quit must not quit on the way.
+            // Not the Settings card: holding its Quit must not quit on the way.
             .gesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in layout?.beginEditing() },
                      including: isEditing || tile.kind.isAction || !canEdit ? .subviews : .all)
             .rotationEffect(.degrees(isEditing && !isDragged ? tilt : 0))
@@ -205,7 +205,7 @@ struct BentoGrid: View {
             .contentShape(Rectangle())
             .gesture(moveGesture(tile, frame: frame))
             .overlay(alignment: .topLeading) {
-                // Settings and Quit stay: without them the panel has no way out.
+                // Settings stays: its card is the panel's way to Settings and to Quit.
                 if !tile.kind.isAction {
                     badge("minus", label: "Remove \(tile.kind.label)") {
                         edit { $0.removeAll { $0.id == tile.id } }
@@ -409,16 +409,7 @@ struct BentoGrid: View {
     @ViewBuilder
     private func tileView(_ tile: BentoTile, size: CGSize) -> some View {
         switch tile.variant {
-        case .settings, .settingsWide:
-            action("Settings", symbol: "gearshape.fill",
-                   colors: [Color(nsColor: .systemGray), Color(nsColor: .secondaryLabelColor)],
-                   size: size, perform: actions.openSettings)
-                .keyboardShortcut(",", modifiers: .command)
-        case .quit, .quitWide:
-            action("Quit", symbol: "power",
-                   colors: [Color(nsColor: .systemRed), Color(nsColor: .systemPink)],
-                   size: size, perform: actions.quit)
-                .keyboardShortcut("q", modifiers: .command)
+        case .settings, .settingsTall, .settingsWide: settingsCard(size: size)
         case .cpuChip: cpu
         case .cpuChipSmall: cpuChipSmall
         case .cpuLoad: cpuLoad
@@ -1215,14 +1206,14 @@ struct BentoGrid: View {
         return ChipGraphic(name: engine.system.value?.chipName,
                            performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
                            efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
-                           performanceColors: palette(.cpu),
+                           performanceColors: [.white, .white],
                            efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
     }
 
     /// The chip without its cores, filled from the bottom by the whole CPU's load.
     private var chipLoad: some View {
         ChipGraphic(name: engine.system.value?.chipName, performance: [], efficiency: [],
-                    performanceColors: palette(.cpu), efficiencyColors: [],
+                    performanceColors: [.white, .white], efficiencyColors: [],
                     load: engine.cpu.value?.total.busy ?? 0)
     }
 
@@ -1534,22 +1525,32 @@ struct BentoGrid: View {
         return engine.lastKnown.processes.value.map { ($0, true) }
     }
 
-    /// One of the panel's two actions as a card of its own: a symbol in its gradient, the
-    /// whole card the button.
-    private func action(_ title: String, symbol: String, colors: [Color], size: CGSize,
-                        perform: @escaping @MainActor () -> Void) -> some View {
+    /// Settings as a card, the whole card the button, with Quit small in its corner:
+    /// the app was just opened, and a card-sized button to close it again was too much.
+    private func settingsCard(size: CGSize) -> some View {
         let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
-        // The symbol alone: a gear and a power sign need no words under them.
-        return Button(action: perform) {
-            Image(systemName: symbol)
+        // The symbol alone: a gear needs no word under it.
+        return Button(action: actions.openSettings) {
+            Image(systemName: "gearshape.fill")
                 .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(gradient(colors))
+                .foregroundStyle(gradient(.system))
                 .frame(width: size.width, height: size.height)
         }
         .buttonStyle(BentoActionStyle())
+        .keyboardShortcut(",", modifiers: .command)
+        .accessibilityLabel("Settings")
+        .overlay(alignment: .topTrailing) {
+            // Where the card's ••• sits in edit mode, which covers it while it cannot be used.
+            Button(action: actions.quit) {
+                Image(systemName: "power").font(.system(size: 9, weight: .heavy))
+            }
+            .buttonStyle(BentoQuitStyle())
+            .keyboardShortcut("q", modifiers: .command)
+            .accessibilityLabel("Quit Bento Stats")
+            .padding(Design.Space.s)
+        }
         .background(shape.fill(BentoCard<EmptyView>.surface))
         .clipShape(shape)
-        .accessibilityLabel(title)
     }
 
     private func card<Content: View>(_ variant: BentoVariant, header: CardHeader?,
@@ -1648,18 +1649,23 @@ struct BentoGrid: View {
     static func palette(_ module: PanelModule) -> [Color] {
         let pair: (NSColor, NSColor)
         switch module {
-        case .cpu: pair = (.systemBlue, .systemCyan)
+        case .cpu, .system: pair = (white, white)
         case .memory: pair = (.systemIndigo, .systemBlue)
-        case .gpu: pair = (.systemPurple, .systemPink)
+        case .gpu: pair = (gpuOrange, gpuOrange)
         case .network: pair = (.systemOrange, .systemYellow)
         case .disk: pair = (.systemTeal, .systemMint)
         case .battery: pair = (.systemGreen, .systemMint)
         case .thermal: pair = (.systemRed, .systemOrange)
         case .processes: pair = (.systemPink, .systemRed)
-        case .system: pair = (.systemGray, .secondaryLabelColor)
         }
         return [Color(nsColor: pair.0), Color(nsColor: pair.1)]
     }
+
+    /// White on the dark cards; on the light ones, where white would vanish, the text
+    /// colour instead.
+    private static let white = NSColor(name: nil) { $0.isDark ? .white : .labelColor }
+
+    private static let gpuOrange = NSColor(srgbRed: 1, green: 0.573, blue: 0.188, alpha: 1)
 
     /// The cards' own surface, for anything drawn to match them.
     static var surface: Color { BentoCard<EmptyView>.surface }
@@ -1840,6 +1846,31 @@ private struct BentoActionBody: View {
             .background(Design.Palette.primaryText
                 .opacity(configuration.isPressed ? 0.12 : isHovering ? 0.06 : 0))
             .contentShape(Rectangle())
+            .onHover { isHovering = $0 }
+            .animation(Design.Motion.respectingAccessibility(Design.Motion.hover), value: isHovering)
+    }
+}
+
+/// Quit, small in the Settings card's corner: red on a red tint at rest, solid red under
+/// the pointer, so it is plain what it does before it is pressed.
+private struct BentoQuitStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        BentoQuitBody(configuration: configuration)
+    }
+}
+
+private struct BentoQuitBody: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var isHovering = false
+
+    var body: some View {
+        let red = Color(nsColor: .systemRed)
+        configuration.label
+            .foregroundStyle(isHovering ? Color.white : red)
+            .frame(width: 20, height: 20)
+            .background(Circle().fill(isHovering ? red : red.opacity(0.16)))
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .contentShape(Circle())
             .onHover { isHovering = $0 }
             .animation(Design.Motion.respectingAccessibility(Design.Motion.hover), value: isHovering)
     }

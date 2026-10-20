@@ -1,8 +1,8 @@
 import Foundation
 
-/// What a bento card shows: one module, or one of the panel's two actions.
+/// What a bento card shows: one module, or the panel's Settings, which holds Quit too.
 public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    case cpu, memory, gpu, network, disk, battery, thermal, system, settings, quit
+    case cpu, memory, gpu, network, disk, battery, thermal, system, settings
 
     public var label: String {
         switch self {
@@ -15,7 +15,6 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
         case .thermal: return "Temperature"
         case .system: return "System"
         case .settings: return "Settings"
-        case .quit: return "Quit"
         }
     }
 
@@ -30,7 +29,7 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
         case .battery: return .battery
         case .thermal: return .thermal
         case .system: return .system
-        case .settings, .quit: return nil
+        case .settings: return nil
         }
     }
 
@@ -39,7 +38,6 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
     public var symbolName: String {
         switch self {
         case .settings: return "gearshape.fill"
-        case .quit: return "power"
         default: return module?.symbolName ?? "square"
         }
     }
@@ -108,8 +106,7 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
     case batteryCharge, batteryInside, batteryHistory, batteryChargeHistory
     case thermalThermometer, thermalSmall, thermalSensors, thermalFans, thermalCooling
     case systemAbout, systemUptime, systemDetails
-    case settings, settingsWide
-    case quit, quitWide
+    case settings, settingsTall, settingsWide
 
     public var kind: BentoTileKind {
         switch self {
@@ -121,20 +118,19 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
         case .batteryCharge, .batteryInside, .batteryHistory, .batteryChargeHistory: return .battery
         case .thermalThermometer, .thermalSmall, .thermalSensors, .thermalFans, .thermalCooling: return .thermal
         case .systemAbout, .systemUptime, .systemDetails: return .system
-        case .settings, .settingsWide: return .settings
-        case .quit, .quitWide: return .quit
+        case .settings, .settingsTall, .settingsWide: return .settings
         }
     }
 
     public var size: BentoTileSize {
         switch self {
         case .cpuChipSmall, .gpuDieSmall, .memoryPressure, .networkSpeedsSmall, .diskSpace,
-             .batteryInside, .thermalSmall, .systemUptime, .settings, .quit:
+             .batteryInside, .thermalSmall, .systemUptime, .settings:
             return .small
         case .cpuLoad, .gpuLoad, .memoryStick, .networkSpeeds, .diskDrive, .batteryCharge,
-             .batteryChargeHistory, .thermalFans, .systemAbout, .settingsWide, .quitWide:
+             .batteryChargeHistory, .thermalFans, .systemAbout, .settingsWide:
             return .wide
-        case .thermalThermometer:
+        case .thermalThermometer, .settingsTall:
             return .tall
         case .cpuChip, .memoryModule, .gpuDie, .networkHistory, .diskHistory, .batteryHistory,
              .thermalSensors, .thermalCooling, .systemDetails:
@@ -177,8 +173,9 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
         case .systemAbout: return "Uptime and Model"
         case .systemUptime: return "Uptime"
         case .systemDetails: return "About This Mac"
-        case .settings, .quit: return "Small"
-        case .settingsWide, .quitWide: return "Wide"
+        case .settings: return "Small"
+        case .settingsTall: return "Tall"
+        case .settingsWide: return "Wide"
         }
     }
 }
@@ -253,17 +250,18 @@ public enum BentoLayout {
     ///     │   CPU   │ Memory  ├─────────┤
     ///     │         │         │ Battery │
     ///     ├─────────┼─────────┼────┬────┤
-    ///     │         │  Wi-Fi  │    │ ⚙︎  │
-    ///     │   GPU   ├─────────┤Temp├────┤
-    ///     │         │ System  │    │ ⏻  │
+    ///     │         │  Wi-Fi  │    │   ⏻│
+    ///     │   GPU   ├─────────┤Temp│ ⚙︎  │
+    ///     │         │ System  │    │    │
     ///     └─────────┴─────────┴────┴────┘
     ///
     /// Fixed identifiers, so two default settings compare equal.
     public static let defaultTiles: [BentoTile] = [
-        BentoTileKind.cpu, .memory, .disk, .battery, .gpu, .network, .thermal, .settings, .system, .quit,
-    ].enumerated().map { index, kind in
+        BentoVariant.cpuChip, .memoryModule, .diskDrive, .batteryCharge, .gpuDie, .networkSpeeds,
+        .thermalThermometer, .settingsTall, .systemAbout,
+    ].enumerated().map { index, variant in
         BentoTile(id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!,
-                  kind: kind)
+                  kind: variant.kind, variant: variant)
     }
 
     /// Bento Small's grid, five cells across.
@@ -276,12 +274,12 @@ public enum BentoLayout {
     ///     │CPU Load │GPU Load │Mem │
     ///     ├─────────┼─────────┼────┤
     ///     │ Network │ Battery │SSD │
-    ///     ├────┬────┴────┬────┼────┤
-    ///     │Temp│  Fans   │ ⚙︎  │ ⏻  │
-    ///     └────┴─────────┴────┴────┘
+    ///     ├────┬────┴────┬────┴────┤
+    ///     │Temp│  Fans   │ ⚙︎     ⏻│
+    ///     └────┴─────────┴─────────┘
     public static let defaultSmallTiles: [BentoTile] = [
         BentoVariant.cpuLoad, .gpuLoad, .memoryPressure, .networkSpeeds, .batteryCharge, .diskSpace,
-        .thermalSmall, .thermalFans, .settings, .quit,
+        .thermalSmall, .thermalFans, .settingsWide,
     ].enumerated().map { index, variant in
         BentoTile(id: UUID(uuidString: String(format: "00000000-0000-0000-0002-%012d", index + 1))!,
                   kind: variant.kind, variant: variant)
@@ -321,15 +319,15 @@ public enum BentoLayout {
     }
 
     /// A stored arrangement made safe to draw: each card in a design of its own, and
-    /// Settings and Quit always present, since without them the panel has no way out.
+    /// Settings always present, since its card is the panel's way to Settings and Quit.
     public static func sanitized(_ tiles: [BentoTile]) -> [BentoTile] {
         var result = tiles.map { tile -> BentoTile in
             var tile = tile
             if tile.variant.kind != tile.kind { tile.variant = tile.kind.defaultVariant }
             return tile
         }
-        for action in [BentoTileKind.settings, .quit] where !result.contains(where: { $0.kind == action }) {
-            result.append(BentoTile(kind: action))
+        if !result.contains(where: { $0.kind == .settings }) {
+            result.append(BentoTile(kind: .settings))
         }
         return result
     }

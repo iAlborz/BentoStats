@@ -21,9 +21,8 @@ struct BentoLayoutTests {
         #expect(placed[.gpu] == BentoPlacement(column: 0, row: 2, columns: 2, rows: 2))
         #expect(placed[.network] == BentoPlacement(column: 2, row: 2, columns: 2, rows: 1))
         #expect(placed[.thermal] == BentoPlacement(column: 4, row: 2, columns: 1, rows: 2))
-        #expect(placed[.settings] == BentoPlacement(column: 5, row: 2, columns: 1, rows: 1))
+        #expect(placed[.settings] == BentoPlacement(column: 5, row: 2, columns: 1, rows: 2))
         #expect(placed[.system] == BentoPlacement(column: 2, row: 3, columns: 2, rows: 1))
-        #expect(placed[.quit] == BentoPlacement(column: 5, row: 3, columns: 1, rows: 1))
     }
 
     @Test("every card has two to five designs, the first its default, all its own")
@@ -33,7 +32,10 @@ struct BentoLayoutTests {
             #expect(kind.defaultVariant == kind.variants[0])
             #expect(kind.variants.allSatisfy { $0.kind == kind })
         }
-        #expect(BentoLayout.defaultTiles.allSatisfy { $0.variant == $0.kind.defaultVariant })
+        // Settings is added one cell square, but the designed panel has room for it tall.
+        #expect(BentoLayout.defaultTiles.allSatisfy {
+            $0.variant == ($0.kind == .settings ? .settingsTall : $0.kind.defaultVariant)
+        })
     }
 
     @Test("no arrangement overlaps or runs off the grid")
@@ -68,14 +70,26 @@ struct BentoLayoutTests {
         #expect(placed[.settings] == BentoPlacement(column: 0, row: 2, columns: 1, rows: 1))
     }
 
-    @Test("Settings and Quit always stay, and a card cannot wear another card's design")
+    @Test("Settings always stays, and a card cannot wear another card's design")
     func sanitizedKeepsTheWayOut() {
         var stray = BentoTile(kind: .cpu)
         stray.variant = .memoryPressure
-        let tiles = BentoLayout.sanitized([stray, BentoTile(kind: .quit, variant: .quitWide)])
-        #expect(tiles.contains { $0.kind == .settings })
+        let tiles = BentoLayout.sanitized([stray])
+        #expect(tiles.count == 2)
         #expect(tiles[0].variant == .cpuChip)
-        #expect(tiles[1].variant == .quitWide)
+        #expect(tiles[1].variant == .settings)
+        let wide = BentoTile(kind: .settings, variant: .settingsWide)
+        #expect(BentoLayout.sanitized([wide]) == [wide])
+    }
+
+    /// Quit is a button in the Settings card's corner now. Every saved arrangement had a
+    /// Quit card, so each opens as the designed one, with Settings grown into its place.
+    @Test("an arrangement saved with a Quit card loads the designed layout")
+    func quitCardRetired() throws {
+        let json = #"{"bentoTiles":[{"id":"\#(UUID())","kind":"settings","variant":"settings"},"#
+            + #"{"id":"\#(UUID())","kind":"quit","variant":"quit"}]}"#
+        let panel = try JSONDecoder().decode(PanelSettings.self, from: Data(json.utf8))
+        #expect(panel.bentoTiles == BentoLayout.defaultTiles)
     }
 
     @Test("settings written before the editable grid load the designed layout")
@@ -100,7 +114,8 @@ struct BentoLayoutTests {
     func nearestSize() {
         #expect(BentoTileSize.nearest(columns: 3, rows: 1, in: BentoTileKind.cpu.sizes) == .wide)
         #expect(BentoTileSize.nearest(columns: 4, rows: 3, in: BentoTileKind.cpu.sizes) == .extraWide)
-        #expect(BentoTileSize.nearest(columns: 2, rows: 2, in: BentoTileKind.quit.sizes) == .wide)
+        #expect(BentoTileSize.nearest(columns: 3, rows: 1, in: BentoTileKind.settings.sizes) == .wide)
+        #expect(BentoTileSize.nearest(columns: 1, rows: 3, in: BentoTileKind.settings.sizes) == .tall)
     }
 
     @Test("every layout is saved and read back, and the retired ones open as Bento")

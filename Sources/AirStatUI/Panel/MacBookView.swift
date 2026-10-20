@@ -240,7 +240,8 @@ struct MacBookView: View {
     /// Performance cores in two rows, efficiency cores in a narrower column beside them,
     /// each filling from the bottom with its load.
     private func cpuCores(performance: [Double], efficiency: [Double]) -> some View {
-        let colors = palette(.cpu)
+        // White whatever the appearance: the die is dark in both.
+        let colors: [Color] = [.white, .white]
         let columns = max(1, (performance.count + 1) / 2)
         return HStack(spacing: 2) {
             VStack(spacing: 2) {
