@@ -74,7 +74,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.backgroundColor = .clear
 
         let backdrop = GlassBackdropView(material: .hudWindow,
-                                         cornerRadius: Design.Radius.panel,
+                                         cornerRadius: Design.Radius.window,
                                          state: .active)
         let hosting = NSHostingView(rootView: root)
         hosting.translatesAutoresizingMaskIntoConstraints = false

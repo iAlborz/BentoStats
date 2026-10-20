@@ -291,9 +291,9 @@ private struct SettingsPreviewHost: View {
             // The window's glass, stood in for the same way the panel's is: its real
             // `NSVisualEffectView` draws nothing offscreen, so without this the whole
             // settings render is content floating on transparency.
-            .floatingSurface(in: RoundedRectangle(cornerRadius: Design.Radius.panel,
+            .floatingSurface(in: RoundedRectangle(cornerRadius: Design.Radius.window,
                                                   style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: Design.Radius.panel, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Design.Radius.window, style: .continuous))
     }
 }
 

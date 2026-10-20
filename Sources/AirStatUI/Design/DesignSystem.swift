@@ -125,9 +125,14 @@ public enum Design {
     // MARK: - Shape
 
     public enum Radius {
-        /// Panel and desktop widget corners. 12 matches the curvature macOS gives menus and
-        /// Control Center popovers at this size.
-        public static let panel: CGFloat = 12
+        /// The panel's corners, and its detail's: a card's corners plus the 12 the cards
+        /// sit in from the edge, so each card's corner runs parallel to the panel's.
+        public static let panel: CGFloat = tile + 12
+        /// A bento card's corners, and the detail's tiles'.
+        public static let tile: CGFloat = 18
+        /// The settings window's corners. 12 matches the curvature macOS gives windows and
+        /// popovers at this size.
+        public static let window: CGFloat = 12
         public static let card: CGFloat = 8
         public static let control: CGFloat = 6
         public static let bar: CGFloat = 2.5

@@ -453,7 +453,7 @@ struct BentoDetail: View {
     }
 
     private var surface: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous).fill(BentoGrid.surface)
+        RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous).fill(BentoGrid.surface)
     }
 
     /// The module's history in its own colour, where it has one and charts are on.

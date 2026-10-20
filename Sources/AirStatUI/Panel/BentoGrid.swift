@@ -1528,7 +1528,7 @@ struct BentoGrid: View {
     /// Settings as a card, the whole card the button, with Quit small in its corner:
     /// the app was just opened, and a card-sized button to close it again was too much.
     private func settingsCard(size: CGSize) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous)
         // The symbol alone: a gear needs no word under it.
         return Button(action: actions.openSettings) {
             Image(systemName: "gearshape.fill")
@@ -1763,7 +1763,7 @@ private struct BentoCard<Content: View>: View {
     }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous)
         VStack(spacing: Design.Space.s) {
             if let header {
                 header.view
