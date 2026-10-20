@@ -471,7 +471,8 @@ struct BentoGrid: View {
     }
 
     private var gpu: some View {
-        card(.gpu, width: Self.span(2), height: Self.span(2), header: gpuHeader) {
+        // No header: the die says it is the GPU, and its cores how many and how busy.
+        card(.gpu, width: Self.span(2), height: Self.span(2), header: nil) {
             VStack(spacing: Design.Space.m) {
                 gpuDie(CGSize(width: 200, height: 106))
                 gpuMeters
@@ -670,10 +671,10 @@ struct BentoGrid: View {
 
     // MARK: GPU designs
 
-    /// The die alone, its load over it.
+    /// The die alone, its lit cores the load.
     private var gpuDieSmall: some View {
-        let box = Self.box(.gpuDieSmall, header: true)
-        return card(.gpuDieSmall, header: CardHeader("GPU", gpuLoadReading)) {
+        let box = Self.box(.gpuDieSmall, header: false)
+        return card(.gpuDieSmall, header: nil) {
             fit(AnyView(gpuDie(CGSize(width: 200, height: 106))), native: CGSize(width: 200, height: 106), in: box)
         }
     }
@@ -681,7 +682,7 @@ struct BentoGrid: View {
     /// The die beside its load, and a bar for how much of the memory it may use it holds.
     private var gpuLoad: some View {
         let device = engine.gpu.value?.primary
-        return card(.gpuLoad, header: gpuHeader) {
+        return card(.gpuLoad, header: nil) {
             HStack(spacing: Design.Space.l) {
                 fit(AnyView(gpuDie(CGSize(width: 200, height: 106))), native: CGSize(width: 200, height: 106),
                     in: CGSize(width: 104, height: 64))
@@ -701,9 +702,9 @@ struct BentoGrid: View {
 
     /// The die in one half; in the other its load beside its history, over the meters.
     private var gpuDieHistory: some View {
-        let box = Self.box(.gpuDieHistory, header: true)
+        let box = Self.box(.gpuDieHistory, header: false)
         let half = Self.half(box)
-        return card(.gpuDieHistory, header: gpuHeader) {
+        return card(.gpuDieHistory, header: nil) {
             halves(box) {
                 fit(AnyView(gpuDie(CGSize(width: 200, height: 106))), native: CGSize(width: 200, height: 106),
                     in: CGSize(width: half, height: box.height))
@@ -1344,12 +1345,6 @@ struct BentoGrid: View {
             .padding(.horizontal, Design.Space.xs)
             .lastKnown(isLastKnown)
         }
-    }
-
-    /// The load is left to the die, whose cores light up with it.
-    private var gpuHeader: CardHeader {
-        let cores = engine.gpu.value?.primary?.coreCount ?? engine.system.value?.gpuCoreCount
-        return CardHeader("GPU", cores.map { "\($0) cores" })
     }
 
     @ViewBuilder
