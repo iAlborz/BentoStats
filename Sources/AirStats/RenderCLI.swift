@@ -14,7 +14,7 @@ enum RenderCLI {
         var outputDirectory = URL(fileURLWithPath: "render", isDirectory: true)
         var collectedMinutes: Int?
         var withoutHistory = false
-        var settings = AirStatKit.Settings()
+        let settings = AirStatKit.Settings()
 
         var index = 0
         while index < arguments.count {
@@ -39,25 +39,6 @@ enum RenderCLI {
                 scales.append(CGFloat(value))
             case "--light": appearances.append(false)
             case "--dark": appearances.append(true)
-            // The colour a user picks is already carried on Request.settings and read
-            // by MenuBarRenderModel and the desktop widget; only a way to say so was missing.
-            // The panel ignores it on purpose, it is monochrome by design.
-            case "--tint":
-                index += 1
-                guard let color = themeColor(from: arguments[safe: index] ?? "") else {
-                    FileHandle.standardError.write(Data("--tint wants #RRGGBB or r,g,b in 0...1\n".utf8))
-                    exit(2)
-                }
-                settings.theme.setAllColors(color)
-            // The desktop widget's shape is decided by two settings a reviewer cannot reach
-            // from the command line otherwise, and its worst case (nine modules,
-            // expanded) is exactly the one worth looking at.
-            case "--expanded":
-                settings.desktopWidget.isCompact = false
-            // Off by default, and the day silhouette is the tallest thing a widget
-            // module can grow.
-            case "--history":
-                settings.desktopWidget.showsHistoryChart = true
             // A day still being collected is the state every launch starts in.
             case "--collected":
                 index += 1
@@ -70,27 +51,6 @@ enum RenderCLI {
             // because the fixtures come with a day of history.
             case "--no-history":
                 withoutHistory = true
-            case "--modules":
-                index += 1
-                let names = (arguments[safe: index] ?? "").split(separator: ",")
-                let parsed = names.compactMap { PanelModule(rawValue: String($0)) }
-                guard parsed.count == names.count, !parsed.isEmpty else {
-                    FileHandle.standardError.write(Data("--modules wants a comma-separated list of module names\n".utf8))
-                    exit(2)
-                }
-                var seen: Set<PanelModule> = []
-                settings.desktopWidget.modules = parsed.filter { seen.insert($0).inserted }
-            // Every panel module starts collapsed, so a change to a module's detail
-            // cannot be reviewed without a way to open it.
-            case "--open":
-                index += 1
-                let names = (arguments[safe: index] ?? "").split(separator: ",")
-                let parsed = names.compactMap { PanelModule(rawValue: String($0)) }
-                guard parsed.count == names.count, !parsed.isEmpty else {
-                    FileHandle.standardError.write(Data("--open wants a comma-separated list of module names\n".utf8))
-                    exit(2)
-                }
-                settings.panel.collapsedModules.subtract(parsed)
             case "--scenario":
                 index += 1
                 guard let scenario = OffscreenRenderer.Scenario(rawValue: arguments[safe: index] ?? "") else {
@@ -152,24 +112,6 @@ enum RenderCLI {
             if !failures.isEmpty { exit(1) }
         }
     }
-}
-
-/// Accepts `#4C8DFF`, `4C8DFF` or `0.3,0.55,1`, so a colour can be pasted from either
-/// a design tool or the settings file without conversion.
-private func themeColor(from text: String) -> ThemeColor? {
-    let trimmed = text.trimmingCharacters(in: .whitespaces)
-
-    if trimmed.contains(",") {
-        let parts = trimmed.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
-        guard parts.count == 3 else { return nil }
-        return ThemeColor(red: parts[0], green: parts[1], blue: parts[2])
-    }
-
-    let hex = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
-    guard hex.count == 6, let value = UInt32(hex, radix: 16) else { return nil }
-    return ThemeColor(red: Double((value >> 16) & 0xFF) / 255,
-                      green: Double((value >> 8) & 0xFF) / 255,
-                      blue: Double(value & 0xFF) / 255)
 }
 
 private extension Array {

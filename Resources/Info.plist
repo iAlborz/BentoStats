@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>AirStats</string>
+	<string>Bento Stats</string>
 	<key>CFBundleExecutable</key>
 	<string>AirStats</string>
 	<key>CFBundleIconFile</key>
@@ -15,13 +15,13 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>AirStats</string>
+	<string>Bento Stats</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.5</string>
+	<string>1.0</string>
 	<key>CFBundleVersion</key>
-	<string>10</string>
+	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -29,20 +29,10 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>AirStats</string>
+	<string>Bento Stats, based on AirStats</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
-	<key>SUAutomaticallyUpdate</key>
-	<false/>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUFeedURL</key>
-	<string>https://airstats.app/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>Qhygt891m7jN7eTbSK4OKLjHwzU9HEOvRyJtSoib8kM=</string>
-	<key>SUScheduledCheckInterval</key>
-	<integer>604800</integer>
 </dict>
 </plist>

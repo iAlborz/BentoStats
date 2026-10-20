@@ -14,72 +14,24 @@ struct SettingsDecodingTests {
         let settings = try decode("{}")
         #expect(settings.general.updateInterval == 2)
         #expect(settings.menuBar.items.count == MenuBarSettings.defaultItems.count)
-        #expect(settings.panel.collapsedModules == PanelSettings.defaultCollapsed)
+        #expect(settings.panel.style == .bento)
     }
 
-    /// A settings file written by 1.2.1 or earlier has `floatsAboveEverything` and no
-    /// `depth`, and the upgrade must not silently move anyone's desktop widget.
-    @Test("a pre-1.3 desktop widget layer converts from the old boolean")
-    func desktopWidgetDepthMigratesFromLegacyBool() throws {
-        #expect(try decode(#"{"overlay":{"floatsAboveEverything":true}}"#).desktopWidget.depth
-                == .aboveEverything)
-        #expect(try decode(#"{"overlay":{"floatsAboveEverything":false}}"#).desktopWidget.depth
-                == .withWindows)
-        #expect(try decode(#"{"overlay":{}}"#).desktopWidget.depth == .aboveEverything)
-    }
-
-    /// The new key wins, so a file that somehow carries both is not dragged backwards
-    /// by the one nothing writes any more.
-    @Test("a stored layer beats the boolean it replaced")
-    func desktopWidgetDepthPrefersTheNewKey() throws {
-        let settings = try decode(#"{"overlay":{"depth":"wallpaper","floatsAboveEverything":true}}"#)
-        #expect(settings.desktopWidget.depth == .wallpaper)
-    }
-
-    /// Round-tripping must not resurrect the retired key, or every save would write a
-    /// field the next version has to keep reading.
-    @Test("saving a desktop widget writes the layer and not the old boolean")
-    func desktopWidgetDepthRoundTrips() throws {
-        var settings = Settings()
-        settings.desktopWidget.depth = .wallpaper
-        let data = try JSONEncoder().encode(settings)
-        let text = String(decoding: data, as: UTF8.self)
-        #expect(!text.contains("floatsAboveEverything"))
-        #expect(try JSONDecoder().decode(Settings.self, from: data).desktopWidget.depth == .wallpaper)
-    }
-
-    /// Asserted by content, not against the constant the app reads. The defaults check
-    /// above compares `collapsedModules` to `PanelSettings.defaultCollapsed`, which
-    /// stays true no matter what that constant is changed to and so cannot notice a
-    /// module quietly starting open.
-    @Test("the panel opens with every module closed")
-    func panelStartsFullyCollapsed() {
-        let collapsed = PanelSettings().collapsedModules
-        for module in PanelModule.allCases {
-            #expect(collapsed.contains(module), "\(module.label) starts open")
-        }
-    }
-
-    /// Opening a module closes the one that was open, and closing the open module
-    /// leaves the list fully collapsed.
-    @Test("the panel keeps one module open at a time")
-    func panelIsAnAccordion() {
-        var panel = PanelSettings()
-        panel.collapsedModules = panel.collapsedModules(toggling: .cpu)
-        #expect(panel.collapsedModules == Set(PanelModule.allCases).subtracting([.cpu]))
-        panel.collapsedModules = panel.collapsedModules(toggling: .memory)
-        #expect(panel.collapsedModules == Set(PanelModule.allCases).subtracting([.memory]))
-        panel.collapsedModules = panel.collapsedModules(toggling: .memory)
-        #expect(panel.collapsedModules == Set(PanelModule.allCases))
-    }
-
-    /// A file saved before the accordion can hold several open modules. The first in
-    /// panel order stays open rather than all of them closing, so an upgrade does not
-    /// hand back a panel that has forgotten what the user was looking at.
-    @Test("a stored panel with several open modules keeps the first")
-    func panelCollapsesAllButTheFirstOpenModule() throws {
-        let settings = try decode(#"{"panel":{"collapsedModules":["cpu","gpu"]}}"#)
-        #expect(settings.panel.collapsedModules == Set(PanelModule.allCases).subtracting([.memory]))
+    /// Files from before the desktop widget, the metric colours and the combine switch
+    /// were removed still hold their keys. Read by nothing now, they must not cost the
+    /// user the rest of their configuration.
+    @Test("a file from before the widget, colours and combine switch went still loads")
+    func retiredFeatureKeysAreIgnored() throws {
+        let settings = try decode("""
+        {"overlay":{"isEnabled":true,"opacity":0.5},
+         "theme":{"metrics":{"cpu":{"red":1,"green":1,"blue":1}}},
+         "menuBar":{"usesCombinedItem":false},
+         "panel":{"style":"list","collapsedModules":["cpu"]},
+         "general":{"temperatureUnit":"fahrenheit"}}
+        """)
+        #expect(settings.general.temperatureUnit == .fahrenheit)
+        #expect(settings.panel.style == .bento)
+        #expect(!settings.menuBar.items.isEmpty)
     }
 
     @Test("a fresh install opens at login, an existing one keeps its answer")
@@ -108,12 +60,9 @@ struct SettingsDecodingTests {
     func clamping() throws {
         let settings = try decode("""
         {"general":{"updateInterval":9999},
-         "overlay":{"opacity":0.0,"width":10000},
          "charts":{"historyDuration":999999}}
         """)
         #expect(settings.general.updateInterval == 60)
-        #expect(settings.desktopWidget.opacity == 0.2)   // never invisible
-        #expect(settings.desktopWidget.width == 480)
         #expect(settings.charts.historyDuration == 3600)
     }
 
@@ -150,7 +99,7 @@ struct SettingsDecodingTests {
     func roundTrip() throws {
         var original = Settings()
         original.general.temperatureUnit = .fahrenheit
-        original.desktopWidget.isEnabled = true
+        original.panel.style = .bentoSmall
         original.menuBar.items.append(MenuBarItemConfig(metric: .gpuUsage, style: .graph))
         let data = try JSONEncoder().encode(original)
         let restored = try JSONDecoder().decode(Settings.self, from: data)
@@ -187,7 +136,7 @@ struct RequiredSourceTests {
         var settings = Settings()
         settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
         settings.panel.showsHistoryChart = false
-        let sources = settings.requiredSources(panelVisible: false, desktopWidgetVisible: false)
+        let sources = settings.requiredSources(panelVisible: false)
         #expect(sources.contains(.cpu))
         #expect(!sources.contains(.power))     // nothing on screen needs the battery
         #expect(!sources.contains(.processes)) // the expensive one stays off
@@ -197,7 +146,7 @@ struct RequiredSourceTests {
     func chartedModulesKeepSampling() {
         var settings = Settings()
         settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
-        let sources = settings.requiredSources(panelVisible: false, desktopWidgetVisible: false)
+        let sources = settings.requiredSources(panelVisible: false)
         #expect(sources.contains(.power))
         #expect(sources.contains(.disk))
         #expect(sources.contains(.network))
@@ -209,7 +158,7 @@ struct RequiredSourceTests {
     func panelOpen() {
         var settings = Settings()
         settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
-        let sources = settings.requiredSources(panelVisible: true, desktopWidgetVisible: false)
+        let sources = settings.requiredSources(panelVisible: true)
         #expect(sources.contains(.processes))
         #expect(sources.contains(.power))
     }
@@ -220,7 +169,7 @@ struct RequiredSourceTests {
         settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
         settings.notifications.isEnabled = true
         settings.notifications.rules = [ThresholdRule(metric: .batteryLow, isEnabled: true)]
-        let sources = settings.requiredSources(panelVisible: false, desktopWidgetVisible: false)
+        let sources = settings.requiredSources(panelVisible: false)
         #expect(sources.contains(.power))
     }
 }

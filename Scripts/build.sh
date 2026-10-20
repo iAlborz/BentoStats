@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds AirStats and assembles a launchable .app bundle.
+# Builds Bento Stats and assembles a launchable .app bundle.
 #
 # SwiftPM cannot produce an app bundle, and a menu bar app needs one: LSUIElement,
 # a bundle identifier for UserDefaults and notifications, and a code signature so
@@ -15,10 +15,12 @@ CONFIG="${1:-debug}"
 swift build -c "$CONFIG" "${@:2}"
 
 BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
-APP="$BIN_DIR/AirStats.app"
+# The app is Bento Stats; the binary and the targets inside it keep the AirStats names
+# they were built under, which nobody sees.
+APP="$BIN_DIR/Bento Stats.app"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN_DIR/AirStats" "$APP/Contents/MacOS/AirStats"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
@@ -42,41 +44,6 @@ else
   echo "error: $BUNDLE is missing; the app would launch with no logo" >&2
   exit 1
 fi
-
-# Sparkle is a framework, and the binary asks for it at @rpath. SwiftPM leaves a copy
-# beside the binary, which is why the bare `.build/debug/AirStats` runs; the bundle
-# needs its own, because the executable inside it resolves @rpath through
-# @executable_path/../Frameworks (see Package.swift).
-#
-# ditto rather than cp -R: a framework is a tree of symlinks into Versions/, and the
-# ones that go missing here are the ones codesign refuses to sign later.
-SPARKLE="$BIN_DIR/Sparkle.framework"
-if [ -d "$SPARKLE" ]; then
-  rm -rf "$APP/Contents/Frameworks/Sparkle.framework"
-  ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
-else
-  echo "error: $SPARKLE is missing; the app would not launch" >&2
-  exit 1
-fi
-
-# Sparkle writes "1.2 is now available—you have 1.1", and nothing else this app puts on
-# screen uses an em dash. Only the English values are rewritten: the keys are what the
-# framework looks strings up by, so changing one loses the translation entirely, and the
-# other languages are somebody else's prose. Patched here rather than upstream because
-# Scripts/release.sh signs the framework after this runs, so the signature covers it.
-python3 - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Resources/Base.lproj/Sparkle.strings" <<'PY'
-import plistlib, sys
-
-path = sys.argv[1]
-with open(path, 'rb') as handle:
-    strings = plistlib.load(handle)
-
-patched = {key: value.replace('available—you have', 'available, you have')
-           for key, value in strings.items()}
-if patched != strings:
-    with open(path, 'wb') as handle:
-        plistlib.dump(patched, handle, fmt=plistlib.FMT_BINARY)
-PY
 
 # Ad-hoc signature. Without any signature macOS refuses some window-server
 # privileges a status item needs.

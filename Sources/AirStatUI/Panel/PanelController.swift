@@ -17,14 +17,8 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
-    /// Absent in the offscreen renderer. The panel's update row is drawn from it.
-    private let updates: SoftwareUpdater?
     private var window: PanelWindow?
     private var layout: PanelLayoutState?
-    private var isDisclosureTransitionActive = false
-    /// Animations still running in the current disclosure: SwiftUI's reveal and
-    /// AppKit's window resize. The transition ends when the last of them does.
-    private var disclosureAnimationsPending = 0
 
     /// The window beside the panel that shows the hovered module's detail.
     private var detailWindow: PanelWindow?
@@ -75,10 +69,9 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// bursts of use and is only released once the panel has genuinely been left alone.
     private static let windowReleaseDelay: Duration = .seconds(120)
 
-    public init(engine: MetricsEngine, settings: SettingsStore, updates: SoftwareUpdater? = nil) {
+    public init(engine: MetricsEngine, settings: SettingsStore) {
         self.engine = engine
         self.settings = settings
-        self.updates = updates
         super.init()
     }
 
@@ -196,9 +189,6 @@ public final class PanelController: NSObject, NSWindowDelegate {
     private func existingOrNewWindow() -> PanelWindow {
         if let window { return window }
         let layout = PanelLayoutState()
-        layout.toggleModule = { [weak self] module in
-            self?.toggleModule(module)
-        }
         layout.rowHover = { [weak self] module, frame in
             self?.rowHover(module, frame: frame)
         }
@@ -209,8 +199,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
             self?.hoveredRow = nil
             self?.hideDetail()
         }
-        let root = PanelRootView(engine: engine, settings: settings, updates: updates,
-                                 layout: layout)
+        let root = PanelRootView(engine: engine, settings: settings, layout: layout)
             .environment(\.panelActions, PanelActions(
                 openSettings: { [weak self] in self?.onRequestSettings?() },
                 quit: { [weak self] in self?.onRequestQuit?() },
@@ -231,7 +220,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
             rootView: PanelDetailView(engine: engine, settings: settings, layout: layout))
         detailHosting.onContentSizeChange = { [weak self] in self?.scheduleDetailResize() }
         let detailWindow = PanelWindow(contentView: detailHosting)
-        detailWindow.title = "AirStats Detail"
+        detailWindow.title = "Bento Stats Detail"
         detailWindow.delegate = self
         detailWindow.onCancel = { [weak self] in self?.hide() }
 
@@ -242,147 +231,6 @@ public final class PanelController: NSObject, NSWindowDelegate {
     }
 
     // MARK: Geometry
-
-    /// Toggle one module as a single AppKit/SwiftUI transaction.
-    ///
-    /// SwiftUI's intrinsic height is an animation value, so following each invalidation
-    /// makes the window chase the content one run-loop turn behind. Instead, stage the
-    /// final hierarchy synchronously to obtain one destination, restore the current
-    /// hierarchy before anything is displayed, then animate both systems to that one
-    /// destination. Intrinsic callbacks and resize delegate re-entry are ignored until
-    /// the transaction has completed.
-    func toggleModule(_ module: PanelModule) {
-        guard !isDisclosureTransitionActive else { return }
-
-        let current = settings.settings.panel.collapsedModules
-        let target = settings.settings.panel.collapsedModules(toggling: module)
-
-        guard let window, isVisible, let layout else {
-            settings.update { $0.panel.collapsedModules = target }
-            return
-        }
-
-        isDisclosureTransitionActive = true
-
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        // Enter the transition on its own layout pass, before the hierarchy changes
-        // shape. The scroll indicator is retired here, so the measurement below cannot
-        // be the pass that flashes one.
-        withTransaction(transaction) {
-            layout.isDisclosureTransitionActive = true
-            layout.disclosureOrigin = current
-        }
-        window.layoutIfNeeded()
-
-        // Measure the final hierarchy without allowing the staging state to animate or
-        // reach the screen. The window itself remains on its current frame throughout.
-        withTransaction(transaction) {
-            layout.collapsedModulesOverride = target
-        }
-        window.layoutIfNeeded()
-        let fitting = window.contentView?.fittingSize
-            ?? NSSize(width: PanelSettings.width, height: window.frame.height)
-        let destination = targetFrame(for: fitting, anchoredTo: lastAnchor, on: lastScreen)
-
-        let duration = disclosureDuration
-        // Reduce Motion: nothing to animate, so the ordering is the whole job. The
-        // hierarchy is already staged at its final shape, so the window is taken to the
-        // frame that fits it before anything is drawn, and the setting is written
-        // behind that. Nothing is ever laid out taller than the window holding it, and
-        // implicit AppKit animations are off for the exchange, so neither the scroller
-        // nor the backdrop has anything to fade.
-        if duration == 0 {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            window.setFrame(destination, display: false)
-            settings.update { $0.panel.collapsedModules = target }
-            withTransaction(transaction) {
-                layout.collapsedModulesOverride = nil
-                layout.disclosureOrigin = nil
-                layout.isDisclosureTransitionActive = false
-            }
-            window.layoutIfNeeded()
-            window.displayIfNeeded()
-            CATransaction.commit()
-            isDisclosureTransitionActive = false
-            position(window, anchoredTo: lastAnchor, on: lastScreen)
-            return
-        }
-
-        withTransaction(transaction) {
-            layout.collapsedModulesOverride = current
-        }
-        window.layoutIfNeeded()
-
-        // Persist behind the presentation override so this write cannot restructure the
-        // visible tree before the coordinated transition begins.
-        settings.update { $0.panel.collapsedModules = target }
-
-        // The transition ends when the later of the two animations ends, not when
-        // AppKit's does.
-        //
-        // The two are given the same curve and the same duration, but SwiftUI's starts
-        // on its next render and AppKit's starts now, so the reveal is still a few
-        // frames from done when the window arrives. Finishing on the window alone
-        // measured the content while it was still short — 24pt short on a Memory open
-        // — snapped the window down to that, and then let the resize path walk it back
-        // up one intrinsic-size change at a time: seven visible steps after every
-        // open. Waiting for both, the window sits at its destination while the reveal
-        // catches up, and the one `position` at the end has nothing left to move.
-        disclosureAnimationsPending = 2
-        let animationDidEnd = { [weak self, weak window, weak layout] in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.disclosureAnimationsPending -= 1
-                guard self.disclosureAnimationsPending == 0, let window, let layout else { return }
-                self.finishDisclosure(window: window, layout: layout)
-            }
-        }
-        withAnimation(Design.Motion.disclosure, completionCriteria: .logicallyComplete) {
-            layout.collapsedModulesOverride = target
-        } completion: {
-            animationDidEnd()
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().setFrame(destination, display: true)
-        } completionHandler: {
-            animationDidEnd()
-        }
-        // A completion that never comes would leave every click ignored and every
-        // resize dropped for the life of the window. Neither has been seen to fail,
-        // but the cost of being wrong is a dead panel, so the transition is ended by
-        // the clock if it is still open well after both animations should be over.
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(Int(duration * 1000) + 250))
-            guard let self, self.isDisclosureTransitionActive,
-                  self.disclosureAnimationsPending > 0,
-                  let window = self.window, let layout = self.layout else { return }
-            self.disclosureAnimationsPending = 0
-            self.finishDisclosure(window: window, layout: layout)
-        }
-    }
-
-    private var disclosureDuration: TimeInterval {
-        Design.Motion.respectingAccessibility(Design.Motion.disclosure) == nil
-            ? 0 : Design.Motion.disclosureDuration
-    }
-
-    private func finishDisclosure(window: NSWindow, layout: PanelLayoutState) {
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            layout.collapsedModulesOverride = nil
-            layout.disclosureOrigin = nil
-            layout.isDisclosureTransitionActive = false
-        }
-        isDisclosureTransitionActive = false
-        // Resolve any sub-point discrepancy between the measured destination and the
-        // final intrinsic size without producing a second visible move.
-        position(window, anchoredTo: lastAnchor, on: lastScreen)
-    }
 
     /// Anchor under the status item, nudged so the panel never hangs off the screen,
     /// slides under the menu bar, or grows past the bottom of the display.
@@ -470,16 +318,12 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// SwiftUI can invalidate its size several times in one layout pass, so the
     /// window is re-measured once on the next turn rather than on every invalidation.
     private func scheduleContentResize() {
-        guard !isDisclosureTransitionActive else { return }
         guard !hasPendingResize else { return }
         hasPendingResize = true
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.hasPendingResize = false
-            // A resize queued on the turn before a click would otherwise fire mid-
-            // transition and snap the window to the destination unanimated.
-            guard let window = self.window, self.isVisible,
-                  !self.isDisclosureTransitionActive else { return }
+            guard let window = self.window, self.isVisible else { return }
             self.position(window, anchoredTo: self.lastAnchor, on: self.lastScreen)
         }
     }
@@ -490,7 +334,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// placement re-pins it under the status item and re-applies the height cap.
     public func windowDidResize(_ notification: Notification) {
         guard let window, notification.object as? NSWindow === window,
-              isVisible, !isPositioning, !isDisclosureTransitionActive else { return }
+              isVisible, !isPositioning else { return }
         position(window, anchoredTo: lastAnchor, on: lastScreen)
     }
 
@@ -631,8 +475,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
         x = min(x, visible.maxX - fitting.width - margin)
         // SwiftUI measures the row from the panel's top edge, and screen y runs upwards.
         // The detail's own top padding goes back on so its header sits level with the row.
-        let padding = settings.settings.panel.style.usesCardDetail ? BentoDetail.inset : Design.Space.xs
-        let rowTop = panel.maxY - row.minY + padding
+        let rowTop = panel.maxY - row.minY + BentoDetail.inset
         let y = min(max(rowTop - height, visible.minY + margin), visible.maxY - height - margin)
 
         let frame = NSRect(x: x.rounded(), y: y.rounded(), width: fitting.width, height: height)
@@ -759,7 +602,7 @@ final class PanelWindow: NSPanel {
         // the system's own menu bar extras do.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         isMovableByWindowBackground = false
-        title = "AirStats Panel"
+        title = "Bento Stats Panel"
 
         let backdrop = PanelBackdropView()
         backdrop.wantsLayer = true

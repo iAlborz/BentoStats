@@ -143,7 +143,7 @@ public final class PublicIPFetcher: @unchecked Sendable {
             request.httpMethod = "GET"
             // CFNetwork's default agent string spells out the OS build and the app
             // version. A fixed name says who is asking without describing the machine.
-            request.setValue("AirStats", forHTTPHeaderField: "User-Agent")
+            request.setValue("BentoStats", forHTTPHeaderField: "User-Agent")
             request.setValue("text/plain", forHTTPHeaderField: "Accept")
             session.dataTask(with: request) { data, response, error in
                 completion(interpret(data: data, response: response, error: error))

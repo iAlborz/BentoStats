@@ -53,7 +53,7 @@ public enum MetricProbe {
         startIfNeeded(network); startIfNeeded(disk); startIfNeeded(power)
         startIfNeeded(thermal); startIfNeeded(processes); startIfNeeded(system)
 
-        emit("AirStats metric probe")
+        emit("Bento Stats metric probe")
         emit("collectors: \(options.collectors.map(\.rawValue).sorted().joined(separator: ", "))")
         emit("samples: \(options.repeatCount) every \(options.interval)s")
         emit(String(repeating: "─", count: 68))

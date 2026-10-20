@@ -4,7 +4,7 @@ import Observation
 /// The app's single source of truth for live system data.
 ///
 /// Owns the background `SamplingCore`, folds every snapshot into bounded history,
-/// and translates UI state (panel open, desktop widget shown, screen locked) into the
+/// and translates UI state (panel open, menu bar hidden, screen locked) into the
 /// sampling activity level that decides how hard the machine works.
 @MainActor
 @Observable
@@ -54,7 +54,6 @@ public final class MetricsEngine {
     private var dayHistorySavedMinute: Int?
     private var core: SamplingCore?
     private var isPanelVisible = false
-    private var isDesktopWidgetVisible = false
     private var isMenuBarOccluded = false
     private struct SuspensionReasons: OptionSet {
         let rawValue: Int
@@ -132,12 +131,6 @@ public final class MetricsEngine {
         updateActivity()
     }
 
-    public func setDesktopWidgetVisible(_ visible: Bool) {
-        guard visible != isDesktopWidgetVisible else { return }
-        isDesktopWidgetVisible = visible
-        updateActivity()
-    }
-
     /// Called when the status item is hidden behind a full-screen app, tucked under
     /// the notch, or otherwise not on screen.
     public func setMenuBarOccluded(_ occluded: Bool) {
@@ -189,8 +182,6 @@ public final class MetricsEngine {
             newActivity = .suspended
         } else if isPanelVisible {
             newActivity = .panel
-        } else if isDesktopWidgetVisible {
-            newActivity = .desktopWidget
         } else if isLowPowerPaused {
             // Ranked below the surfaces the user opened deliberately and above the
             // occlusion throttle: a pause is the stronger of the two power measures,
@@ -235,8 +226,7 @@ public final class MetricsEngine {
     }
 
     private var currentRequiredSources: Set<CollectorID> {
-        settingsStore.settings.requiredSources(panelVisible: isPanelVisible,
-                                               desktopWidgetVisible: isDesktopWidgetVisible)
+        settingsStore.settings.requiredSources(panelVisible: isPanelVisible)
     }
 
     // MARK: Settings
@@ -324,7 +314,7 @@ public final class MetricsEngine {
 
     /// Re-pushes the whole configuration, and is called for *any* accepted settings
     /// change: the engine wakes on `settingsStore.revision`, which bumps on every
-    /// mutation. Changing a desktop widget colour re-pushes the interval, the enabled-source
+    /// mutation. Changing a notification rule re-pushes the interval, the enabled-source
     /// set and the public IP flag.
     ///
     /// That is harmless only because every setter it calls early-returns on an

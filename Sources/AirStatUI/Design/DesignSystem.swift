@@ -86,23 +86,12 @@ public enum Design {
         /// and it is not AirStat's to reassign.
         public static var accent: Color { Color(nsColor: .controlAccentColor) }
 
-        /// Per-metric identity colours, used sparingly: in charts, and in the panel
+        /// Per-metric identity colours, used sparingly: in charts, and in the settings
         /// only as a small glyph tint.
         ///
-        /// The shipped values are Apple's system palette rather than custom hexes, so
-        /// they shift correctly in dark mode and increased contrast. A user override
-        /// is a fixed sRGB triple and cannot do that — which is the trade the user
-        /// makes by picking one, and the reason nothing is stored until they do.
+        /// Apple's system palette rather than custom hexes, so they shift correctly in
+        /// dark mode and increased contrast.
         public static func metric(_ id: CollectorID) -> Color {
-            if let custom = SettingsStore.currentTheme.color(for: id) {
-                return Color(themeColor: custom)
-            }
-            return defaultMetric(id)
-        }
-
-        /// What `metric` returns with no override in place. Public so the colour
-        /// editor can show what "Default" means and reset back to it.
-        public static func defaultMetric(_ id: CollectorID) -> Color {
             switch id {
             case .cpu: return Color(nsColor: .systemBlue)
             case .memory: return Color(nsColor: .systemGreen)
@@ -228,47 +217,6 @@ extension EnvironmentValues {
 
 // MARK: - Shared primitives
 
-/// A label/value line — the atom the whole panel is built from.
-///
-/// Values are trailing-aligned with monospaced digits so every row in a module forms
-/// a clean right edge, which is what lets the eye scan a column of numbers.
-///
-/// A row used to turn yellow, orange and red as its value climbed. It does not any
-/// more: a number that changes colour as you watch it is the app editorialising about
-/// data the user is perfectly able to read, and nine modules each deciding on their
-/// own when to shout left the panel with no quiet state at all. Colour in AirStat now
-/// means one thing — which metric this is — and the user chooses it.
-public struct ReadoutRow: View {
-    private let label: String
-    private let value: String
-    private let isDimmed: Bool
-
-    public init(_ label: String, _ value: String, isDimmed: Bool = false) {
-        self.label = label
-        self.value = value
-        self.isDimmed = isDimmed
-    }
-
-    public var body: some View {
-        HStack(spacing: Design.Space.rowGap) {
-            SwiftUI.Text(label)
-                .font(Design.Text.label)
-                .foregroundStyle(Design.Palette.secondaryText)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: Design.Space.m)
-            SwiftUI.Text(value)
-                .font(Design.Text.value)
-                .foregroundStyle(Design.Palette.primaryText)
-                .lineLimit(1)
-                .contentTransition(.numericText())
-        }
-        .opacity(isDimmed ? 0.5 : 1)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(label)
-        .accessibilityValue(value)
-    }
-}
 
 /// Horizontal capacity bar. Used for anything with a real 0...1 maximum, and never
 /// for a rate, which has none.
@@ -492,37 +440,6 @@ public final class GlassBackdropView: NSVisualEffectView {
             NSColor(white: 1, alpha: 0).cgColor,
         ]
         sheen.borderColor = NSColor(white: 1, alpha: isDark ? 0.14 : 0.5).cgColor
-    }
-}
-
-// MARK: - Theme colour bridging
-
-extension Color {
-    /// A stored override, as a drawable colour. Built in sRGB because that is the
-    /// space the components were captured in.
-    public init(themeColor: ThemeColor) {
-        self.init(.sRGB, red: themeColor.red, green: themeColor.green, blue: themeColor.blue)
-    }
-
-    /// This colour as storable components, or nil if it cannot be resolved into sRGB.
-    ///
-    /// A dynamic system colour resolves against whatever appearance is current when
-    /// this is called, which is exactly right here: the user is looking at the swatch
-    /// they are about to replace, and what they saw is what gets written down.
-    public var themeColor: ThemeColor? {
-        guard let srgb = NSColor(self).usingColorSpace(.sRGB) else { return nil }
-        return ThemeColor(red: Double(srgb.redComponent),
-                          green: Double(srgb.greenComponent),
-                          blue: Double(srgb.blueComponent))
-    }
-}
-
-extension NSColor {
-    /// A stored override as an AppKit colour. The menu bar draws in Core Graphics and
-    /// never sees a SwiftUI `Color`, so it resolves overrides through here.
-    public convenience init(themeColor: ThemeColor) {
-        self.init(srgbRed: themeColor.red, green: themeColor.green, blue: themeColor.blue,
-                  alpha: 1)
     }
 }
 

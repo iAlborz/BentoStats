@@ -45,12 +45,16 @@ struct BentoGrid: View {
     var showing: [BentoTile]? = nil
     /// Names each card's design and size under the pointer, for the gallery.
     var labelsSizes = false
+    /// Which of the two arrangements this grid draws and edits: Bento's or Bento Small's.
+    var arrangement: BentoArrangement = .regular
 
     private static let inset: CGFloat = 12
     private static let gap: CGFloat = 10
     /// One square cell. Six across, with the gaps and the inset, is 734 wide.
     private static let cell: CGFloat = 110
-    static let width = inset * 2 + span(BentoLayout.columns)
+    static func width(for arrangement: BentoArrangement) -> CGFloat {
+        inset * 2 + span(arrangement.columns)
+    }
     private static let space = "bento"
 
     /// The length of `cells` cells and the gaps between them, across or down.
@@ -95,14 +99,14 @@ struct BentoGrid: View {
         MetricFormatter(settings: settings.settings.general)
     }
 
-    private var tiles: [BentoTile] { working ?? showing ?? settings.settings.panel.bentoTiles }
+    private var tiles: [BentoTile] { working ?? showing ?? settings.settings[keyPath: arrangement.tiles] }
     /// The arrangement can be changed: in the panel, and not in the gallery.
     private var canEdit: Bool { layout != nil && showing == nil }
     private var isEditing: Bool { layout?.isEditing == true }
 
     var body: some View {
         let tiles = self.tiles
-        let packed = BentoLayout.pack(tiles)
+        let packed = BentoLayout.pack(tiles, columns: arrangement.columns)
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tile in
@@ -111,7 +115,7 @@ struct BentoGrid: View {
                     }
                 }
             }
-            .frame(width: Self.span(BentoLayout.columns), height: Self.span(max(packed.rows, 1)),
+            .frame(width: Self.span(arrangement.columns), height: Self.span(max(packed.rows, 1)),
                    alignment: .topLeading)
             .coordinateSpace(.named(Self.space))
             .padding(Self.inset)
@@ -238,7 +242,7 @@ struct BentoGrid: View {
     /// between them along by one, the way a list reorders.
     private func reorder(_ id: UUID, toward point: CGPoint) {
         guard var list = working, let drag else { return }
-        let packed = BentoLayout.pack(list).placements
+        let packed = BentoLayout.pack(list, columns: arrangement.columns).placements
         guard let target = list.first(where: { tile in
             tile.id != id && packed[tile.id].map { Self.frame(of: $0).contains(point) } == true
         }) else {
@@ -353,7 +357,7 @@ struct BentoGrid: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            Button { edit { $0 = BentoLayout.defaultTiles } } label: {
+            Button { edit { $0 = arrangement.defaults } } label: {
                 pill("arrow.counterclockwise", "Reset")
             }
             .buttonStyle(.plain)
@@ -387,16 +391,16 @@ struct BentoGrid: View {
 
     /// A change to the arrangement, saved and animated.
     private func edit(_ change: (inout [BentoTile]) -> Void) {
-        var list = settings.settings.panel.bentoTiles
+        var list = settings.settings[keyPath: arrangement.tiles]
         change(&list)
         let sanitized = BentoLayout.sanitized(list)
-        settings.update { $0.panel.bentoTiles = sanitized }
+        settings.update { [arrangement] in $0[keyPath: arrangement.tiles] = sanitized }
     }
 
     private func commit() {
         guard let working else { return }
         let sanitized = BentoLayout.sanitized(working)
-        settings.update { $0.panel.bentoTiles = sanitized }
+        settings.update { [arrangement] in $0[keyPath: arrangement.tiles] = sanitized }
         self.working = nil
     }
 
@@ -1211,14 +1215,14 @@ struct BentoGrid: View {
         return ChipGraphic(name: engine.system.value?.chipName,
                            performance: cores.filter { $0.kind != .efficiency }.map(\.busy),
                            efficiency: cores.filter { $0.kind == .efficiency }.map(\.busy),
-                           performanceColors: palette(.cpu, onCard: false),
+                           performanceColors: palette(.cpu),
                            efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
     }
 
     /// The chip without its cores, filled from the bottom by the whole CPU's load.
     private var chipLoad: some View {
         ChipGraphic(name: engine.system.value?.chipName, performance: [], efficiency: [],
-                    performanceColors: palette(.cpu, onCard: false), efficiencyColors: [],
+                    performanceColors: palette(.cpu), efficiencyColors: [],
                     load: engine.cpu.value?.total.busy ?? 0)
     }
 
@@ -1282,7 +1286,7 @@ struct BentoGrid: View {
         let memory = engine.memory.value
         let used = memory.map { $0.totalBytes > 0 ? Double($0.usedBytes) / Double($0.totalBytes) : 0 }
         return MemoryGraphic(label: memoryFree.map { "\(formatter.memory($0)) free" },
-                             fraction: used ?? 0, load: palette(.memory, onCard: false)[0])
+                             fraction: used ?? 0, load: palette(.memory)[0])
     }
 
     /// The biggest users, ranked by what they hold rather than by how busy they are: the
@@ -1351,7 +1355,7 @@ struct BentoGrid: View {
     private func gpuDie(_ size: CGSize) -> some View {
         let device = engine.gpu.value?.primary
         if let cores = device?.coreCount ?? engine.system.value?.gpuCoreCount, cores > 0 {
-            GPUDie(cores: cores, load: device?.utilization ?? 0, colors: palette(.gpu, onCard: false),
+            GPUDie(cores: cores, load: device?.utilization ?? 0, colors: palette(.gpu),
                    size: size)
         } else {
             bigNumber(.gpu, nil, size: 24)
@@ -1388,7 +1392,7 @@ struct BentoGrid: View {
         let root = engine.disk.value?.rootVolume
         return SSDGraphic(fraction: root.map { $0.totalBytes > 0
                               ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 } ?? 0,
-                          colors: palette(.disk, onCard: false),
+                          colors: palette(.disk),
                           label: root.map { "\(formatter.storage($0.availableBytes)) free" })
     }
 
@@ -1636,23 +1640,12 @@ struct BentoGrid: View {
     }
 
     /// Two colours per card, drawn as a gradient the way Apple sets its headline words,
-    /// and chosen so the nine cards read as nine different things at a glance. A colour
-    /// the user has set for the metric in Appearance wins over these.
-    ///
-    /// `onCard` is for colour drawn straight on the card rather than on one of the dark
-    /// objects (the chip, the memory module, the GPU die, the SSD). There, a colour the
-    /// user picked that is too pale to read on a white card gives way to the label
-    /// colour in light appearance: white is a fine choice for the dark panel and an
-    /// invisible number on a light one.
-    private func palette(_ module: PanelModule, onCard: Bool = true) -> [Color] {
-        Self.palette(module, theme: settings.settings.theme, onCard: onCard)
+    /// and chosen so the cards read as different things at a glance.
+    private func palette(_ module: PanelModule) -> [Color] {
+        Self.palette(module)
     }
 
-    static func palette(_ module: PanelModule, theme: ThemeSettings, onCard: Bool = true) -> [Color] {
-        if let custom = theme.color(for: module.requiredSource) {
-            let color = onCard ? Self.legibleOnCard(custom) : Color(themeColor: custom)
-            return [color, color]
-        }
+    static func palette(_ module: PanelModule) -> [Color] {
         let pair: (NSColor, NSColor)
         switch module {
         case .cpu: pair = (.systemBlue, .systemCyan)
@@ -1666,14 +1659,6 @@ struct BentoGrid: View {
         case .system: pair = (.systemGray, .secondaryLabelColor)
         }
         return [Color(nsColor: pair.0), Color(nsColor: pair.1)]
-    }
-
-    private static func legibleOnCard(_ theme: ThemeColor) -> Color {
-        let color = NSColor(srgbRed: theme.red, green: theme.green, blue: theme.blue, alpha: 1)
-        let luminance = 0.2126 * theme.red + 0.7152 * theme.green + 0.0722 * theme.blue
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            !appearance.isDark && luminance > 0.75 ? .labelColor : color
-        })
     }
 
     /// The cards' own surface, for anything drawn to match them.
@@ -1699,6 +1684,42 @@ struct BentoGrid: View {
     private static func marketingCapacity(_ bytes: UInt64) -> String {
         let gigabytes = Double(bytes) / Double(1 << 30)
         return "\(Int(gigabytes.rounded())) GB"
+    }
+}
+
+extension MetricsEngine {
+    /// Whether `module` is waiting for its first reading since sampling started, which
+    /// for a collector that measures rates is the first sample after every pause.
+    func isCollecting(_ module: PanelModule) -> Bool {
+        switch module {
+        case .cpu: cpu.failure == .pending
+        case .memory: memory.failure == .pending
+        case .gpu: gpu.failure == .pending
+        case .network: network.failure == .pending
+        case .disk: disk.failure == .pending
+        case .battery: power.failure == .pending
+        case .thermal: thermal.failure == .pending
+        case .processes: processes.failure == .pending
+        case .system: system.failure == .pending
+        }
+    }
+}
+
+// MARK: - Arrangements
+
+/// The two bento arrangements, each with its own cards and its own width.
+enum BentoArrangement: Sendable {
+    case regular, small
+
+    var columns: Int { self == .small ? BentoLayout.smallColumns : BentoLayout.columns }
+
+    var tiles: WritableKeyPath<AirStatKit.Settings, [BentoTile]> {
+        self == .small ? \.panel.bentoSmallTiles : \.panel.bentoTiles
+    }
+
+    /// What Reset goes back to.
+    var defaults: [BentoTile] {
+        self == .small ? BentoLayout.defaultSmallTiles : BentoLayout.defaultTiles
     }
 }
 

@@ -379,26 +379,6 @@ struct MainActorPerformanceTests {
         }
     }
 
-    /// In the main-actor suite because `StatusItemController.slice` is main-actor
-    /// isolated, which it should be: it is only ever called from `render()`.
-    @Test("slicing the model down to one readout per status item")
-    func menuBarSlice() {
-        let model = MenuBarRenderModel(snapshot: SnapshotFixtures.nominal,
-                                       history: PerformanceTests.filledHistory(),
-                                       settings: PerformanceTests.maximalSettings(),
-                                       isStale: false)
-        let ids = model.items.map(\.id)
-
-        let result = Benchmark.measure("slice x16 (separate status items)", iterations: 200) {
-            for id in ids {
-                Benchmark.blackHole(StatusItemController.slice(model, readout: id))
-            }
-        }
-        // Paid once per status item per redraw when the combine switch is off, so the
-        // separate-items layout multiplies this by the number of enabled readouts.
-        expectWithinBudget(result, nanoseconds: 200_000)
-    }
-
     @Test("a settings mutation, which every slider drag repeats")
     func settingsUpdate() {
         let (engine, store) = Self.makeEngine()
@@ -406,7 +386,7 @@ struct MainActorPerformanceTests {
             var value = 0.5
             let result = Benchmark.measure("SettingsStore.update", iterations: 300) {
                 value = value > 0.9 ? 0.5 : value + 0.01
-                store.update { $0.desktopWidget.opacity = value }
+                store.update { $0.charts.historyDuration = 300 + value * 100 }
             }
             // Copies the tree, mutates, sanitises, compares for equality and schedules
             // a save. A slider drag runs this at display rate.

@@ -31,7 +31,7 @@ struct BentoDetail: View {
     }
 
     private var palette: [Color] {
-        BentoGrid.palette(module, theme: settings.settings.theme)
+        BentoGrid.palette(module)
     }
 
     var body: some View {

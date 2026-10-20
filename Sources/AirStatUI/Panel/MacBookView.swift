@@ -189,7 +189,7 @@ struct MacBookView: View {
 
     private func memoryPackages(count: Int, fraction: Double) -> some View {
         let perSide = count / 2
-        let color = palette(.memory, onCard: false)[0]
+        let color = palette(.memory)[0]
         let column = VStack(spacing: 6) {
             ForEach(0..<perSide, id: \.self) { _ in
                 level(fraction, color: color, vertical: true, radius: 2, face: Tone.chipFace)
@@ -240,7 +240,7 @@ struct MacBookView: View {
     /// Performance cores in two rows, efficiency cores in a narrower column beside them,
     /// each filling from the bottom with its load.
     private func cpuCores(performance: [Double], efficiency: [Double]) -> some View {
-        let colors = palette(.cpu, onCard: false)
+        let colors = palette(.cpu)
         let columns = max(1, (performance.count + 1) / 2)
         return HStack(spacing: 2) {
             VStack(spacing: 2) {
@@ -285,7 +285,7 @@ struct MacBookView: View {
         let columns = cores >= 8 ? 8 : max(cores, 1)
         let rows = max(1, Int((Double(cores) / Double(columns)).rounded(.up)))
         let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
-        let colors = palette(.gpu, onCard: false)
+        let colors = palette(.gpu)
         return VStack(spacing: 2) {
             ForEach(0..<rows, id: \.self) { row in
                 HStack(spacing: 2) {
@@ -308,7 +308,7 @@ struct MacBookView: View {
     private var ssd: some View {
         let root = engine.disk.value?.rootVolume
         let used = root.map { $0.totalBytes > 0 ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 } ?? 0
-        let color = palette(.disk, onCard: false)[0]
+        let color = palette(.disk)[0]
         return place(VStack(spacing: 8) {
             ForEach(0..<2, id: \.self) { _ in
                 level(used, color: color, vertical: true, radius: 3, face: Tone.chipFace)
@@ -322,7 +322,7 @@ struct MacBookView: View {
         let power = engine.power.value
         let charge = (power?.percentage ?? 0) / 100
         let isLow = power != nil && charge <= 0.2 && power?.isCharging == false
-        let color = isLow ? Color(nsColor: .systemRed) : palette(.battery, onCard: false)[0]
+        let color = isLow ? Color(nsColor: .systemRed) : palette(.battery)[0]
         return ZStack(alignment: .topLeading) {
             place(cellPair(charge: charge, color: color, vertical: true)
                 .hoverRegion(.battery, layout: layout), Self.leftCells)
@@ -497,8 +497,8 @@ struct MacBookView: View {
         view.frame(width: rect.width, height: rect.height).position(x: rect.midX, y: rect.midY)
     }
 
-    private func palette(_ module: PanelModule, onCard: Bool = true) -> [Color] {
-        BentoGrid.palette(module, theme: settings.settings.theme, onCard: onCard)
+    private func palette(_ module: PanelModule) -> [Color] {
+        BentoGrid.palette(module)
     }
 
     /// "M1 Max" out of "Apple M1 Max"; the logo beside it already says Apple.

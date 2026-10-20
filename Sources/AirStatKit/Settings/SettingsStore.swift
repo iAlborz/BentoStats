@@ -13,23 +13,10 @@ public final class SettingsStore {
     public private(set) var settings: Settings {
         didSet {
             guard settings != oldValue else { return }
-            SettingsStore.currentTheme = settings.theme
             revision &+= 1
             scheduleSave()
         }
     }
-
-    /// The colour overrides the UI layer draws with, mirrored out of the store.
-    ///
-    /// The palette is consulted from places that have no store to read from — chart
-    /// tints supplied as default argument values, and `Design.Palette.metric` itself,
-    /// which is a static function called from twenty sites. Threading a store through
-    /// all of them to deliver a value that is process-wide anyway would be ceremony;
-    /// mirroring it here is not.
-    ///
-    /// Written only from `didSet` above and from `load`, both of which are main-actor
-    /// confined, and always before the `revision` bump that makes SwiftUI re-read it.
-    public nonisolated(unsafe) private(set) static var currentTheme = ThemeSettings()
 
     /// Increments on every accepted change. Views observe this to recompute
     /// derived layout without diffing the whole settings tree.
@@ -52,9 +39,6 @@ public final class SettingsStore {
         let (loaded, diagnostic) = SettingsStore.load(from: fileURL, backup: backupURL)
         self.settings = loaded
         self.loadDiagnostic = diagnostic
-        // `didSet` does not fire during initialisation, so the first paint would use
-        // the shipped palette and only pick up the user's colours on their next edit.
-        SettingsStore.currentTheme = loaded.theme
     }
 
     /// Note that `HOME` does not redirect `applicationSupportDirectory`, so a test
@@ -78,27 +62,20 @@ public final class SettingsStore {
         settings = SettingsStore.sanitize(copy)
     }
 
-    public func resetToDefaults() {
-        settings = Settings()
-        flush()
-    }
-
     public func resetSection(_ section: SettingsSection) {
         update { s in
             switch section {
             case .general: s.general = GeneralSettings()
             case .menuBar: s.menuBar = MenuBarSettings()
             case .charts: s.charts = ChartSettings()
-            case .desktopWidget: s.desktopWidget = DesktopWidgetSettings()
             case .notifications: s.notifications = NotificationSettings()
             case .shortcuts: s.shortcuts = ShortcutSettings()
-            case .theme: s.theme = ThemeSettings()
             }
         }
     }
 
     public enum SettingsSection: String, Sendable, CaseIterable {
-        case general, menuBar, charts, desktopWidget, notifications, shortcuts, theme
+        case general, menuBar, charts, notifications, shortcuts
 
         /// What this subtree is called in the window. Here rather than in the UI layer
         /// because the reset menu lists sections, not panes — one pane now edits more
@@ -108,28 +85,10 @@ public final class SettingsStore {
             case .general: return "General"
             case .menuBar: return "Menu Bar"
             case .charts: return "Charts"
-            case .desktopWidget: return "Desktop Widget"
             case .notifications: return "Notifications"
             case .shortcuts: return "Shortcuts"
-            case .theme: return "Colors"
             }
         }
-    }
-
-    // MARK: Import / export
-
-    public func exportJSON() throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(settings)
-    }
-
-    /// Replace the entire configuration from a user-supplied file. Throws only when
-    /// the data is not decodable at all; individual bad keys fall back to defaults.
-    public func importJSON(_ data: Data) throws {
-        let decoded = try JSONDecoder().decode(Settings.self, from: data)
-        settings = SettingsStore.sanitize(decoded)
-        flush()
     }
 
     // MARK: Persistence
@@ -208,12 +167,8 @@ public final class SettingsStore {
         if s.menuBar.items.isEmpty { s.menuBar.items = MenuBarSettings.defaultItems }
         // A user who disables every menu bar item still needs a way to open the app.
         if s.menuBar.enabledItems.isEmpty { s.menuBar.items[0].isEnabled = true }
-        if s.desktopWidget.modules.isEmpty { s.desktopWidget.modules = [.cpu, .memory, .network] }
         s.general.updateInterval = min(max(s.general.updateInterval, 0.5), 60)
         s.charts.historyDuration = min(max(s.charts.historyDuration, 30), 3600)
-        s.desktopWidget.opacity = min(max(s.desktopWidget.opacity, 0.2), 1)
-        s.desktopWidget.inactiveOpacity = min(max(s.desktopWidget.inactiveOpacity, 0.15), s.desktopWidget.opacity)
-        s.desktopWidget.width = min(max(s.desktopWidget.width, 160), 480)
         return s
     }
 

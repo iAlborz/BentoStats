@@ -8,18 +8,15 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
-    private let updater: SoftwareUpdater?
     /// Shared with the threshold monitor, so the notifications pane reports the same
     /// grant the alerts actually depend on rather than a second opinion.
     private let authority: NotificationAuthority?
     private var window: NSWindow?
 
     public init(engine: MetricsEngine, settings: SettingsStore,
-                updater: SoftwareUpdater? = nil,
                 authority: NotificationAuthority? = nil) {
         self.engine = engine
         self.settings = settings
-        self.updater = updater
         self.authority = authority
         super.init()
     }
@@ -51,12 +48,11 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func makeWindow() -> NSWindow {
         let window = NSWindow()
         let root = SettingsRootView(settings: settings, engine: engine,
-                                    updater: updater,
                                     authority: authority) { [weak window] tab in
             window?.title = tab.label
         }
         window.delegate = self
-        window.title = "AirStats Settings"
+        window.title = "Bento Stats Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
 
@@ -111,9 +107,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 struct SettingsRootView: View {
     let settings: SettingsStore
     let engine: MetricsEngine?
-    /// Nil in the offscreen renderer, which has no app lifecycle to hang an updater on.
-    let updater: SoftwareUpdater?
-    /// Nil for the same reason: `UNUserNotificationCenter` traps outside an app bundle.
+    /// Nil in the offscreen renderer: `UNUserNotificationCenter` traps outside an app bundle.
     let authority: NotificationAuthority?
     /// Lets the window title follow the selected pane, which is what System
     /// Settings does and what `navigationTitle` used to give us for free.
@@ -133,12 +127,11 @@ struct SettingsRootView: View {
     /// a form row sliding behind three buttons is worse than a band of plain glass.
     private static let titlebarInset: CGFloat = 28
 
-    init(settings: SettingsStore, engine: MetricsEngine? = nil, updater: SoftwareUpdater? = nil,
+    init(settings: SettingsStore, engine: MetricsEngine? = nil,
          authority: NotificationAuthority? = nil,
          initialTab: SettingsTab? = nil, onPaneChange: ((SettingsTab) -> Void)? = nil) {
         self.settings = settings
         self.engine = engine
-        self.updater = updater
         self.authority = authority
         self.onPaneChange = onPaneChange
         _tab = State(initialValue: initialTab ?? SettingsTab.renderDefault)
@@ -192,7 +185,7 @@ struct SettingsRootView: View {
                 VStack(alignment: .leading, spacing: Design.Space.s) {
                     HStack(spacing: Design.Space.xs) {
                         LogoMark(size: 13)
-                        Text("AIRSTATS")
+                        Text("BENTO STATS")
                             .font(.system(size: 10, weight: .semibold))
                             .kerning(0.6)
                     }
@@ -275,14 +268,13 @@ struct SettingsRootView: View {
     @ViewBuilder
     private var pane: some View {
         switch tab {
-        case .general: GeneralPane(settings: settings, updater: updater)
+        case .general: GeneralPane(settings: settings)
         case .menuBar: MenuBarPane(settings: settings, engine: engine)
         case .appearance: AppearancePane(settings: settings)
-        case .desktopWidget: DesktopWidgetPane(settings: settings, engine: engine)
         case .notifications: NotificationsPane(settings: settings, engine: engine,
                                                authority: authority)
         case .shortcuts: ShortcutsPane(settings: settings)
-        case .about: AboutPane(settings: settings, engine: engine, updater: updater)
+        case .about: AboutPane(settings: settings)
         }
     }
 

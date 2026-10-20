@@ -1,33 +1,15 @@
 import AppKit
 import AirStatKit
 
-/// What the menu bar is currently made of.
-///
-/// Either one item drawing every readout, one item per enabled readout in the user's
-/// order, or no item at all. Derived from settings and compared as a whole, so flipping
-/// the combine switch or enabling a readout is a single value change the controller
-/// can act on without inspecting anything else.
+/// What the menu bar is currently made of: one item drawing every readout, or none.
 enum MenuBarItemLayout: Equatable {
     case combined
-    case separate([UUID])
     /// The user has taken the app out of the menu bar. Nothing is installed, and the
     /// controller reports that explicit absence to its visibility callback.
     case hidden
 
     init(settings: MenuBarSettings) {
-        guard settings.isVisible else {
-            self = .hidden
-            return
-        }
-        let enabled = settings.enabledItems.map(\.id)
-        // Separate items with nothing enabled would put no item on the bar at all, and
-        // with it no way back into the app short of a hot key. The combined item draws
-        // an empty readout at a clickable minimum width, so it stands in.
-        guard !settings.usesCombinedItem, !enabled.isEmpty else {
-            self = .combined
-            return
-        }
-        self = .separate(enabled)
+        self = settings.isVisible ? .combined : .hidden
     }
 }
 
@@ -37,10 +19,7 @@ enum MenuBarItemLayout: Equatable {
 /// Apple's own glyphs, redraws constantly, and must never jitter, blur, or push its
 /// neighbours around. Everything here exists to serve that.
 ///
-/// There is one item per enabled readout when the user has turned the combine switch
-/// off, and one item for all of them when it is on. Separate items are what let the
-/// user drag a readout to sit beside Wi-Fi rather than beside our other numbers, and
-/// what lets macOS drop them one at a time instead of losing the whole bar at once.
+/// One item draws every readout, in the user's order.
 @MainActor
 public final class StatusItemController {
 
@@ -59,10 +38,8 @@ public final class StatusItemController {
     private var renderTask: Task<Void, Never>?
     private var lastReportedVisibility: Bool?
 
-    /// One status item and the view drawing into it. `readout` is the id of the single
-    /// readout it draws, or nil for the combined item, which draws them all.
+    /// One status item and the view drawing into it.
     private struct Hosted {
-        let readout: UUID?
         let item: NSStatusItem
         let content: MenuBarContentView
     }
@@ -87,30 +64,12 @@ public final class StatusItemController {
         layout = nil
     }
 
-    /// The combined item keeps the name it has always had, so an install that predates
-    /// separate items does not lose the position the user dragged it to.
+    /// The item keeps the name it has always had, so it stays where the user dragged it.
     static let combinedAutosaveName = "AirStatsStatusItem"
 
-    /// Per-readout items are keyed by the readout's own id rather than by its metric.
-    /// Two readouts of the same metric are allowed, and keyed by metric they would
-    /// share one saved position and fight over it. The consequence is that turning a
-    /// readout off and back on returns it to where the user dragged it, since that
-    /// keeps the config and its id, while deleting one and adding it again mints a new
-    /// id and starts from the default position, which is what a new readout should do.
-    static func autosaveName(for readout: UUID) -> String {
-        "\(combinedAutosaveName)-\(readout.uuidString)"
-    }
-
-    /// Brings the installed items in line with the settings. A no-op unless the combine
-    /// switch moved or the set of enabled readouts changed, so an unrelated settings
-    /// write costs one comparison and no menu bar churn.
-    ///
-    /// When it does change, every item is rebuilt rather than the difference applied.
-    /// Placement is the reason: an item is only ever inserted at the end of our run, so
-    /// keeping the survivors and appending a newly enabled readout would put it at one
-    /// end of the bar instead of in the slot the user put it in. Rebuilding puts the
-    /// whole run back in order, and anything the user has dragged elsewhere returns to
-    /// where they dragged it from its autosaved position.
+    /// Brings the installed item in line with the settings: in the bar, or out of it. A
+    /// no-op unless that changed, so an unrelated settings write costs one comparison
+    /// and no menu bar churn.
     private func syncLayout() {
         let desired = MenuBarItemLayout(settings: settings.settings.menuBar)
         guard desired != layout else { return }
@@ -119,24 +78,10 @@ public final class StatusItemController {
 
         switch desired {
         case .combined:
-            if let entry = makeItem(readout: nil,
-                                    autosaveName: StatusItemController.combinedAutosaveName,
-                                    label: "AirStats system statistics") {
+            if let entry = makeItem(autosaveName: StatusItemController.combinedAutosaveName,
+                                    label: "Bento Stats system statistics") {
                 hosted = [entry]
             }
-
-        case .separate:
-            // Built back to front: an item with no saved position lands to the left of
-            // the ones already on the bar, so making the last readout first leaves the
-            // first one leftmost and the configured order reads left to right. A
-            // readout the user has since dragged somewhere else keeps that position.
-            let configs = settings.settings.menuBar.enabledItems
-            let built = configs.reversed().compactMap { config in
-                makeItem(readout: config.id,
-                         autosaveName: StatusItemController.autosaveName(for: config.id),
-                         label: "AirStats \(config.metric.label)")
-            }
-            hosted = built.reversed()
 
         case .hidden:
             break
@@ -144,7 +89,7 @@ public final class StatusItemController {
         reportVisibility()
     }
 
-    private func makeItem(readout: UUID?, autosaveName: String, label: String) -> Hosted? {
+    private func makeItem(autosaveName: String, label: String) -> Hosted? {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.behavior = [.removalAllowed]
         item.autosaveName = autosaveName
@@ -169,7 +114,7 @@ public final class StatusItemController {
             content.bottomAnchor.constraint(equalTo: button.bottomAnchor),
         ])
 
-        return Hosted(readout: readout, item: item, content: content)
+        return Hosted(item: item, content: content)
     }
 
     /// Every item goes before the replacement set is reported. This avoids exposing a
@@ -242,8 +187,8 @@ public final class StatusItemController {
     }
 
     private func render() {
-        // Settings are read here rather than watched separately, so the combine switch
-        // takes effect on the same pass that redraws the numbers under it.
+        // Settings are read here rather than watched separately, so hiding or showing the
+        // item takes effect on the same pass that redraws the numbers in it.
         syncLayout()
         guard !hosted.isEmpty else { return }
         let model = MenuBarRenderModel(snapshot: engine.snapshot,
@@ -251,24 +196,10 @@ public final class StatusItemController {
                                        settings: settings.settings,
                                        isStale: engine.isStale)
         for entry in hosted {
-            let slice = StatusItemController.slice(model, readout: entry.readout)
-            entry.content.update(with: slice)
+            entry.content.update(with: model)
             entry.item.length = entry.content.intrinsicContentSize.width
-            entry.item.button?.setAccessibilityValue(slice.accessibilityDescription)
+            entry.item.button?.setAccessibilityValue(model.accessibilityDescription)
         }
-    }
-
-    /// The whole-bar model narrowed to the one readout an item draws.
-    ///
-    /// A slice of the finished model rather than a second, per-item build of it: the
-    /// item then draws exactly what it would have drawn in the combined bar, including
-    /// the joint normalisation a paired metric's graphs depend on, and each item still
-    /// redraws only when its own slice changes.
-    static func slice(_ model: MenuBarRenderModel, readout: UUID?) -> MenuBarRenderModel {
-        guard let readout else { return model }
-        var slice = model
-        slice.items = model.items.filter { $0.id == readout }
-        return slice
     }
 
     // MARK: Input

@@ -36,12 +36,6 @@ public struct MenuBarLine: Equatable, Sendable {
 public struct MenuBarItemRender: Equatable, Sendable {
     public var id: UUID
     public var style: MenuBarDisplayStyle
-    /// The colour the user chose for this metric, or nil if they have left it alone.
-    ///
-    /// Carried as data rather than resolved in the view from the theme, because the
-    /// status item redraws only when this model changes: a view that read the palette
-    /// itself would keep drawing yesterday's colour until some *other* field moved.
-    public var tint: ThemeColor?
     /// Short caption such as "CPU", drawn beside the readout. Only ever set for the
     /// styles that draw no number of their own, and only when the user asks for it.
     public var caption: String?
@@ -54,10 +48,10 @@ public struct MenuBarItemRender: Equatable, Sendable {
     public var accessibilityLabel: String
     /// Charge as 0...1, for the `.battery` style. Nil on every other readout.
     ///
-    /// The three battery fields travel here for the same reason `tint` does, and the
-    /// reason matters more for these: the status item redraws only when this model
-    /// changes, so a battery drawn from a value the view fetched itself would keep
-    /// showing the charge from whenever some *other* readout last moved.
+    /// The three battery fields travel here rather than being fetched by the view: the
+    /// status item redraws only when this model changes, so a battery drawn from a
+    /// value the view fetched itself would keep showing the charge from whenever some
+    /// *other* readout last moved.
     public var batteryCharge: Double?
     /// Power is going in. Drawn as a bolt over the fill.
     public var isBatteryCharging: Bool
@@ -113,8 +107,7 @@ public struct MenuBarItemRender: Equatable, Sendable {
     /// Where the indicator turns red. 20% is where macOS itself first warns.
     public static let lowBatteryFraction = 0.20
 
-    public init(id: UUID, style: MenuBarDisplayStyle,
-                tint: ThemeColor? = nil, caption: String?,
+    public init(id: UUID, style: MenuBarDisplayStyle, caption: String?,
                 primary: MenuBarLine, secondary: MenuBarLine? = nil,
                 isUnavailable: Bool, symbolName: String?,
                 accessibilityLabel: String,
@@ -126,7 +119,6 @@ public struct MenuBarItemRender: Equatable, Sendable {
                 level: Double? = nil) {
         self.id = id
         self.style = style
-        self.tint = tint
         self.caption = caption
         self.primary = primary
         self.secondary = secondary
@@ -425,11 +417,6 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         MenuBarItemRender(
             id: config.id,
             style: config.style,
-            // Only a colour the user actually picked. The shipped metric colours stay
-            // out of the menu bar: it is a monochrome surface that Apple's own extras
-            // never colour, and a CPU readout that is blue because blue is what CPU
-            // charts happen to be is noise the user never asked for.
-            tint: settings.theme.color(for: config.metric.requiredSource),
             caption: caption,
             primary: primary,
             secondary: secondary,

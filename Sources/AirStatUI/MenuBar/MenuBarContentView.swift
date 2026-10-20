@@ -663,12 +663,8 @@ public final class MenuBarContentView: NSView {
             if item.isUnavailable {
                 return base.withAlphaComponent(base.alphaComponent * Layout.unavailableAlpha)
             }
-            // The menu bar is a monochrome surface and stays one by default. A colour
-            // appears here only because the user went and chose one for this metric,
-            // and it does not change afterwards: a readout that turned yellow, then
-            // orange, then red as the number climbed was saying what the number
-            // already said, in the one place on screen with no room to say anything.
-            return item.tint.map(NSColor.init(themeColor:))
+            // The menu bar is a monochrome surface, as Apple's own extras are.
+            return nil
         }
     }
 

@@ -29,7 +29,7 @@ public enum Logo {
         guard let url = resources.url(forResource: "Logo", withExtension: "png"),
               let image = NSImage(contentsOf: url) else { return nil }
         image.isTemplate = true
-        image.accessibilityDescription = "AirStats"
+        image.accessibilityDescription = "Bento Stats"
         return image
     }()
 }

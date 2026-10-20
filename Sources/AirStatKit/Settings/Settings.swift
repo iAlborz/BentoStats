@@ -248,13 +248,10 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
 }
 
 public struct MenuBarSettings: Sendable, Codable, Equatable {
+    /// The readouts, in order. Always drawn together in one menu bar item.
     public var items: [MenuBarItemConfig]
-    /// Use a single status item for everything (tidier, survives menu bar crowding)
-    /// versus one status item per metric (individually re-orderable by the user).
-    public var usesCombinedItem: Bool
-    /// Off, and the app puts nothing in the menu bar at all: the desktop widget is
-    /// the only surface left, and Settings is reached by launching the app again, by
-    /// its hot key, or from the widget's context menu.
+    /// Off, and the app puts nothing in the menu bar at all: Settings is reached by
+    /// launching the app again or by its hot key.
     public var isVisible: Bool
 
     /// Numbers are always set in a fixed-width face. Previously a toggle; a column of
@@ -278,10 +275,8 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     public static let hidesIdleItems = false
 
     public init(items: [MenuBarItemConfig] = MenuBarSettings.defaultItems,
-                usesCombinedItem: Bool = true,
                 isVisible: Bool = true) {
         self.items = items
-        self.usesCombinedItem = usesCombinedItem
         self.isVisible = isVisible
     }
 
@@ -315,7 +310,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }
 
     private enum CodingKeys: String, CodingKey {
-        case items, usesCombinedItem, isVisible
+        case items, isVisible
     }
 
     /// Files written before the packing settings were removed still load: the keys
@@ -326,7 +321,6 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
         let decodedItems = c.value(.items, or: MenuBarSettings.defaultItems)
         // An empty menu bar would leave the user with no way back into the app.
         items = decodedItems.isEmpty ? MenuBarSettings.defaultItems : decodedItems.map { $0.sanitized() }
-        usesCombinedItem = c.value(.usesCombinedItem, or: true)
         isVisible = c.value(.isVisible, or: true)
     }
 }
@@ -369,134 +363,70 @@ public enum PanelModule: String, Sendable, Codable, CaseIterable, Equatable, Has
 
 /// Which layout the click-down panel draws.
 public enum PanelStyle: String, Sendable, Codable, CaseIterable, Equatable {
-    /// The first design: one row per module, and a click on a heading unfolds the
-    /// module's detail under it.
-    case original
-    /// One row per module, drawn as a meter where the reading is a fraction, with the
-    /// detail in a card beside the panel while a row is hovered.
-    case list
-    /// A grid of cards in different sizes, with the same detail card on hover.
+    /// A grid of cards in different sizes, with a detail card beside the panel on hover.
     case bento
+    /// A smaller grid of the cards' compact designs, arranged on its own.
+    case bentoSmall
     /// The inside of a MacBook seen from above, every part showing how hard it is
     /// working and how hot it is, with the bento detail on hover.
     case macbook
-    /// Every bento card in every size, one card and style at a time, for checking how
-    /// each one lays out.
+    /// Every design of one bento card at a time, for checking how each lays out.
     case debug
 
     public var label: String {
         switch self {
-        case .original: return "Original"
-        case .list: return "List"
         case .bento: return "Bento"
+        case .bentoSmall: return "Bento Small"
         case .macbook: return "MacBook"
         case .debug: return "Debug"
         }
     }
-
-    /// Whether hovering opens the bento-style detail of tiles rather than a module row.
-    public var usesCardDetail: Bool { self == .bento || self == .macbook || self == .debug }
 }
 
 /// What the panel remembers between openings.
 ///
 /// The panel used to be configurable — module order, which modules were on, width,
-/// process row count and sort, sparklines, focus behaviour. All of it is gone: the
-/// panel is a glance surface reached by one click, and a settings pane with eight
-/// controls governing it was more configuration than the surface earns. What remains
-/// is the one piece of state the user still sets, and they set it by clicking a
-/// heading in the panel itself rather than by opening a window.
+/// process row count and sort, sparklines, focus behaviour, and then which modules were
+/// unfolded in its first, list-shaped layouts. What remains is the layout, and the two
+/// bento arrangements, which the user sets in the panel itself rather than here.
 public struct PanelSettings: Sendable, Codable, Equatable {
-    /// Modules the user has collapsed to just their summary row.
-    public var collapsedModules: Set<PanelModule>
-    /// Draw the history chart under an expanded module's rows.
+    /// Draw the module's history in the detail beside the panel.
     public var showsHistoryChart: Bool
-    /// The panel's layout. The one choice of how the panel looks that is left to the
-    /// user, because the three are different ways of reading it rather than tweaks.
+    /// The panel's layout.
     public var style: PanelStyle
-    /// The bento style's cards, in order, each with its size and style. Arranged in the
+    /// The bento layout's cards, in order, each in one of its designs. Arranged in the
     /// panel itself, in its edit mode.
     public var bentoTiles: [BentoTile]
+    /// Bento Small's cards, arranged the same way and kept apart from Bento's.
+    public var bentoSmallTiles: [BentoTile]
 
-    /// Fixed layout, previously the `width` setting. 380pt gives a detail grid three
-    /// columns and a process name room beside its icon, and still leaves the panel
-    /// narrower than the narrowest MacBook screen at any status item position.
+    /// The narrowest a detail or panel window starts at before it has measured itself.
     public static let width: Double = 380
-    /// Previously `processRowCount` and `processSortKey`.
-    public static let processRowCount = 5
-    public static let processSortKey: ProcessSortKey = .cpu
-    /// Previously `showsSparklines`. The header trace is gone; a module's series is
-    /// drawn once, as the history chart under its rows.
-    public static let showsSparklines = false
-    /// Previously `staysOpenOnFocusLoss`. The panel closes when it loses focus, which
-    /// is what a menu bar popover does and what clicking outside one means.
-    public static let staysOpenOnFocusLoss = false
 
-    public init(collapsedModules: Set<PanelModule> = PanelSettings.defaultCollapsed,
-                showsHistoryChart: Bool = true, style: PanelStyle = .list,
-                bentoTiles: [BentoTile] = BentoLayout.defaultTiles) {
-        self.collapsedModules = Self.accordion(collapsedModules)
+    public init(showsHistoryChart: Bool = true, style: PanelStyle = .bento,
+                bentoTiles: [BentoTile] = BentoLayout.defaultTiles,
+                bentoSmallTiles: [BentoTile] = BentoLayout.defaultSmallTiles) {
         self.showsHistoryChart = showsHistoryChart
         self.style = style
         self.bentoTiles = BentoLayout.sanitized(bentoTiles)
+        self.bentoSmallTiles = BentoLayout.sanitized(bentoSmallTiles)
     }
 
-    /// The collapsed set after a click on `module`'s header.
-    ///
-    /// One module open at a time. Opening a second one used to stack its detail under
-    /// the first, and with charts under every module the panel ran off a 13-inch
-    /// screen by the third click. Opening a module now closes whichever one was open,
-    /// so the panel is never taller than the list plus one detail.
-    public func collapsedModules(toggling module: PanelModule) -> Set<PanelModule> {
-        if collapsedModules.contains(module) {
-            return Set(PanelModule.allCases).subtracting([module])
-        }
-        return Set(PanelModule.allCases)
-    }
-
-    /// At most one module open. A settings file written before the accordion may hold
-    /// several; the first in panel order keeps its place and the rest close.
-    static func accordion(_ collapsed: Set<PanelModule>) -> Set<PanelModule> {
-        guard let open = PanelModule.allCases.first(where: { !collapsed.contains($0) }) else {
-            return collapsed
-        }
-        return Set(PanelModule.allCases).subtracting([open])
-    }
-
-    /// Every module starts collapsed.
-    ///
-    /// A collapsed module still shows its heading and its headline value, so nothing
-    /// glanceable is lost — only the detail rows are hidden. Collapsed it reads as a
-    /// summary you can scan, and the detail is one click away where the user actually
-    /// wants it.
-    ///
-    /// CPU and Memory used to be left open, on the reasoning that a panel opening to
-    /// nothing but headings looks inert. It reads as an inconsistency instead: two
-    /// modules are already showing detail nobody asked for, the panel opens at an
-    /// awkward in-between height, and the two that happen to be open are the two
-    /// someone chose years ago rather than the two this user cares about. Uniformly
-    /// closed is the shorter, quieter, more predictable panel — and every module is
-    /// one click from open.
-    public static let defaultCollapsed: Set<PanelModule> = Set(PanelModule.allCases)
-
-    /// Every module, in declaration order. Was a stored order plus an enabled set;
-    /// with the ordering and toggling UI gone there is one canonical arrangement, and
-    /// a new release's modules appear without a stored order having to be migrated.
+    /// Every module, in declaration order.
     public var visibleModules: [PanelModule] { PanelModule.allCases }
 
     private enum CodingKeys: String, CodingKey {
-        case collapsedModules, showsHistoryChart, style, bentoTiles
+        case showsHistoryChart, style, bentoTiles, bentoSmallTiles
     }
 
-    /// Decoded leniently, and settings files written before the panel pane was removed
-    /// still load: the keys they carry for order, width and the rest are simply not
-    /// read, and an unknown key has never been an error here.
+    /// Decoded leniently: settings files written before carry keys that are no longer
+    /// read, and a layout that no longer exists, Original or List, opens as Bento.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        collapsedModules = Self.accordion(c.value(.collapsedModules, or: PanelSettings.defaultCollapsed))
         showsHistoryChart = c.value(.showsHistoryChart, or: true)
-        style = c.value(.style, or: .list)
+        style = c.value(.style, or: .bento)
         bentoTiles = BentoLayout.sanitized(c.value(.bentoTiles, or: BentoLayout.defaultTiles))
+        bentoSmallTiles = BentoLayout.sanitized(c.value(.bentoSmallTiles, or: BentoLayout.defaultSmallTiles))
     }
 }
 
@@ -556,153 +486,6 @@ public struct ChartSettings: Sendable, Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         historyDuration = min(max(c.value(.historyDuration, or: 300.0), 30), 3600)
         style = c.value(.style, or: ChartStyle.filledLine)
-    }
-}
-
-// MARK: - Desktop widget
-
-public enum DesktopWidgetCorner: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    case topLeft, topRight, bottomLeft, bottomRight, free
-
-    public var label: String {
-        switch self {
-        case .topLeft: return "Top Left"
-        case .topRight: return "Top Right"
-        case .bottomLeft: return "Bottom Left"
-        case .bottomRight: return "Bottom Right"
-        case .free: return "Custom Position"
-        }
-    }
-}
-
-/// Which stack of windows the desktop widget belongs to.
-///
-/// This was a single "float above everything" switch, which could only ever say
-/// *how far up*. A readout pinned to the wallpaper is a different thing from a HUD:
-/// it is furniture the desktop happens to have, visible when nothing is covering it
-/// and never once in the way of anything.
-public enum DesktopWidgetDepth: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    /// Over every window, including a full-screen app.
-    case aboveEverything
-    /// A normal floating utility window: above the app you are using, under a
-    /// full-screen one.
-    case withWindows
-    /// Behind every window, sitting on the desktop picture.
-    case wallpaper
-
-    public var label: String {
-        switch self {
-        case .aboveEverything: return "Above Everything"
-        case .withWindows: return "With Other Windows"
-        case .wallpaper: return "On the Wallpaper"
-        }
-    }
-
-    public var detail: String {
-        switch self {
-        case .aboveEverything: return "Stays visible over full-screen apps."
-        case .withWindows: return "A normal floating window."
-        case .wallpaper: return "Behind every window, on the desktop picture."
-        }
-    }
-}
-
-public struct DesktopWidgetSettings: Sendable, Codable, Equatable {
-    public var isEnabled: Bool
-    public var modules: [PanelModule]
-    public var corner: DesktopWidgetCorner
-    /// Saved frame in screen coordinates, used when `corner == .free`.
-    public var originX: Double?
-    public var originY: Double?
-    public var width: Double
-    public var opacity: Double
-    /// Let clicks pass through to whatever is beneath the desktop widget.
-    public var isClickThrough: Bool
-    /// Which stack of windows the desktop widget belongs to.
-    public var depth: DesktopWidgetDepth
-    public var showsOnAllSpaces: Bool
-    /// Fade the desktop widget down until the pointer is near it.
-    public var dimsWhenInactive: Bool
-    public var inactiveOpacity: Double
-    public var isCompact: Bool
-    /// A 24 hour silhouette under each module that has a series to draw.
-    public var showsHistoryChart: Bool
-
-    public init(isEnabled: Bool = false,
-                modules: [PanelModule] = [.cpu, .memory, .network],
-                corner: DesktopWidgetCorner = .topRight,
-                originX: Double? = nil,
-                originY: Double? = nil,
-                width: Double = 220,
-                opacity: Double = 0.9,
-                isClickThrough: Bool = false,
-                depth: DesktopWidgetDepth = .aboveEverything,
-                showsOnAllSpaces: Bool = true,
-                dimsWhenInactive: Bool = true,
-                inactiveOpacity: Double = 0.55,
-                isCompact: Bool = true,
-                showsHistoryChart: Bool = false) {
-        self.isEnabled = isEnabled
-        self.modules = modules
-        self.corner = corner
-        self.originX = originX
-        self.originY = originY
-        self.width = width
-        self.opacity = opacity
-        self.isClickThrough = isClickThrough
-        self.depth = depth
-        self.showsOnAllSpaces = showsOnAllSpaces
-        self.dimsWhenInactive = dimsWhenInactive
-        self.inactiveOpacity = inactiveOpacity
-        self.isCompact = isCompact
-        self.showsHistoryChart = showsHistoryChart
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case isEnabled, modules, corner, originX, originY, width, opacity
-        case isClickThrough, depth, showsOnAllSpaces
-        case dimsWhenInactive, inactiveOpacity, isCompact, showsHistoryChart
-    }
-
-    /// Keys this type still reads but no longer writes. Kept out of `CodingKeys` so
-    /// the synthesized encoder cannot resurrect one.
-    private enum LegacyKeys: String, CodingKey {
-        case floatsAboveEverything
-    }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        isEnabled = c.value(.isEnabled, or: false)
-        // Deduplicated, because the desktop widget identifies its rows by the module itself.
-        // A hand-edited file listing "cpu" twice gives SwiftUI two views with the same
-        // identity in one `ForEach`, which it resolves by animating them into each
-        // other and dropping one at random.
-        var seen: Set<PanelModule> = []
-        let decodedModules = c.value(.modules, or: [PanelModule.cpu, .memory, .network])
-            .filter { seen.insert($0).inserted }
-        modules = decodedModules.isEmpty ? [.cpu, .memory, .network] : decodedModules
-        corner = c.value(.corner, or: DesktopWidgetCorner.topRight)
-        originX = try? c.decodeIfPresent(Double.self, forKey: .originX)
-        originY = try? c.decodeIfPresent(Double.self, forKey: .originY)
-        width = min(max(c.value(.width, or: 220.0), 160), 480)
-        // Never let a stored opacity make the desktop widget invisible and unrecoverable.
-        opacity = min(max(c.value(.opacity, or: 0.9), 0.2), 1)
-        isClickThrough = c.value(.isClickThrough, or: false)
-        // `floatsAboveEverything` is what shipped through 1.2.1. A file written by
-        // that build has the bool and not the enum, and its two values are the first
-        // two cases, so it converts without asking the user anything.
-        if let stored = try? c.decodeIfPresent(DesktopWidgetDepth.self, forKey: .depth) {
-            depth = stored
-        } else {
-            let legacy = try? decoder.container(keyedBy: LegacyKeys.self)
-            let floated = legacy?.value(.floatsAboveEverything, or: true) ?? true
-            depth = floated ? .aboveEverything : .withWindows
-        }
-        showsOnAllSpaces = c.value(.showsOnAllSpaces, or: true)
-        dimsWhenInactive = c.value(.dimsWhenInactive, or: true)
-        inactiveOpacity = min(max(c.value(.inactiveOpacity, or: 0.55), 0.15), 1)
-        isCompact = c.value(.isCompact, or: true)
-        showsHistoryChart = c.value(.showsHistoryChart, or: false)
     }
 }
 
@@ -840,16 +623,12 @@ public struct KeyboardShortcut: Sendable, Codable, Equatable, Hashable {
 
 public enum ShortcutAction: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
     case togglePanel = "togglePanel"
-    // The raw value is what a saved binding is keyed by on disk, so it stays
-    // "toggleOverlay" even though the feature is now the desktop widget.
-    case toggleDesktopWidget = "toggleOverlay"
     case toggleMenuBarItem = "toggleMenuBarItem"
     case openSettings = "openSettings"
 
     public var label: String {
         switch self {
         case .togglePanel: return "Show / Hide Panel"
-        case .toggleDesktopWidget: return "Show / Hide Desktop Widget"
         case .toggleMenuBarItem: return "Show / Hide Menu Bar Item"
         case .openSettings: return "Open Settings"
         }
@@ -886,8 +665,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     public var throttlesWhenOccluded: Bool
     /// Suspend sampling entirely while on battery below a threshold.
     public var pausesOnLowPower: Bool
-    /// Fetch the public IP address. One of the two features that leave the machine,
-    /// the other being Sparkle's update check, which keeps its own preference.
+    /// Fetch the public IP address: the one feature that leaves the machine.
     public var fetchesPublicIP: Bool
     public var showsDockIcon: Bool
 
@@ -941,96 +719,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
 
 // MARK: - Root
 
-// MARK: - Theme
-
-/// One user-chosen colour, stored as sRGB components.
-///
-/// Components rather than a hex string because that is what `ColorPicker` hands back
-/// and what `NSColor` wants, and round-tripping through hex would quantise a colour
-/// the user picked to eight bits per channel every time the file was written.
-public struct ThemeColor: Sendable, Codable, Equatable, Hashable {
-    public var red: Double
-    public var green: Double
-    public var blue: Double
-
-    public init(red: Double, green: Double, blue: Double) {
-        self.red = min(max(red, 0), 1)
-        self.green = min(max(green, 0), 1)
-        self.blue = min(max(blue, 0), 1)
-    }
-
-    private enum CodingKeys: String, CodingKey { case red, green, blue }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(red: c.value(.red, or: 0.5),
-                  green: c.value(.green, or: 0.5),
-                  blue: c.value(.blue, or: 0.5))
-    }
-}
-
-/// User overrides for the app's colours.
-///
-/// Every field is optional, and nil means "use what the app shipped". That is the
-/// whole design: the defaults are Apple's semantic system colours, which already
-/// track light, dark, increased-contrast and vibrancy correctly, and a stored copy
-/// of one of them would freeze it at whatever it resolved to on the day it was
-/// picked. So an untouched install stores nothing and keeps following the system;
-/// only a colour the user deliberately chose is written down.
-public struct ThemeSettings: Sendable, Codable, Equatable {
-    /// Per-metric identity colours, keyed by `CollectorID.rawValue`.
-    ///
-    /// Keyed by the raw string rather than by `CollectorID` so a collector that is
-    /// renamed or removed in a later build leaves an ignorable entry behind instead
-    /// of failing the whole decode.
-    ///
-    /// The one thing this type stores. The accent colour was editable here too, and
-    /// should not have been: selection is a system-wide choice the user already made
-    /// in System Settings, and an app that quietly disagrees with it is not theming
-    /// itself, it is ignoring them. A previously stored `accent` key decodes to
-    /// nothing and is dropped on the next save.
-    public var metrics: [String: ThemeColor]
-
-    public init(metrics: [String: ThemeColor] = [:]) {
-        self.metrics = metrics
-    }
-
-    public func color(for id: CollectorID) -> ThemeColor? { metrics[id.rawValue] }
-
-    public mutating func setColor(_ color: ThemeColor?, for id: CollectorID) {
-        metrics[id.rawValue] = color
-    }
-
-    /// Puts every metric on one colour, or back on the colours the app ships with.
-    ///
-    /// Nil clears the whole dictionary rather than writing nine copies of a default:
-    /// an absent entry is what makes a metric follow Apple's semantic colour through
-    /// appearance and contrast changes, and a stored copy of that colour would not.
-    public mutating func setAllColors(_ color: ThemeColor?) {
-        guard let color else { metrics.removeAll(); return }
-        for id in CollectorID.allCases { metrics[id.rawValue] = color }
-    }
-
-    /// The single colour every metric is currently set to, or nil if any is on its
-    /// default or differs from the rest.
-    public var uniformColor: ThemeColor? {
-        var shared: ThemeColor?
-        for id in CollectorID.allCases {
-            guard let color = metrics[id.rawValue] else { return nil }
-            if let shared, shared != color { return nil }
-            shared = color
-        }
-        return shared
-    }
-
-    private enum CodingKeys: String, CodingKey { case metrics }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        metrics = c.value(.metrics, or: [:])
-    }
-}
-
 public struct Settings: Sendable, Codable, Equatable {
     /// Bumped when a migration is needed. Unknown future versions are loaded
     /// leniently rather than discarded.
@@ -1039,10 +727,8 @@ public struct Settings: Sendable, Codable, Equatable {
     public var menuBar: MenuBarSettings
     public var panel: PanelSettings
     public var charts: ChartSettings
-    public var desktopWidget: DesktopWidgetSettings
     public var notifications: NotificationSettings
     public var shortcuts: ShortcutSettings
-    public var theme: ThemeSettings
 
     public static let currentSchemaVersion = 1
 
@@ -1051,26 +737,19 @@ public struct Settings: Sendable, Codable, Equatable {
                 menuBar: MenuBarSettings = .init(),
                 panel: PanelSettings = .init(),
                 charts: ChartSettings = .init(),
-                desktopWidget: DesktopWidgetSettings = .init(),
                 notifications: NotificationSettings = .init(),
-                shortcuts: ShortcutSettings = .init(),
-                theme: ThemeSettings = .init()) {
+                shortcuts: ShortcutSettings = .init()) {
         self.schemaVersion = schemaVersion
         self.general = general
         self.menuBar = menuBar
         self.panel = panel
         self.charts = charts
-        self.desktopWidget = desktopWidget
         self.notifications = notifications
         self.shortcuts = shortcuts
-        self.theme = theme
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, general, menuBar, panel, charts, notifications
-        case shortcuts, theme
-        // Stored under the old name so an installed copy keeps its settings.
-        case desktopWidget = "overlay"
+        case schemaVersion, general, menuBar, panel, charts, notifications, shortcuts
     }
 
     public init(from decoder: Decoder) throws {
@@ -1080,17 +759,15 @@ public struct Settings: Sendable, Codable, Equatable {
         menuBar = c.value(.menuBar, or: MenuBarSettings())
         panel = c.value(.panel, or: PanelSettings())
         charts = c.value(.charts, or: ChartSettings())
-        desktopWidget = c.value(.desktopWidget, or: DesktopWidgetSettings())
         notifications = c.value(.notifications, or: NotificationSettings())
         shortcuts = c.value(.shortcuts, or: ShortcutSettings())
-        theme = c.value(.theme, or: ThemeSettings())
     }
 
     /// Collectors that must run to satisfy everything currently on screen.
     ///
     /// This drives the engine's enabled-source set, and is why a user who only
     /// wants a CPU readout never pays for IOKit battery or SMC sensor polling.
-    public func requiredSources(panelVisible: Bool, desktopWidgetVisible: Bool) -> Set<CollectorID> {
+    public func requiredSources(panelVisible: Bool) -> Set<CollectorID> {
         var sources = Set<CollectorID>()
         for item in menuBar.enabledItems { sources.insert(item.metric.requiredSource) }
         if panelVisible {
@@ -1103,9 +780,6 @@ public struct Settings: Sendable, Codable, Equatable {
             for module in panel.visibleModules where module != .processes {
                 sources.insert(module.requiredSource)
             }
-        }
-        if desktopWidgetVisible {
-            for module in desktopWidget.modules { sources.insert(module.requiredSource) }
         }
         if notifications.isEnabled {
             for rule in notifications.enabledRules { sources.insert(rule.metric.requiredSource) }

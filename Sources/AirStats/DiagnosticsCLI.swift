@@ -44,13 +44,12 @@ enum DiagnosticsCLI {
       --interval S    seconds between samples (default 1)
       --verbose       print every sample, not just the last
 
-    Render surfaces:  menuBar, panel, desktopWidget, settings   (omit for all)
+    Render surfaces:  menuBar, panel, settings   (omit for all)
     Render flags:
       --out DIR       output directory (default ./render)
       --scenario S    nominal | underLoad | charging | degraded | pending  (omit for all)
       --light / --dark   appearance (omit for both)
       --scale N       backing scale, repeatable (omit for 1 and 2)
-      --tint C        metric colour as #RRGGBB or r,g,b; the panel stays monochrome
 
     Examples:
       AirStats --probe cpu --repeat 5 --interval 1 --verbose

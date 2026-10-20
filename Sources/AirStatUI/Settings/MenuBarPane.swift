@@ -36,18 +36,6 @@ struct MenuBarPane: View {
             }
             .disabled(!isVisible)
 
-            Section {
-                Toggle("Combine into one menu bar item",
-                       isOn: settings.binding(\.menuBar.usesCombinedItem))
-            } header: {
-                Text("Layout")
-            } footer: {
-                Text("One item keeps the readouts together and in order. Separate items "
-                     + "can be rearranged among your other menu bar icons, and macOS "
-                     + "hides them one at a time when the bar runs out of room.")
-                .font(.callout)
-                .foregroundStyle(Design.Palette.secondaryText)
-            }
             .disabled(!isVisible)
 
         }

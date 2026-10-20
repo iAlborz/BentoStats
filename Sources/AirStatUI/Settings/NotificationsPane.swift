@@ -59,7 +59,7 @@ struct NotificationsPane: View {
                 SettingsFootnote("Waiting for your answer to the macOS permission prompt.")
             case .unavailable:
                 VStack(alignment: .leading, spacing: Design.Space.s) {
-                    SettingsCaution("macOS is not allowing AirStats to send notifications, "
+                    SettingsCaution("macOS is not allowing Bento Stats to send notifications, "
                                     + "so these rules cannot alert you.")
                     Button("Open Notification Settings…") { openSystemNotificationSettings() }
                 }
@@ -73,7 +73,7 @@ struct NotificationsPane: View {
     /// the moment they said they want notifications.
     private func askIfNeeded(_ enabled: Bool) {
         guard enabled else { return }
-        authority?.request("AirStats alerts you when a metric crosses a threshold you set.")
+        authority?.request("Bento Stats alerts you when a metric crosses a threshold you set.")
     }
 
     private func openSystemNotificationSettings() {

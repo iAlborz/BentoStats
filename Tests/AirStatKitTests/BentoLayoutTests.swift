@@ -103,14 +103,28 @@ struct BentoLayoutTests {
         #expect(BentoTileSize.nearest(columns: 2, rows: 2, in: BentoTileKind.quit.sizes) == .wide)
     }
 
-    @Test("the MacBook style is saved and read back, and opens the card detail on hover")
-    func macBookStyle() throws {
-        var panel = PanelSettings()
-        panel.style = .macbook
-        let decoded = try JSONDecoder().decode(PanelSettings.self, from: JSONEncoder().encode(panel))
-        #expect(decoded.style == .macbook)
-        #expect(PanelStyle.macbook.usesCardDetail)
-        #expect(PanelStyle.bento.usesCardDetail)
-        #expect(!PanelStyle.list.usesCardDetail)
+    @Test("every layout is saved and read back, and the retired ones open as Bento")
+    func layouts() throws {
+        for style in PanelStyle.allCases {
+            var panel = PanelSettings()
+            panel.style = style
+            let decoded = try JSONDecoder().decode(PanelSettings.self, from: JSONEncoder().encode(panel))
+            #expect(decoded.style == style)
+        }
+        for retired in ["original", "list"] {
+            let json = #"{"style":"\#(retired)"}"#
+            #expect(try JSONDecoder().decode(PanelSettings.self, from: Data(json.utf8)).style == .bento)
+        }
+        #expect(PanelSettings().style == .bento)
+    }
+
+    @Test("Bento Small starts as the compact designs, three full rows of five")
+    func bentoSmallDefault() {
+        let tiles = BentoLayout.defaultSmallTiles
+        #expect(tiles.allSatisfy { $0.size == .small || $0.size == .wide })
+        let packed = BentoLayout.pack(tiles, columns: BentoLayout.smallColumns)
+        #expect(packed.rows == 3)
+        #expect(tiles.reduce(0) { $0 + $1.size.columns * $1.size.rows } == 15)
+        #expect(PanelSettings().bentoSmallTiles == tiles)
     }
 }

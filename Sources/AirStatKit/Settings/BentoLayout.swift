@@ -266,6 +266,27 @@ public enum BentoLayout {
                   kind: kind)
     }
 
+    /// Bento Small's grid, five cells across.
+    public static let smallColumns = 5
+
+    /// Bento Small as it starts: the cards' compact designs, one cell or two wide,
+    /// filling three rows of five.
+    ///
+    ///     ┌─────────┬─────────┬────┐
+    ///     │CPU Load │GPU Load │Mem │
+    ///     ├─────────┼─────────┼────┤
+    ///     │ Network │ Battery │SSD │
+    ///     ├────┬────┴────┬────┼────┤
+    ///     │Temp│  Fans   │ ⚙︎  │ ⏻  │
+    ///     └────┴─────────┴────┴────┘
+    public static let defaultSmallTiles: [BentoTile] = [
+        BentoVariant.cpuLoad, .gpuLoad, .memoryPressure, .networkSpeeds, .batteryCharge, .diskSpace,
+        .thermalSmall, .thermalFans, .settings, .quit,
+    ].enumerated().map { index, variant in
+        BentoTile(id: UUID(uuidString: String(format: "00000000-0000-0000-0002-%012d", index + 1))!,
+                  kind: variant.kind, variant: variant)
+    }
+
     /// Each card's place, in the order given, and how many rows the grid needs.
     public static func pack(_ tiles: [BentoTile], columns: Int = columns)
         -> (placements: [UUID: BentoPlacement], rows: Int) {

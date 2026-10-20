@@ -78,7 +78,7 @@ struct LowPowerPauseTests {
         #expect(engine.activity == .menuBar)
     }
 
-    @Test("a surface the user opened keeps sampling through the pause")
+    @Test("the panel keeps sampling through the pause")
     func openSurfacesOutrankThePause() {
         let (engine, _) = makeEngine(pausesOnLowPower: true)
         engine.setLowPowerMode(true)
@@ -86,8 +86,6 @@ struct LowPowerPauseTests {
         #expect(engine.activity == .panel)
         engine.setPanelVisible(false)
         #expect(engine.activity == .suspended)
-        engine.setDesktopWidgetVisible(true)
-        #expect(engine.activity == .desktopWidget)
     }
 
     @Test("the pause outranks the occlusion throttle")
