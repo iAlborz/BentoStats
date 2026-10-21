@@ -216,16 +216,14 @@ struct MacBookView: View {
             face.fill(Tone.chipFace)
             face.strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75)
             VStack(spacing: 5) {
-                // The chip's name across its top, the way Apple prints it.
-                HStack(spacing: 1.5) {
-                    Image(systemName: "apple.logo").font(.system(size: 7, weight: .semibold))
-                    Text(Self.chipName(engine.system.value?.chipName))
-                        .font(.system(size: 7.5, weight: .semibold))
-                        .tracking(0.3)
-                }
-                .foregroundStyle(Color(white: 0.78))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                // The chip's name across its top, the way Apple prints it, without the
+                // logo, which Apple does not allow other apps to show.
+                Text(Self.chipName(engine.system.value?.chipName))
+                    .font(.system(size: 7.5, weight: .semibold))
+                    .tracking(0.3)
+                    .foregroundStyle(Color(white: 0.78))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 cpuCores(performance: performance, efficiency: efficiency)
                     .frame(height: 38)
                     .hoverRegion(.cpu, layout: layout)
@@ -502,7 +500,7 @@ struct MacBookView: View {
         BentoGrid.palette(module)
     }
 
-    /// "M1 Max" out of "Apple M1 Max"; the logo beside it already says Apple.
+    /// "M1 Max" out of "Apple M1 Max": on the board of a Mac, the chip is plainly Apple's.
     private static func chipName(_ name: String?) -> String {
         guard let name else { return "" }
         return name.hasPrefix("Apple ") ? String(name.dropFirst(6)) : name

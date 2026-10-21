@@ -34,13 +34,13 @@ struct SettingsDecodingTests {
         #expect(!settings.menuBar.items.isEmpty)
     }
 
-    @Test("a fresh install opens at login, an existing one keeps its answer")
+    @Test("a fresh install waits to be asked to open at login, an existing one keeps its answer")
     func launchAtLoginDefault() throws {
-        // The shipped default, which is what a Mac with no settings file gets.
-        #expect(GeneralSettings().launchAtLogin)
-        // A file that already says no must stay no. The default changed after release,
-        // and re-enabling a login item someone deliberately turned off would be the
-        // worst possible reading of "default it to on".
+        // The shipped default, which is what a Mac with no settings file gets: the Mac
+        // App Store does not allow an app to start at login unasked.
+        #expect(GeneralSettings().launchAtLogin == false)
+        // A file that already says yes or no keeps it.
+        #expect(try decode(#"{"general":{"launchAtLogin":true}}"#).general.launchAtLogin)
         #expect(try decode(#"{"general":{"launchAtLogin":false}}"#).general.launchAtLogin == false)
         // A file predating the key is an existing install too, so it does not opt in.
         #expect(try decode(#"{"general":{}}"#).general.launchAtLogin == false)

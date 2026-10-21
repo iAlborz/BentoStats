@@ -285,7 +285,10 @@ private func listPIDs(_ buffer: inout [pid_t], filter: UInt32, argument: UInt32)
         let bytes = buffer.withUnsafeMutableBufferPointer {
             proc_listpids(filter, argument, $0.baseAddress, Int32($0.count * pidSize))
         }
-        guard bytes > 0 else { return nil }
+        // Refused, as the App Sandbox refuses it: the same list through `sysctl`.
+        guard bytes > 0 else {
+            return errno == EPERM ? kernProcPIDs(&buffer, filter: filter, argument: argument) : nil
+        }
         let count = Int(bytes) / pidSize
         // proc_listpids truncates silently, so an exactly-full buffer means the tail
         // of the process list was dropped.

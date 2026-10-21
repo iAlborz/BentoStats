@@ -655,6 +655,8 @@ public struct ShortcutSettings: Sendable, Codable, Equatable {
 public struct GeneralSettings: Sendable, Codable, Equatable {
     /// Seconds between sampling cycles. Individual collectors may run slower.
     public var updateInterval: TimeInterval
+    /// Off until the user turns it on: the Mac App Store does not let an app start
+    /// itself at login without being asked to.
     public var launchAtLogin: Bool
     public var appearance: AppearanceMode
     public var temperatureUnit: TemperatureUnit
@@ -670,7 +672,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     public var showsDockIcon: Bool
 
     public init(updateInterval: TimeInterval = 2,
-                launchAtLogin: Bool = true,
+                launchAtLogin: Bool = false,
                 appearance: AppearanceMode = .system,
                 temperatureUnit: TemperatureUnit = .celsius,
                 networkRateUnit: NetworkRateUnit = .bytes,

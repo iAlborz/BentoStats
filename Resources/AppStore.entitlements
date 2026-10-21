@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Mac App Store build's entitlements; Scripts/appstore.sh signs with these and
+  adds the team and app identifiers from the provisioning profile.
+
+  - The sandbox, which every App Store app runs in.
+  - Outgoing connections, for the public IP lookup, which is off until the user turns
+    it on in Settings.
+  - Opening the SMC, the chip that reports the temperatures and fan speeds: the
+    sandbox closes it otherwise. A temporary exception, which App Review must accept;
+    the review notes should say why the app needs it.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.temporary-exception.iokit-user-client-class</key>
+	<array>
+		<string>AppleSMCClient</string>
+	</array>
+</dict>
+</plist>

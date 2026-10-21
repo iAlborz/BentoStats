@@ -1953,18 +1953,15 @@ private struct ChipGraphic: View {
     private func lettering(side: CGFloat, scale: CGFloat) -> some View {
         let size = side * scale
         if let name, name.hasPrefix("Apple ") {
-            // "Apple M1 Max" is set as the chip is marked: the logo and "M1" in silver,
-            // and the tier under it in that tier's colours.
+            // "Apple M1 Max" is set as the chip is marked: "M1" in silver, and the tier
+            // under it in that tier's colours. Without Apple's logo, which Apple does
+            // not allow other apps to show.
             let words = name.dropFirst("Apple ".count).split(separator: " ", maxSplits: 1)
             VStack(spacing: size * 0.02) {
-                HStack(alignment: .center, spacing: size * 0.01) {
-                    Image(systemName: "applelogo")
-                        .font(.system(size: size * 0.25, weight: .regular))
-                    Text(words.first.map(String.init) ?? "")
-                        .font(.system(size: size * 0.3, weight: .semibold))
-                        .tracking(-size * 0.005)
-                }
-                .foregroundStyle(Self.silver)
+                Text(words.first.map(String.init) ?? "")
+                    .font(.system(size: size * 0.3, weight: .semibold))
+                    .tracking(-size * 0.005)
+                    .foregroundStyle(Self.silver)
                 if words.count > 1 {
                     Text(words[1].uppercased())
                         .font(.system(size: size * 0.14, weight: .semibold))
