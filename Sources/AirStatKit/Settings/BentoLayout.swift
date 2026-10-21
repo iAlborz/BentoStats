@@ -271,15 +271,15 @@ public enum BentoLayout {
     /// filling three rows of five.
     ///
     ///     ┌─────────┬─────────┬────┐
-    ///     │CPU Load │GPU Load │Mem │
+    ///     │CPU Load │GPU Load │Temp│
     ///     ├─────────┼─────────┼────┤
-    ///     │ Network │ Battery │SSD │
-    ///     ├────┬────┴────┬────┴────┤
-    ///     │Temp│  Fans   │ ⚙︎     ⏻│
-    ///     └────┴─────────┴─────────┘
+    ///     │ Memory  │ Network │SSD │
+    ///     ├─────────┼─────────┼────┤
+    ///     │ Battery │  Fans   │ ⚙︎ ⏻│
+    ///     └─────────┴─────────┴────┘
     public static let defaultSmallTiles: [BentoTile] = [
-        BentoVariant.cpuLoad, .gpuLoad, .memoryPressure, .networkSpeeds, .batteryCharge, .diskSpace,
-        .thermalSmall, .thermalFans, .settingsWide,
+        BentoVariant.cpuLoad, .gpuLoad, .thermalSmall, .memoryStick, .networkSpeeds, .diskSpace,
+        .batteryCharge, .thermalFans, .settings,
     ].enumerated().map { index, variant in
         BentoTile(id: UUID(uuidString: String(format: "00000000-0000-0000-0002-%012d", index + 1))!,
                   kind: variant.kind, variant: variant)

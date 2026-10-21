@@ -141,24 +141,24 @@ struct MacBookView: View {
     private var fans: some View {
         let fans = engine.thermal.value?.fans ?? []
         return ZStack(alignment: .topLeading) {
-            place(fan(fans.first).hoverRegion(.thermal, layout: layout), Self.leftFan)
-            place(fan(fans.count > 1 ? fans[1] : fans.first).hoverRegion(.thermal, layout: layout),
+            place(fan(fans.first, isMirrored: false).hoverRegion(.thermal, layout: layout), Self.leftFan)
+            place(fan(fans.count > 1 ? fans[1] : fans.first, isMirrored: true).hoverRegion(.thermal, layout: layout),
                   Self.rightFan)
         }
         .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
     }
 
-    private func fan(_ fan: FanInfo?) -> some View {
+    private func fan(_ fan: FanInfo?, isMirrored: Bool) -> some View {
         let housing = RoundedRectangle(cornerRadius: 34, style: .continuous)
         return ZStack {
             housing.fill(Tone.part)
             housing.strokeBorder(Tone.edge, lineWidth: 1)
             Circle().fill(Tone.well).frame(width: 136, height: 136).offset(y: -12)
-            SpinningFan(fraction: fan?.loadFraction ?? (fan.map { min($0.currentRPM / 6000, 1) } ?? 0),
-                        isSpinning: (fan?.currentRPM ?? 0) >= 1)
+            SpinningFan(fraction: fan?.speedFraction ?? 0, isSpinning: (fan?.currentRPM ?? 0) >= 1,
+                        isMirrored: isMirrored)
                 .frame(width: 128, height: 128)
                 .offset(y: -12)
-            Text(fan.map { $0.currentRPM < 1 ? "Off" : formatter.rpm($0.currentRPM) } ?? "Fan")
+            Text(fan.map { $0.currentRPM < 1 ? "Off" : formatter.percent($0.speedFraction) } ?? "Fan")
                 .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
                 .foregroundStyle(Design.Palette.secondaryText)
                 .offset(y: 72)
@@ -567,12 +567,15 @@ private struct HoverRegion: ViewModifier {
 
 /// A fan's blades, curved, turning at a pace set by how fast the real fan is running:
 /// a slow drift at idle, a blur at full speed, still when the fan is stopped.
+///
+/// A Mac's two fans are drawn as each other's reflection: the second one's blades curve
+/// the other way, and it turns anticlockwise.
 struct SpinningFan: View {
     /// 0...1, idle to flat out.
     let fraction: Double
     let isSpinning: Bool
+    var isMirrored = false
 
-    @State private var angle: Double = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Seconds per turn, in steps, so a fan that wavers by a few RPM keeps its pace.
@@ -582,18 +585,35 @@ struct SpinningFan: View {
     }
 
     var body: some View {
+        let period = isSpinning && !reduceMotion ? self.period : nil
+        // A new rotor at each new pace, which starts turning from rest. The angle cannot
+        // live here: set back to 0 and on to 360 in one update, it would not change at
+        // all, and the fan would stop at the first change of pace.
+        FanRotor(period: period, isMirrored: isMirrored)
+            .id(period ?? 0)
+    }
+}
+
+private struct FanRotor: View {
+    let period: Double?
+    let isMirrored: Bool
+
+    @State private var angle: Double = 0
+
+    var body: some View {
         ZStack {
             FanBlades().fill(Color.white.opacity(0.38))
             FanBlades().stroke(Color.black.opacity(0.15), lineWidth: 0.5)
             Circle().fill(Color(white: 0.35)).frame(width: 34, height: 34)
             Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1).frame(width: 34, height: 34)
         }
+        .scaleEffect(x: isMirrored ? -1 : 1)
         .rotationEffect(.degrees(angle))
-        .id(isSpinning && !reduceMotion ? period : 0)
         .onAppear {
-            angle = 0
-            guard isSpinning, !reduceMotion else { return }
-            withAnimation(.linear(duration: period).repeatForever(autoreverses: false)) { angle = 360 }
+            guard let period else { return }
+            withAnimation(.linear(duration: period).repeatForever(autoreverses: false)) {
+                angle = isMirrored ? -360 : 360
+            }
         }
     }
 }

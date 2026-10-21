@@ -558,6 +558,15 @@ public struct FanInfo: Sendable, Equatable, Hashable, Identifiable {
         guard let minRPM, let maxRPM, maxRPM > minRPM else { return nil }
         return max(0, min(1, (currentRPM - minRPM) / (maxRPM - minRPM)))
     }
+
+    /// 0...1 share of the fan's top speed, what "40%" means on a fan: a fan turning at
+    /// its slowest is still running, so this does not start from the minimum. A fan that
+    /// does not report its top speed is taken to top out at 6,000 RPM, about what a
+    /// MacBook Pro's do.
+    public var speedFraction: Double {
+        let top = maxRPM.flatMap { $0 > 0 ? $0 : nil } ?? 6000
+        return max(0, min(1, currentRPM / top))
+    }
 }
 
 public struct ThermalSnapshot: Sendable, Equatable {

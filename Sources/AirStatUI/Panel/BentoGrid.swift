@@ -900,19 +900,19 @@ struct BentoGrid: View {
                 }
             } else {
                 HStack(spacing: 0) {
-                    ForEach(fans) { fan in
+                    ForEach(Array(fans.enumerated()), id: \.element.id) { index, fan in
                         VStack(spacing: Design.Space.xs) {
                             ZStack {
                                 Circle().fill(Self.fanWell)
                                 // Drawn at MacBook mode's size and scaled, so the hub
                                 // and the blades keep their proportions.
-                                fit(AnyView(SpinningFan(fraction: fan.loadFraction ?? min(fan.currentRPM / 6000, 1),
-                                                        isSpinning: fan.currentRPM >= 1)),
+                                fit(AnyView(SpinningFan(fraction: fan.speedFraction, isSpinning: fan.currentRPM >= 1,
+                                                        isMirrored: index == 1)),
                                     native: CGSize(width: 128, height: 128), in: CGSize(width: 42, height: 42))
                             }
                             .frame(width: 46, height: 46)
                             VStack(spacing: 0) {
-                                Text(fan.currentRPM < 1 ? "Off" : formatter.rpm(fan.currentRPM))
+                                Text(fanReading(fan))
                                     .font(.system(size: 14, weight: .bold).monospacedDigit())
                                     .foregroundStyle(LinearGradient(colors: [Color(nsColor: .systemCyan),
                                                                              Color(nsColor: .systemBlue)],
@@ -956,13 +956,13 @@ struct BentoGrid: View {
                     .frame(width: 26, height: 119)
                     .position(x: columns[1], y: bulb + 12.5 - 59.5)
                 ForEach(Array(fans.prefix(2).enumerated()), id: \.offset) { index, fan in
-                    coolingFan(fan, diameter: 62)
+                    coolingFan(fan, diameter: 62, isMirrored: index == 1)
                         .position(x: columns[index == 0 ? 0 : 2], y: bulb)
                 }
                 coolingReading(temperatureReading ?? "—", "CPU", colors: palette(.thermal))
                     .position(x: columns[1], y: bulb + 44)
                 ForEach(Array(fans.prefix(2).enumerated()), id: \.offset) { index, fan in
-                    coolingReading(fan.currentRPM < 1 ? "Off" : formatter.rpm(fan.currentRPM), fan.name,
+                    coolingReading(fanReading(fan), fan.name,
                                    colors: [Color(nsColor: .systemCyan), Color(nsColor: .systemBlue)])
                         .position(x: columns[index == 0 ? 0 : 2], y: bulb + 44)
                 }
@@ -971,11 +971,17 @@ struct BentoGrid: View {
         }
     }
 
-    private func coolingFan(_ fan: FanInfo, diameter: CGFloat) -> some View {
+    /// A fan's speed as a share of its top speed, or Off: "Off" says a stopped fan is
+    /// normal, where "0%" would read as a fault. The detail gives the RPM.
+    private func fanReading(_ fan: FanInfo) -> String {
+        fan.currentRPM < 1 ? "Off" : formatter.percent(fan.speedFraction)
+    }
+
+    private func coolingFan(_ fan: FanInfo, diameter: CGFloat, isMirrored: Bool) -> some View {
         ZStack {
             Circle().fill(Self.fanWell)
-            fit(AnyView(SpinningFan(fraction: fan.loadFraction ?? min(fan.currentRPM / 6000, 1),
-                                    isSpinning: fan.currentRPM >= 1)),
+            fit(AnyView(SpinningFan(fraction: fan.speedFraction, isSpinning: fan.currentRPM >= 1,
+                                    isMirrored: isMirrored)),
                 native: CGSize(width: 128, height: 128),
                 in: CGSize(width: diameter - 6, height: diameter - 6))
         }
