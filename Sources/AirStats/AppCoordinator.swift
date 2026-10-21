@@ -99,6 +99,8 @@ final class AppCoordinator {
     private func togglePanel() {
         let anchor = statusItem.anchorRect
         guard panel.isVisible else {
+            // The click closed the panel on its way down; its mouse-up is not a second one.
+            if panel.isClosing(NSApp.currentEvent) { return }
             panelAnchor = anchor
             panel.show(anchoredTo: anchor, on: statusItem.anchorScreen)
             return

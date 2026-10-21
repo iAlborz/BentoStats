@@ -51,6 +51,10 @@ public final class PanelController: NSObject, NSWindowDelegate {
     private var lastAnchor: NSRect?
     private var lastScreen: NSScreen?
 
+    /// When a click around the status item last closed the panel, by the event clock.
+    /// See `isClosing(_:)`.
+    private var itemClickDismissal: TimeInterval?
+
     /// Bumped on every show and hide so a fade-out that is still running cannot order
     /// out a panel the user has re-opened in the meantime.
     private var presentation: UInt64 = 0
@@ -96,6 +100,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
         releaseTask = nil
         let window = existingOrNewWindow()
         lastAnchor = anchor
+        itemClickDismissal = nil
         lastScreen = screen ?? anchor.flatMap(Self.screen(containing:))
         presentation &+= 1
 
@@ -118,6 +123,23 @@ public final class PanelController: NSObject, NSWindowDelegate {
         installDismissMonitors()
         isVisible = true
         WindowLog.log("panel shown frame=\(window.frame) key=\(window.isKeyWindow) appActive=\(NSApp.isActive) monitors=\(activeEventMonitorCount)")
+    }
+
+    /// Whether `event`, the status item's mouse-up, ends the click that just closed the
+    /// panel, so the item's action should leave it closed rather than open it again.
+    ///
+    /// The item takes clicks a few points either side of its button and all the way up
+    /// to the top of the screen, which the button's frame does not cover. The dismiss
+    /// monitor sees such a click's mouse-down as one outside the panel and closes it;
+    /// the item's action then comes on the mouse-up and found the panel closed, so it
+    /// opened it again. A click there closes the panel, as one on the button does.
+    ///
+    /// Asked once per action: the first one after such a click is that click's own, and
+    /// a second click straight after, to open the panel again, must do so.
+    public func isClosing(_ event: NSEvent?) -> Bool {
+        defer { itemClickDismissal = nil }
+        guard let event, event.type == .leftMouseUp, let down = itemClickDismissal else { return false }
+        return (0..<0.5).contains(event.timestamp - down)
     }
 
     public func hide() {
@@ -529,17 +551,28 @@ public final class PanelController: NSObject, NSWindowDelegate {
         // panel closed and reopen it, so the item could never close the panel. A plain
         // click there belongs to the item's action, so it is left alone here; a right-
         // or Control-click opens the item's menu, which should still close the panel.
+        // The item also takes clicks just past its button, which this cannot tell from
+        // a click beside it, so those close the panel here and `isClosing(_:)` keeps
+        // the item's action from opening it again.
         if let outside = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown],
             handler: { [weak self] event in
                 let location = event.locationInWindow
+                let timestamp = event.timestamp
                 let isPlainClick = event.type == .leftMouseDown
                     && !event.modifierFlags.contains(.control)
                 Task { @MainActor in
                     guard let self else { return }
                     if isPlainClick, let anchor = self.lastAnchor, anchor.contains(location) { return }
-                    WindowLog.log("click outside the panel; dismissing")
+                    let isAroundItem = self.lastAnchor.map { anchor in
+                        location.y >= anchor.minY && abs(location.x - anchor.midX) <= anchor.width / 2 + 12
+                    } ?? false
+                    WindowLog.log("click outside the panel\(isAroundItem ? ", around the item" : ""); dismissing")
+                    // Only a click that closed the panel: if the item's action got there
+                    // first and closed it, there is no mouse-up left to keep from reopening.
+                    let wasVisible = self.isVisible
                     self.hide()
+                    if wasVisible, isPlainClick, isAroundItem { self.itemClickDismissal = timestamp }
                 }
             }) {
             monitors.append(outside)
