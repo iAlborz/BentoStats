@@ -1,7 +1,8 @@
 import SwiftUI
 import AppKit
 
-/// AirStat's mark.
+/// Bento Stats' mark: the icon's box and its three compartments, in one colour. Drawn by
+/// Scripts/make-icon.swift along with the icon.
 ///
 /// Loaded once and marked as a template, which is the whole reason the file on disk is
 /// black on transparent: a template image is re-tinted by AppKit for the appearance it

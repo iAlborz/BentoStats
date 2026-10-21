@@ -15,8 +15,12 @@ struct AboutPane: View {
         Form {
             Section {
                 HStack(spacing: Design.Space.xl) {
-                    LogoMark(size: 52)
-                        .foregroundStyle(Design.Palette.primaryText)
+                    // The icon in colour, as an About window shows it; its body is 52 across
+                    // inside the margin every macOS icon keeps.
+                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                        .resizable()
+                        .frame(width: 64, height: 64)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: Design.Space.xxs) {
                         Text("Bento Stats").font(.title2.weight(.medium))
                         Text(versionText).foregroundStyle(Design.Palette.secondaryText)
