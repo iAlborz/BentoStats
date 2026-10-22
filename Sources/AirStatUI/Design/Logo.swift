@@ -26,8 +26,13 @@ public enum Logo {
 
     /// The mark as a template image, or nil if the resource is missing — the callers
     /// draw nothing rather than an empty box.
+    ///
+    /// The App Store build carries it loose in the app's own Resources instead: a bundle
+    /// nested there keeps whatever signature it had when Organizer re-signs the app for
+    /// distribution, and App Store Connect refuses one not signed for distribution.
     public static let image: NSImage? = {
-        guard let url = resources.url(forResource: "Logo", withExtension: "png"),
+        guard let url = Bundle.main.url(forResource: "Logo", withExtension: "png")
+                ?? resources.url(forResource: "Logo", withExtension: "png"),
               let image = NSImage(contentsOf: url) else { return nil }
         image.isTemplate = true
         image.accessibilityDescription = "Bento Stats"

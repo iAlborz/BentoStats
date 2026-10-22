@@ -36,11 +36,15 @@ mkdir -p "$ARCHIVE/Products/Applications" "$ARCHIVE/dSYMs"
 cp -R "$BUILT" "$APP"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Contents/Info.plist"
 
+# The UI's resource bundle, unpacked into the app's own Resources, where Logo looks
+# first. Organizer re-signs the app but leaves a bundle nested in Resources as it was,
+# and App Store Connect refuses one that is not signed for distribution (ITMS-90284).
+mv "$APP/Contents/Resources/AirStats_AirStatUI.bundle/Contents/Resources/"* "$APP/Contents/Resources/"
+rm -rf "$APP/Contents/Resources/AirStats_AirStatUI.bundle"
+
 # Symbols, so crash reports from App Store users can be read.
 dsymutil "$BIN_DIR/AirStats" -o "$ARCHIVE/dSYMs/$NAME.app.dSYM"
 
-# Inside out: the resource bundle, then the app with the sandbox entitlements.
-codesign --force --sign "$IDENTITY" "$APP/Contents/Resources/AirStats_AirStatUI.bundle"
 codesign --force --sign "$IDENTITY" --entitlements Resources/AppStore.entitlements "$APP"
 codesign --verify --deep --strict "$APP"
 
