@@ -1,66 +1,64 @@
 #!/bin/bash
-# Builds Bento Stats for the Mac App Store: sandboxed, signed for distribution, and
-# wrapped in the signed installer package App Store Connect takes.
+# Archives Bento Stats for the Mac App Store, as Xcode's Product › Archive would, and
+# puts the archive where Xcode's Organizer lists it:
 #
-#   BUNDLE_ID=com.example.BentoStats Scripts/appstore.sh   → dist/Bento Stats.pkg
+#   Scripts/appstore.sh   → ~/Library/Developer/Xcode/Archives/<date>/Bento Stats <date, time>.xcarchive
 #
-# Then upload the .pkg with Apple's Transporter app.
+# Then, in Xcode: Window › Organizer › Archives › Bento Stats › Distribute App ›
+# App Store Connect. Organizer signs the app for distribution with the team's certificate
+# and an App Store profile, creating them if they do not exist yet, and uploads it.
 #
-# One-time setup, in the Apple Developer account and in Xcode:
-#   - An App ID for BUNDLE_ID, and a Mac App Store provisioning profile for it, saved
-#     as dist/AppStore.provisionprofile or passed as PROFILE=path.
-#   - "Apple Distribution" and "Mac Installer Distribution" certificates in the
-#     keychain: Xcode › Settings › Accounts › Manage Certificates. The installer one
-#     appears in the keychain as "3rd Party Mac Developer Installer".
-#   - The app's record in App Store Connect, under the same bundle ID.
-#
-# The local build keeps its own bundle ID and stays outside the sandbox; only the copy
-# made here is changed. Resources/AppStore.entitlements says what the sandbox allows.
+# The archive holds a copy of the release build with the App Store bundle ID, signed with
+# the team's Apple Development certificate and the sandbox entitlements in
+# Resources/AppStore.entitlements; Organizer keeps those entitlements when it re-signs.
+# The local build keeps its own bundle ID and stays outside the sandbox.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-BUNDLE_ID="${BUNDLE_ID:?set BUNDLE_ID to the App ID registered for the App Store}"
-PROFILE="${PROFILE:-dist/AppStore.provisionprofile}"
-APP_IDENTITY="${APP_IDENTITY:-Apple Distribution}"
-INSTALLER_IDENTITY="${INSTALLER_IDENTITY:-3rd Party Mac Developer Installer}"
-DIST="dist"
-APP="$DIST/Bento Stats.app"
-PKG="$DIST/Bento Stats.pkg"
+BUNDLE_ID="${BUNDLE_ID:-io.github.ialborz.bentostats}"
+TEAM="${TEAM:-R3S425S3T8}"
+IDENTITY="${IDENTITY:-Apple Development: Alborz Heydaryan (6K967VP868)}"
 
-# Preflight, so a missing piece of setup is named before a two-minute build.
-[ -f "$PROFILE" ] || { echo "error: no provisioning profile at $PROFILE (set PROFILE=…)" >&2; exit 1; }
-security find-identity -v -p codesigning | grep -q "$APP_IDENTITY" \
-  || { echo "error: no \"$APP_IDENTITY\" certificate in the keychain" >&2; exit 1; }
-security find-identity -v | grep -q "$INSTALLER_IDENTITY" \
-  || { echo "error: no \"$INSTALLER_IDENTITY\" certificate in the keychain" >&2; exit 1; }
+security find-identity -v -p codesigning | grep -qF "$IDENTITY" \
+  || { echo "error: no \"$IDENTITY\" certificate in the keychain (set IDENTITY=…)" >&2; exit 1; }
 
-# The profile names the team and the app; the signature must carry both, or App Store
-# Connect refuses the upload.
-PROFILE_PLIST="$(mktemp)"
-security cms -D -i "$PROFILE" > "$PROFILE_PLIST"
-TEAM="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$PROFILE_PLIST")"
-APP_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$PROFILE_PLIST")"
-[ "$APP_IDENTIFIER" = "$TEAM.$BUNDLE_ID" ] \
-  || { echo "error: $PROFILE is for $APP_IDENTIFIER, not $TEAM.$BUNDLE_ID" >&2; exit 1; }
-
-ENTITLEMENTS="$(mktemp -d)/AppStore.entitlements"
-cp Resources/AppStore.entitlements "$ENTITLEMENTS"
-/usr/libexec/PlistBuddy \
-  -c "Add :com.apple.application-identifier string $APP_IDENTIFIER" \
-  -c "Add :com.apple.developer.team-identifier string $TEAM" \
-  "$ENTITLEMENTS"
+NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' Resources/Info.plist)"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist)"
 
 BUILT="$(Scripts/build.sh release | tail -1)"
-mkdir -p "$DIST"
-rm -rf "$APP" "$PKG"
+BIN_DIR="$(swift build -c release --show-bin-path)"
+
+ARCHIVE="$HOME/Library/Developer/Xcode/Archives/$(date +%Y-%m-%d)/$NAME $(date '+%Y-%m-%d, %-I.%M %p').xcarchive"
+APP="$ARCHIVE/Products/Applications/$NAME.app"
+mkdir -p "$ARCHIVE/Products/Applications" "$ARCHIVE/dSYMs"
 cp -R "$BUILT" "$APP"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Contents/Info.plist"
-cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
 
-codesign --force --sign "$APP_IDENTITY" --entitlements "$ENTITLEMENTS" "$APP"
-codesign --verify --strict --verbose=2 "$APP"
+# Symbols, so crash reports from App Store users can be read.
+dsymutil "$BIN_DIR/AirStats" -o "$ARCHIVE/dSYMs/$NAME.app.dSYM"
 
-productbuild --component "$APP" /Applications --sign "$INSTALLER_IDENTITY" "$PKG"
+# Inside out: the resource bundle, then the app with the sandbox entitlements.
+codesign --force --sign "$IDENTITY" "$APP/Contents/Resources/AirStats_AirStatUI.bundle"
+codesign --force --sign "$IDENTITY" --entitlements Resources/AppStore.entitlements "$APP"
+codesign --verify --deep --strict "$APP"
 
-echo "$PKG"
+PLIST="$ARCHIVE/Info.plist"
+/usr/libexec/PlistBuddy \
+  -c "Add :ArchiveVersion integer 2" \
+  -c "Add :CreationDate date $(date -u '+%a %b %d %H:%M:%S GMT %Y')" \
+  -c "Add :Name string $NAME" \
+  -c "Add :SchemeName string $NAME" \
+  -c "Add :ApplicationProperties dict" \
+  -c "Add :ApplicationProperties:ApplicationPath string Applications/$NAME.app" \
+  -c "Add :ApplicationProperties:Architectures array" \
+  -c "Add :ApplicationProperties:Architectures:0 string $(lipo -archs "$APP/Contents/MacOS/AirStats")" \
+  -c "Add :ApplicationProperties:CFBundleIdentifier string $BUNDLE_ID" \
+  -c "Add :ApplicationProperties:CFBundleShortVersionString string $VERSION" \
+  -c "Add :ApplicationProperties:CFBundleVersion string $BUILD" \
+  -c "Add :ApplicationProperties:SigningIdentity string $IDENTITY" \
+  -c "Add :ApplicationProperties:Team string $TEAM" \
+  "$PLIST"
+
+echo "$ARCHIVE"
