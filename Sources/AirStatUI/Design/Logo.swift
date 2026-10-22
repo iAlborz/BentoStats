@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// Bento Stats' mark: the icon's box and its three compartments, in one colour. Drawn by
+/// Bento Stats' mark: the icon's gauge, its sweep and needle, in one colour. Drawn by
 /// Scripts/make-icon.swift along with the icon.
 ///
 /// Loaded once and marked as a template, which is the whole reason the file on disk is
