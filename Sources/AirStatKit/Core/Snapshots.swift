@@ -424,7 +424,7 @@ public struct PowerSnapshot: Sendable, Equatable {
     /// True when macOS is holding the charge at ~80% for battery longevity.
     public var isOptimizedChargingPaused: Bool
     /// Batteries in things attached to the Mac: earbuds, a mouse, a keyboard.
-    /// Whatever the power source list reports for accessories, read once a minute.
+    /// Bluetooth keyboards, mice and trackpads that report a charge, read once a minute.
     public var accessories: [AccessoryBattery] = []
 
     public init(hasBattery: Bool = false, percentage: Double? = nil, isCharging: Bool = false,

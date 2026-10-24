@@ -102,12 +102,6 @@ public final class PowerCollector: MetricSource {
     // MARK: Accessories
 
     /// The accessory list, re-read once a minute.
-    ///
-    /// The same power source machinery the internal battery comes from, asked for
-    /// its accessory sources: this is what `pmset -g accps` and the Bluetooth menu
-    /// read. The call is exported by IOKit but not declared in its public headers,
-    /// so it is declared here; if a macOS release stops answering, the list is
-    /// empty and the panel shows no accessory rows, which is the state it starts in.
     private func currentAccessories() -> [AccessoryBattery] {
         let now = ContinuousClock.now
         if let readAt = accessoriesReadAt, now - readAt < Self.accessoryInterval {
@@ -118,18 +112,35 @@ public final class PowerCollector: MetricSource {
         return accessories
     }
 
+    /// Bluetooth keyboards, mice and trackpads, from the IORegistry, where their HID
+    /// event services publish `BatteryPercent`, in the shape `accessories(from:)` reads.
+    ///
+    /// Public IOKit. Earbuds were listed too while this asked the power source
+    /// machinery for its accessory sources, but that call is not in IOKit's public
+    /// headers, and the App Store refuses an app that makes it; earbuds are not in the
+    /// registry, so they are no longer listed.
     static func readAccessories() -> [AccessoryBattery] {
-        guard let blob = IOPSCopyPowerSourcesByType(Self.accessorySourceType)?.takeRetainedValue(),
-              let handles = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
-        else { return [] }
-        let sources = handles.compactMap {
-            IOPSGetPowerSourceDescription(blob, $0)?.takeUnretainedValue() as? [String: Any]
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("AppleDeviceManagementHIDEventService"),
+                                           &iterator) == KERN_SUCCESS else { return [] }
+        defer { IOObjectRelease(iterator) }
+        var sources: [[String: Any]] = []
+        var service = IOIteratorNext(iterator)
+        while service != IO_OBJECT_NULL {
+            var properties: Unmanaged<CFMutableDictionary>?
+            if IORegistryEntryCreateCFProperties(service, &properties, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+               let entry = properties?.takeRetainedValue() as? [String: Any],
+               let percent = entry["BatteryPercent"] as? NSNumber,
+               let name = entry["Product"] as? String {
+                sources.append(["Name": name, "Current Capacity": percent, "Max Capacity": 100,
+                                "Accessory Identifier": entry["SerialNumber"] as? String
+                                    ?? entry["DeviceAddress"] as? String ?? name])
+            }
+            IOObjectRelease(service)
+            service = IOIteratorNext(iterator)
         }
         return accessories(from: sources)
     }
-
-    /// `kIOPSSourceForAccessories` in IOKit's private key header.
-    private static let accessorySourceType: Int32 = 3
 
     /// Folds the accessory sources into one accessory per device.
     ///
@@ -376,8 +387,3 @@ public final class PowerCollector: MetricSource {
 
     private func dictionary(_ key: String) -> [String: Any]? { property(key) as? [String: Any] }
 }
-
-/// Exported by IOKit and used by `pmset`, but absent from the public headers. The
-/// argument selects the source type; see `PowerCollector.accessorySourceType`.
-@_silgen_name("IOPSCopyPowerSourcesByType")
-private func IOPSCopyPowerSourcesByType(_ type: Int32) -> Unmanaged<CFTypeRef>?
