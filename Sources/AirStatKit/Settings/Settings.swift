@@ -299,13 +299,14 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// it is or what the fill means.
     ///
     /// Only a fresh install sees this. Anyone with a settings file already has their own
-    /// `menuBar.items` and keeps them.
+    /// `menuBar.items` and keeps them. The App Store's copy, which cannot read the
+    /// temperature, starts without it.
     public static let defaultItems: [MenuBarItemConfig] = [
         MenuBarItemConfig(metric: .cpuUsage, style: .text, showsCaption: true),
         MenuBarItemConfig(metric: .cpuTemperature, style: .text, showsCaption: true),
         MenuBarItemConfig(metric: .gpuUsage, style: .text, showsCaption: true),
         MenuBarItemConfig(metric: .battery, style: .battery, showsCaption: false),
-    ]
+    ].filter { Capabilities.readsSensors || $0.metric.requiredSource != .thermal }
 
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }
 

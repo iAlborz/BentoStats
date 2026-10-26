@@ -432,11 +432,8 @@ struct BentoGrid: View {
         case .batteryInside: batteryInside
         case .batteryHistory: batteryHistory
         case .batteryChargeHistory: batteryChargeHistory
-        case .thermalThermometer: thermal
-        case .thermalSmall: thermalSmall
-        case .thermalSensors: thermalSensors
-        case .thermalFans: thermalFans
-        case .thermalCooling: thermalCooling
+        case .thermalThermometer, .thermalSmall, .thermalSensors, .thermalFans, .thermalCooling:
+            if Capabilities.readsSensors { temperature(tile.variant) } else { thermalState(tile.variant) }
         case .systemAbout: system
         case .systemUptime: systemUptime
         case .systemDetails: systemDetails
@@ -837,6 +834,126 @@ struct BentoGrid: View {
     }
 
     // MARK: Temperature designs
+
+    @ViewBuilder
+    private func temperature(_ variant: BentoVariant) -> some View {
+        switch variant {
+        case .thermalSmall: thermalSmall
+        case .thermalSensors: thermalSensors
+        case .thermalFans: thermalFans
+        case .thermalCooling: thermalCooling
+        default: thermal
+        }
+    }
+
+    // MARK: Thermal state designs
+
+    /// The App Store's copy cannot read a temperature or a fan (see `Capabilities`), so
+    /// each temperature design draws macOS's thermal state at its own size instead, and
+    /// an arrangement made outside the store keeps its shape inside it.
+    @ViewBuilder
+    private func thermalState(_ variant: BentoVariant) -> some View {
+        let state = engine.thermal.value?.pressure
+        let colors = Self.stateColors(state)
+        let word = state.map(Self.stateWord)
+        switch variant.size {
+        case .small:
+            card(variant, header: CardHeader("Thermal")) {
+                HStack(spacing: Design.Space.s) {
+                    ThermometerGraphic(fraction: Self.stateLevel(state), colors: colors, scale: 0.45)
+                        .frame(width: 14, height: 63)
+                    bigNumber(.thermal, word, size: 18, colors: colors, fitting: 66)
+                }
+            }
+        case .tall:
+            card(variant, header: CardHeader("Thermal")) {
+                VStack(spacing: Design.Space.m) {
+                    ThermometerGraphic(fraction: Self.stateLevel(state), colors: colors)
+                        .frame(width: 30, height: 140)
+                    bigNumber(.thermal, word, size: 18, colors: colors, fitting: 86)
+                }
+            }
+        case .wide:
+            card(variant, header: nil) {
+                HStack(spacing: Design.Space.l) {
+                    ThermometerGraphic(fraction: Self.stateLevel(state), colors: colors, scale: 0.55)
+                        .frame(width: 17, height: 77)
+                    VStack(alignment: .leading, spacing: Design.Space.xs) {
+                        Text("Thermal state")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(Design.Palette.secondaryText)
+                        bigNumber(.thermal, word, size: 24, colors: colors, fitting: 130)
+                        stateMeter(state).frame(width: 130)
+                    }
+                }
+            }
+        default:
+            card(variant, header: CardHeader("Thermal state")) {
+                HStack(spacing: Design.Space.l) {
+                    ThermometerGraphic(fraction: Self.stateLevel(state), colors: colors)
+                        .frame(width: 30, height: 140)
+                    VStack(alignment: .leading, spacing: Design.Space.s) {
+                        bigNumber(.thermal, word, size: 28, colors: colors, fitting: 140)
+                        Text(state.map(Self.stateLine) ?? "")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(Design.Palette.secondaryText)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                        stateMeter(state).frame(width: 140)
+                    }
+                    .frame(width: 140, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    /// The four states as segments, lit up to the current one in its colour.
+    private func stateMeter(_ state: ThermalPressure?) -> some View {
+        HStack(spacing: 3) {
+            ForEach(Self.states, id: \.self) { step in
+                Capsule()
+                    .fill(state.map { $0 >= step } == true ? AnyShapeStyle(Self.stateColors(state)[0])
+                                                           : AnyShapeStyle(Design.Palette.track))
+                    .frame(height: 6)
+            }
+        }
+    }
+
+    private static let states: [ThermalPressure] = [.nominal, .fair, .serious, .critical]
+
+    /// macOS's names for the states are its own; these are what they mean.
+    private static func stateWord(_ state: ThermalPressure) -> String {
+        switch state {
+        case .nominal: "Normal"
+        case .fair: "Elevated"
+        case .serious: "High"
+        case .critical: "Critical"
+        }
+    }
+
+    private static func stateLine(_ state: ThermalPressure) -> String {
+        switch state {
+        case .nominal: "Running cool. Nothing is held back."
+        case .fair: "Warming up. macOS may start to ease off."
+        case .serious: "Hot. macOS is slowing things down to cool off."
+        case .critical: "Very hot. Performance is cut back hard."
+        }
+    }
+
+    /// Green to red as the state rises, the way memory pressure is coloured.
+    private static func stateColors(_ state: ThermalPressure?) -> [Color] {
+        switch state {
+        case .fair: [Color(nsColor: .systemYellow), Color(nsColor: .systemOrange)]
+        case .serious: [Color(nsColor: .systemOrange), Color(nsColor: .systemRed)]
+        case .critical: [Color(nsColor: .systemRed), Color(nsColor: .systemPink)]
+        default: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)]
+        }
+    }
+
+    /// How full the thermometer is drawn for a state: a quarter of the way per step.
+    private static func stateLevel(_ state: ThermalPressure?) -> Double {
+        state.map { 0.28 + 0.24 * Double($0.rawValue) } ?? 0
+    }
 
     /// A small thermometer beside the reading.
     private var thermalSmall: some View {

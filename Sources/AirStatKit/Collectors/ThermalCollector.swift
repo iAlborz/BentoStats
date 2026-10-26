@@ -113,6 +113,12 @@ public final class ThermalCollector: MetricSource {
 
     public func start() {
         stop()
+        // In the App Sandbox the SMC is closed: not even asked, so the store's copy
+        // makes no attempt the sandbox would log as a violation.
+        guard Capabilities.readsSensors else {
+            setupFailure = Capabilities.noSensorsReason
+            return
+        }
 
         request = .allocate(byteCount: Layout.size, alignment: 16)
         reply = .allocate(byteCount: Layout.size, alignment: 16)

@@ -12,7 +12,7 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
         case .network: return "Network"
         case .disk: return "SSD"
         case .battery: return "Battery"
-        case .thermal: return "Temperature"
+        case .thermal: return Capabilities.readsSensors ? "Temperature" : "Thermal State"
         case .system: return "System"
         case .settings: return "Settings"
         }
@@ -44,8 +44,11 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
 
     /// The card's designs, the one it starts as first. Each is drawn as it was designed,
     /// at its own size: two to five per card, rather than every size in every style.
+    ///
+    /// Without sensors every temperature design draws the thermal state at its size, so
+    /// of the two two-by-two ones only the first is offered.
     public var variants: [BentoVariant] {
-        BentoVariant.allCases.filter { $0.kind == self }
+        BentoVariant.allCases.filter { $0.kind == self && (Capabilities.readsSensors || $0 != .thermalCooling) }
     }
 
     public var defaultVariant: BentoVariant { variants[0] }
@@ -142,6 +145,7 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
 
     /// What it shows, for the card's menu in edit mode.
     public var label: String {
+        if kind == .thermal, !Capabilities.readsSensors { return "Thermal State" }
         switch self {
         case .cpuChip: return "Chip and Busiest"
         case .cpuChipSmall: return "Chip"
