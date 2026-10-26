@@ -158,7 +158,10 @@ struct MacBookView: View {
                         isMirrored: isMirrored)
                 .frame(width: 128, height: 128)
                 .offset(y: -12)
-            Text(fan.map { $0.currentRPM < 1 ? "Off" : formatter.percent($0.speedFraction) } ?? "Fan")
+            // Nothing under a fan the App Store's copy cannot read: its blades are the
+            // drawing's, not a reading.
+            Text(fan.map { $0.currentRPM < 1 ? "Off" : formatter.percent($0.speedFraction) }
+                 ?? (Capabilities.readsSensors ? "Fan" : ""))
                 .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
                 .foregroundStyle(Design.Palette.secondaryText)
                 .offset(y: 72)

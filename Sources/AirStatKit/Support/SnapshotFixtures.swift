@@ -265,9 +265,15 @@ public enum SnapshotFixtures {
                       adapterName: "143W USB-C Power Adapter")
     }
 
+    /// Without sensors, as in the App Store's copy, only the thermal state, so a render
+    /// shows that copy as it really looks.
     public static func thermal(cpuTemp: Double, fanRPM: Double) -> ThermalSnapshot {
-        ThermalSnapshot(
-            pressure: cpuTemp > 95 ? .serious : (cpuTemp > 80 ? .fair : .nominal),
+        let pressure: ThermalPressure = cpuTemp > 95 ? .serious : (cpuTemp > 80 ? .fair : .nominal)
+        guard Capabilities.readsSensors else {
+            return ThermalSnapshot(pressure: pressure, sensorsUnavailableReason: Capabilities.noSensorsReason)
+        }
+        return ThermalSnapshot(
+            pressure: pressure,
             sensors: [
                 TemperatureSensor(id: "Tp0C", name: "CPU Performance Cluster", category: .cpu, celsius: cpuTemp),
                 TemperatureSensor(id: "Tp1C", name: "CPU Efficiency Cluster", category: .cpu, celsius: cpuTemp - 6),
