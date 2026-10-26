@@ -12,6 +12,9 @@
 # the team's Apple Development certificate and the sandbox entitlements in
 # Resources/AppStore.entitlements; Organizer keeps those entitlements when it re-signs.
 # The local build keeps its own bundle ID and stays outside the sandbox.
+#
+# ARCHIVE puts the archive somewhere else, and an empty ENTITLEMENTS signs it with none:
+# Scripts/direct.sh archives the full, unsandboxed app that way.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -19,6 +22,7 @@ cd "$(dirname "$0")/.."
 BUNDLE_ID="${BUNDLE_ID:-io.github.ialborz.bentostats}"
 TEAM="${TEAM:-R3S425S3T8}"
 IDENTITY="${IDENTITY:-Apple Development: Alborz Heydaryan (6K967VP868)}"
+ENTITLEMENTS="${ENTITLEMENTS-Resources/AppStore.entitlements}"
 
 security find-identity -v -p codesigning | grep -qF "$IDENTITY" \
   || { echo "error: no \"$IDENTITY\" certificate in the keychain (set IDENTITY=…)" >&2; exit 1; }
@@ -30,7 +34,7 @@ BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plis
 BUILT="$(Scripts/build.sh release | tail -1)"
 BIN_DIR="$(swift build -c release --show-bin-path)"
 
-ARCHIVE="$HOME/Library/Developer/Xcode/Archives/$(date +%Y-%m-%d)/$NAME $(date '+%Y-%m-%d, %-I.%M %p').xcarchive"
+ARCHIVE="${ARCHIVE:-$HOME/Library/Developer/Xcode/Archives/$(date +%Y-%m-%d)/$NAME $(date '+%Y-%m-%d, %-I.%M %p').xcarchive}"
 APP="$ARCHIVE/Products/Applications/$NAME.app"
 mkdir -p "$ARCHIVE/Products/Applications" "$ARCHIVE/dSYMs"
 cp -R "$BUILT" "$APP"
@@ -45,7 +49,8 @@ rm -rf "$APP/Contents/Resources/AirStats_AirStatUI.bundle"
 # Symbols, so crash reports from App Store users can be read.
 dsymutil "$BIN_DIR/AirStats" -o "$ARCHIVE/dSYMs/$NAME.app.dSYM"
 
-codesign --force --sign "$IDENTITY" --entitlements Resources/AppStore.entitlements "$APP"
+# The hardened runtime, which notarization requires of a Developer ID copy.
+codesign --force --options runtime --sign "$IDENTITY" ${ENTITLEMENTS:+--entitlements "$ENTITLEMENTS"} "$APP"
 codesign --verify --deep --strict "$APP"
 
 PLIST="$ARCHIVE/Info.plist"
