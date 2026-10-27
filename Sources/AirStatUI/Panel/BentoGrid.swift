@@ -2066,13 +2066,9 @@ struct ChipGraphic: View {
     static let silver = LinearGradient(colors: [Color(white: 0.97), Color(white: 0.66)],
                                        startPoint: .top, endPoint: .bottom)
 
-    private func lettering(side: CGFloat, scale: CGFloat) -> some View {
-        Self.lettering(name, size: side * scale)
-    }
-
-    /// The chip's name as it is marked on the chip, at a scale set by `size`.
     @ViewBuilder
-    static func lettering(_ name: String?, size: CGFloat) -> some View {
+    private func lettering(side: CGFloat, scale: CGFloat) -> some View {
+        let size = side * scale
         if let name, name.hasPrefix("Apple ") {
             // "Apple M1 Max" is set as the chip is marked: "M1" in silver, and the tier
             // under it in that tier's colours. Without Apple's logo, which Apple does
@@ -2116,7 +2112,7 @@ struct ChipGraphic: View {
 /// The CPU cores laid out on the die: performance cores as squares in two rows, the
 /// efficiency cores beside them as blocks a little over half as wide, each rising from
 /// the bottom with its own load.
-struct ChipCores: View {
+private struct ChipCores: View {
     let performance: [Double]
     let efficiency: [Double]
     /// The area the cores fill, edge to edge.
@@ -2277,7 +2273,7 @@ private struct Ticks: Shape {
 /// grid: at 18% of 32 cores, the first six. macOS reports the GPU only as a whole, so
 /// the blocks are lit in order, which reads as a level, rather than scattered, which
 /// would claim to know which cores are busy.
-private struct GPUDie: View {
+struct GPUDie: View {
     let cores: Int
     let load: Double
     let colors: [Color]
@@ -2378,7 +2374,7 @@ private struct ChipLegs: Shape {
 
 /// One GPU core on the die: a dark block with a hairline edge, filled and glowing in
 /// the card's colour while lit. All but square-cornered.
-struct GPUBlock: View {
+private struct GPUBlock: View {
     let isLit: Bool
     let colors: [Color]
 
@@ -2438,7 +2434,7 @@ struct ChipFace: View {
 /// in use. One board: the gold contacts sit along its bottom edge, which the key notch
 /// cuts into, and only the part above them fills. Dark in both appearances, like the
 /// chip.
-private struct MemoryGraphic: View {
+struct MemoryGraphic: View {
     /// Printed across the module: what is free.
     let label: String?
     let fraction: Double
@@ -2500,11 +2496,13 @@ private struct MemoryGraphic: View {
 /// fills from the left with how full the disk is, and the controller and flash packages
 /// sit on top of the fill, so it still reads as a drive. The connector stays gold
 /// whatever the level.
-private struct SSDGraphic: View {
+struct SSDGraphic: View {
     let fraction: Double
     let colors: [Color]
     /// Printed across the packages, as the memory module's capacity is.
     var label: String?
+    /// What the drive lies on, which shows through the cut for its screw.
+    var surface: Color = BentoGrid.surface
 
     /// The depth of the connector at the board's left end.
     private static let connector: CGFloat = 9
@@ -2542,11 +2540,11 @@ private struct SSDGraphic: View {
                     .padding(.leading, 5)
                     .padding(.trailing, 12)
                     .padding(.vertical, 4)
-                    // The screw's half-round cut, in the card's own colour so it reads as
-                    // a notch out of the board.
+                    // The screw's half-round cut, in the colour of what is behind the drive
+                    // so it reads as a notch out of the board.
                     HStack {
                         Spacer()
-                        Circle().fill(BentoCard<EmptyView>.surface).frame(width: 10, height: 10)
+                        Circle().fill(surface).frame(width: 10, height: 10)
                             .offset(x: 5)
                     }
                     if let label {

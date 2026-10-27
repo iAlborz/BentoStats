@@ -3,38 +3,43 @@ import AppKit
 import AirStatKit
 
 /// The MacBook style: the inside of a MacBook Pro seen from above with its bottom case
-/// off, after the internals wallpapers Basic Apple Guy draws, with every part showing how
-/// hard it is working.
+/// off, after the internals wallpapers Basic Apple Guy draws, built from the bento's own
+/// parts: the CPU chip, the GPU, the memory module and the SSD its cards draw, laid out
+/// on one logic board, each showing how hard it is working.
 ///
 /// Laid out the way the machine is, but spaced out so each part has room for its
 /// reading: the hinge and its vents along the top; a blower fan in each upper corner,
 /// spinning with the fan's real speed and blowing through copper fins into the hinge;
-/// the logic board between them, with heat pipes running from the fins to the M-series
-/// chip in its middle, and the Wi-Fi module and the SSD's flash either side of the chip;
-/// then the battery's cells either side of the trackpad, a speaker at each edge, and the
-/// ports along the sides.
+/// the logic board up the middle, with heat pipes from the fins to the CPU and the GPU,
+/// and across under the fans for the memory in its slot, the Wi-Fi module and the SSD
+/// in its socket; then the battery's cells either side of the trackpad, a speaker at
+/// each edge, and the ports along the sides.
 ///
 ///     ┌── hinge ────────────────── vents ────────────────── hinge ──┐
-///     │ ┌ fins ┐  ┌────────────── logic board ──────────────┐ ┌ fins ┐ │
-///     │ │ fan  │  │ Wi-Fi  ┌ memory │ chip │ memory ┐  flash │ │ fan  │ │
-///     │ ╰──────╯  │ ↓ ↑    └────────────────────────┘  free  │ ╰──────╯ │
-///     │   27%     │           CPU     GPU    Memory          │   26%    │
+///     │ ┌ fins ┐  ┌─────────── logic board ───────────┐  ┌ fins ┐ │
+///     │ │ fan  │  │  ┌ CPU ┐      ┌──── GPU ────┐     │  │ fan  │ │
+///     │ ╰──────╯  │  └─────┘      └─────────────┘     │  ╰──────╯ │
+///     │   27%     │    34%             18%            │    26%    │
+///     │ ┌─────────┘                                   └─────────┐ │
+///     │ │ memory: 7.7 GB free   Wi-Fi ↑ ↓   SSD: 185 GB free    │ │
+///     │ └───────────────────────────────────────────────────────┘ │
 ///     │ ┌─┐┌ cells ┐ ┌──────── trackpad ────────┐ ┌ cells ┐┌─┐ │
 ///     │ └─┘└───────┘ └──────────────────────────┘ └───────┘└─┘ │
 ///     └──────────────────────────────────────────────────────────┘
 ///
-/// Drawn tone on tone in one neutral, as those wallpapers are drawn in one hue, so the
-/// colour on it is the data: the cores lit by their load, the memory and the flash
-/// filled by how full they are, the cells by their charge. Every reading sits in clear
-/// space beside its part, or on the part's own label where it has one, as a battery cell
-/// does. Pointing at a part opens its detail beside the panel, as a bento card does.
-/// Built from shapes, never a `Canvas`: see `PlotShape` for why.
+/// The case is drawn tone on tone in one neutral, as those wallpapers are drawn in one
+/// hue, and the bento's parts keep their own dark finish, so the colour on it is the
+/// data: the cores lit by their load, the memory and the drive filled by how full they
+/// are, the cells by their charge. Every reading sits in clear space beside its part,
+/// or on the part where the bento prints it, as it prints what is free on the memory
+/// and the drive. Pointing at a part opens its detail beside the panel, as a bento card
+/// does. Built from shapes, never a `Canvas`: see `PlotShape` for why.
 struct MacBookView: View {
     let engine: MetricsEngine
     let settings: SettingsStore
     let layout: PanelLayoutState?
 
-    private static let size = CGSize(width: 706, height: 500)
+    private static let size = CGSize(width: 706, height: 520)
     private static let inset: CGFloat = 14
     static let width = size.width + inset * 2
 
@@ -42,21 +47,34 @@ struct MacBookView: View {
     private static let leftHinge = CGRect(x: 40, y: 16, width: 96, height: 14)
     private static let rightHinge = CGRect(x: 570, y: 16, width: 96, height: 14)
     private static let vent = CGRect(x: 148, y: 17, width: 410, height: 12)
-    /// The fin stack above, the housing below it.
-    private static let leftFan = CGRect(x: 26, y: 40, width: 140, height: 190)
-    private static let rightFan = CGRect(x: 540, y: 40, width: 140, height: 190)
-    private static let board = CGRect(x: 178, y: 40, width: 350, height: 258)
-    private static let package = CGRect(x: 265, y: 58, width: 176, height: 168)
-    private static let die = CGRect(x: 303, y: 64, width: 100, height: 156)
-    private static let wifi = CGRect(x: 190, y: 66, width: 56, height: 56)
-    private static let flash = CGRect(x: 460, y: 66, width: 56, height: 56)
-    private static let leftSpeaker = CGRect(x: 20, y: 310, width: 28, height: 172)
-    private static let leftCells = CGRect(x: 58, y: 310, width: 168, height: 172)
-    private static let trackpad = CGRect(x: 238, y: 310, width: 230, height: 172)
-    private static let rightCells = CGRect(x: 480, y: 310, width: 168, height: 172)
-    private static let rightSpeaker = CGRect(x: 658, y: 310, width: 28, height: 172)
-    /// Where the readings under the fans and the chip start.
-    private static let readingsTop: CGFloat = 238
+    /// The fin stack above, the housing below it. Down to the board in the App Store's
+    /// copy, which has no fan speeds to show under them.
+    private static let fanHeight: CGFloat = Capabilities.readsSensors ? 158 : 208
+    private static let leftFan = CGRect(x: 26, y: 40, width: 140, height: fanHeight)
+    private static let rightFan = CGRect(x: 540, y: 40, width: 140, height: fanHeight)
+    /// The logic board: a column up the middle between the fans, and a band right across
+    /// under them.
+    private static let boardColumn = CGRect(x: 178, y: 40, width: 350, height: 302)
+    private static let boardBand = CGRect(x: 12, y: 260, width: 682, height: 82)
+    /// The bento's parts at the sizes their cards draw them, and where they sit here.
+    private static let chipNative = CGSize(width: 140, height: 140)
+    private static let gpuNative = CGSize(width: 200, height: 106)
+    private static let memoryNative = CGSize(width: 200, height: 56)
+    private static let ssdNative = CGSize(width: 200, height: 44)
+    private static let cpu = CGRect(x: 192, y: 66, width: 124, height: 124)
+    private static let gpu = CGRect(x: 334, y: 80.3, width: 180, height: 95.4)
+    /// The module and the drive at one scale, centred on one line.
+    private static let memory = CGRect(x: 20, y: 288, width: 152, height: 42.56)
+    private static let ssd = CGRect(x: 534, y: 292.56, width: 152, height: 33.44)
+    private static let leftSpeaker = CGRect(x: 20, y: 354, width: 28, height: 150)
+    private static let leftCells = CGRect(x: 58, y: 354, width: 168, height: 150)
+    private static let trackpad = CGRect(x: 238, y: 354, width: 230, height: 150)
+    private static let rightCells = CGRect(x: 480, y: 354, width: 168, height: 150)
+    private static let rightSpeaker = CGRect(x: 658, y: 354, width: 28, height: 150)
+    /// Where the readings under the fans and the chips start.
+    private static let readingsTop: CGFloat = 206
+    /// Where the labels over the band's parts start.
+    private static let labelsTop: CGFloat = 270
 
     private var formatter: MetricFormatter {
         MetricFormatter(settings: settings.settings.general)
@@ -66,13 +84,11 @@ struct MacBookView: View {
         ZStack(alignment: .topLeading) {
             chassis
             hinge
-            boardBase
-            antennas
+            board
             fans
             heatPipes
-            chip
-            wifiModule
-            flashPackages
+            chips
+            modules
             readings
             battery
             trackpadInfo
@@ -168,7 +184,7 @@ struct MacBookView: View {
                 VentSlots(pitch: 3.2).fill(Copper.fins).padding(.vertical, 2)
                 fins.strokeBorder(Tone.edge, lineWidth: 0.75)
             }
-            .frame(height: 20)
+            .frame(height: 18)
             ZStack(alignment: .bottom) {
                 housing.fill(LinearGradient(colors: [Tone.partTop, Tone.part], startPoint: .top, endPoint: .bottom))
                 housing.strokeBorder(Tone.edge, lineWidth: 1)
@@ -195,13 +211,11 @@ struct MacBookView: View {
 
     // MARK: Board
 
-    private var boardBase: some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+    private var board: some View {
+        let outline = BoardOutline(column: Self.boardColumn, band: Self.boardBand, radius: 12)
         return canvas {
-            place(ZStack {
-                shape.fill(LinearGradient(colors: [Tone.boardTop, Tone.board], startPoint: .top, endPoint: .bottom))
-                shape.strokeBorder(Tone.edge, lineWidth: 1)
-            }, Self.board)
+            outline.fill(LinearGradient(colors: [Tone.boardTop, Tone.board], startPoint: .top, endPoint: .bottom))
+            outline.stroke(Tone.edge, lineWidth: 1)
             BoardParts(kind: .capacitors).fill(Tone.component)
             BoardParts(kind: .chips).fill(Tone.boardChip)
             BoardParts(kind: .chips).stroke(Color.white.opacity(0.14), lineWidth: 0.75)
@@ -211,13 +225,14 @@ struct MacBookView: View {
         }
     }
 
-    private static let boardScrews = [CGPoint(x: 353, y: 48), CGPoint(x: 190, y: 286), CGPoint(x: 516, y: 286)]
+    private static let boardScrews = [CGPoint(x: 353, y: 50), CGPoint(x: 196, y: 334), CGPoint(x: 510, y: 334)]
 
     /// Copper, from along the foot of the fins at each fan's outlet, over the top of the
-    /// board and down into the chip, where the package covers their ends.
+    /// board and down under the CPU on the left and the GPU on the right, which cover
+    /// their ends.
     private var heatPipes: some View {
-        let pipes = [HeatPipe(from: CGPoint(x: 46, y: 57), along: 240, to: CGPoint(x: 292, y: 78)),
-                     HeatPipe(from: CGPoint(x: 660, y: 57), along: 466, to: CGPoint(x: 414, y: 78))]
+        let pipes = [HeatPipe(from: CGPoint(x: 46, y: 55), along: 226, to: CGPoint(x: 246, y: 90)),
+                     HeatPipe(from: CGPoint(x: 660, y: 55), along: 486, to: CGPoint(x: 466, y: 104))]
         return canvas {
             ForEach(pipes.indices, id: \.self) { index in
                 pipes[index].stroke(Color.black.opacity(0.18),
@@ -231,54 +246,11 @@ struct MacBookView: View {
         }
     }
 
-    /// The Wi-Fi module's two antenna leads, up into the hinge where the antennas are.
-    private var antennas: some View {
-        canvas {
-            ForEach([Self.wifi.minX + 16, Self.wifi.maxX - 16], id: \.self) { x in
-                place(Capsule().fill(Tone.cable), CGRect(x: x - 1, y: Self.vent.maxY, width: 2,
-                                                         height: Self.wifi.minY - Self.vent.maxY))
-            }
-        }
-    }
+    // MARK: Chips
 
-    // MARK: Chip
-
-    /// The M-series package: the die in the middle, its CPU cores over its GPU cores, each
-    /// lit by its load, and the memory packages either side, filled by how much is in use.
-    private var chip: some View {
-        let substrate = RoundedRectangle(cornerRadius: 7, style: .continuous)
-        let memory = engine.memory.value
-        // Four packages for a Max's wide memory bus, two otherwise.
-        let packages = (memory?.totalBytes ?? 0) >= 32 << 30 ? 4 : 2
-        return canvas {
-            place(ZStack {
-                substrate.fill(LinearGradient(colors: [Tone.substrateTop, Tone.substrate],
-                                              startPoint: .top, endPoint: .bottom))
-                substrate.strokeBorder(Tone.edge, lineWidth: 1)
-            }
-            .shadow(color: Tone.dropShadow, radius: 3, y: 1), Self.package)
-            place(memoryPackages(count: packages, fraction: memory?.usedFraction ?? 0)
-                .hoverRegion(.memory, layout: layout), Self.package.insetBy(dx: 6, dy: 6))
-            place(die, Self.die)
-        }
-    }
-
-    private func memoryPackages(count: Int, fraction: Double) -> some View {
-        let column = VStack(spacing: 6) {
-            ForEach(0..<count / 2, id: \.self) { _ in
-                level(fraction, color: palette(.memory)[0], vertical: true, radius: 2.5, face: Tone.chipFace,
-                      isChip: true)
-                    .frame(width: 26)
-            }
-        }
-        return HStack(spacing: 0) {
-            column
-            Spacer(minLength: 0)
-            column
-        }
-    }
-
-    private var die: some View {
+    /// The bento's CPU chip, its cores lit by their load, and its GPU, its cores switching
+    /// on as the load rises, side by side where the heat pipes end.
+    private var chips: some View {
         let cpu = engine.cpu.value
         let kinds = cpu?.coreKinds ?? []
         let loads = cpu?.perCore.map(\.busy) ?? []
@@ -287,101 +259,82 @@ struct MacBookView: View {
         let performance = loads.indices.filter { $0 >= kinds.count || kinds[$0] != .efficiency }.map { loads[$0] }
         let efficiency = loads.indices.filter { $0 < kinds.count && kinds[$0] == .efficiency }.map { loads[$0] }
         let device = engine.gpu.value?.primary
-        let gpuCores = device?.coreCount ?? engine.system.value?.gpuCoreCount ?? 0
-        let inner = Self.die.width - 16
-        return ZStack {
-            ChipFace()
-            VStack(spacing: 7) {
-                ChipGraphic.lettering(engine.system.value?.chipName, size: 64)
-                    .frame(height: 34)
-                ChipCores(performance: performance, efficiency: efficiency,
-                          size: CGSize(width: inner, height: 46),
-                          performanceColors: [.white, .white],
-                          efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)])
-                    .frame(width: inner, height: 46)
-                    .hoverRegion(.cpu, layout: layout)
-                Rectangle().fill(Color.white.opacity(0.1)).frame(height: 1)
-                gpuGrid(cores: gpuCores, load: device?.utilization ?? 0)
-                    .frame(width: inner)
-                    .frame(maxHeight: .infinity)
-                    .hoverRegion(.gpu, layout: layout)
-            }
-            .padding(8)
-        }
-    }
-
-    /// The GPU's cores in two rows, four on the biggest chips, switching on one by one as
-    /// the load rises: macOS reports the GPU only as a whole, so the lit ones read as a
-    /// level, not as which.
-    private func gpuGrid(cores: Int, load: Double) -> some View {
-        let rows = cores > 24 ? 4 : cores > 4 ? 2 : 1
-        let columns = max(1, Int((Double(cores) / Double(rows)).rounded(.up)))
-        let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
-        return VStack(spacing: 3) {
-            ForEach(0..<rows, id: \.self) { row in
-                HStack(spacing: 3) {
-                    ForEach(0..<columns, id: \.self) { column in
-                        let index = row * columns + column
-                        if index < cores {
-                            GPUBlock(isLit: index < lit, colors: palette(.gpu))
-                        } else {
-                            Color.clear
-                        }
-                    }
-                }
-            }
-        }
-        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: lit)
-    }
-
-    // MARK: Wi-Fi and flash
-
-    /// The Wi-Fi module under its shield, with its antenna leads' connectors along the top.
-    private var wifiModule: some View {
-        let network = engine.network.value ?? engine.lastKnown.network.value
-        let can = RoundedRectangle(cornerRadius: 4, style: .continuous)
         return canvas {
-            place(ZStack {
-                can.fill(LinearGradient(colors: [Tone.shieldTop, Tone.shield],
-                                        startPoint: .topLeading, endPoint: .bottomTrailing))
-                DotGrid(pitch: 5, radius: 0.7).fill(Tone.well.opacity(0.7)).padding(6).clipShape(can)
-                Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(gradient(palette(.network)))
-                    .padding(.top, 6)
-                can.strokeBorder(Tone.edge, lineWidth: 1)
-            }
-            .shadow(color: Tone.dropShadow, radius: 2, y: 1)
-            .hoverRegion(.network, layout: layout), Self.wifi)
-            ForEach([Self.wifi.minX + 16, Self.wifi.maxX - 16], id: \.self) { x in
-                ZStack {
-                    Circle().fill(Tone.cable)
-                    Circle().fill(Copper.shine).frame(width: 2.5, height: 2.5)
-                }
-                .frame(width: 7, height: 7)
-                .position(x: x, y: Self.wifi.minY + 7)
-            }
+            place(scaled(ChipGraphic(name: engine.system.value?.chipName,
+                                     performance: performance, efficiency: efficiency,
+                                     performanceColors: [.white, .white],
+                                     efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)]),
+                         native: Self.chipNative, width: Self.cpu.width)
+                .shadow(color: Tone.dropShadow, radius: 3, y: 1)
+                .hoverRegion(.cpu, layout: layout), Self.cpu)
+            place(gpuDie(cores: device?.coreCount ?? engine.system.value?.gpuCoreCount ?? 0,
+                         load: device?.utilization ?? 0)
+                .shadow(color: Tone.dropShadow, radius: 3, y: 1)
+                .hoverRegion(.gpu, layout: layout), Self.gpu)
         }
     }
 
-    /// The SSD's flash on the board beside the chip, filled by how full the disk is.
-    private var flashPackages: some View {
-        let root = engine.disk.value?.rootVolume
-        let used = root.map { $0.totalBytes > 0 ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 } ?? 0
-        return place(VStack(spacing: 6) {
-            ForEach(0..<2, id: \.self) { _ in
-                level(used, color: palette(.disk)[0], vertical: false, radius: 2.5, face: Tone.chipFace,
-                      isChip: true)
+    @ViewBuilder
+    private func gpuDie(cores: Int, load: Double) -> some View {
+        if cores > 0 {
+            scaled(GPUDie(cores: cores, load: load, colors: palette(.gpu), size: Self.gpuNative),
+                   native: Self.gpuNative, width: Self.gpu.width)
+        } else {
+            // No core count to lay the cores out by: the package and its name alone.
+            ZStack {
+                ChipFace()
+                Text("GPU")
+                    .font(.system(size: 29, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(ChipGraphic.silver)
             }
+            .padding(4)
         }
-        .shadow(color: Tone.dropShadow, radius: 2, y: 1)
-        .hoverRegion(.disk, layout: layout), Self.flash)
+    }
+
+    // MARK: Memory and SSD
+
+    /// The bento's memory module standing in its slot under the left fan, and its SSD in
+    /// its socket under the right, held down by the screw at its far end: each filled by
+    /// how full it is, with what is free printed on it.
+    private var modules: some View {
+        let memory = engine.memory.value
+        let root = engine.disk.value?.rootVolume
+        let scale = Self.memory.width / Self.memoryNative.width
+        let slot = RoundedRectangle(cornerRadius: 2, style: .continuous)
+        let socket = ZStack {
+            slot.fill(Tone.well)
+            slot.strokeBorder(Tone.edge, lineWidth: 0.75)
+        }
+        // Free is what the fill leaves, and the drive's fill is counted from the same
+        // available space as the label printed on it, as the bento counts them.
+        let memoryFree = memory.map { $0.totalBytes > $0.usedBytes ? $0.totalBytes - $0.usedBytes : 0 }
+        let memoryUsed = memory.map { $0.totalBytes > 0 ? Double($0.usedBytes) / Double($0.totalBytes) : 0 }
+        let diskUsed = root.map { $0.totalBytes > 0 ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 }
+        return canvas {
+            place(socket, CGRect(x: Self.memory.minX - 4, y: Self.memory.maxY - 8 * scale - 2,
+                                 width: Self.memory.width + 8, height: 8 * scale + 5))
+            place(scaled(MemoryGraphic(label: memoryFree.map { "\(formatter.memory($0)) free" },
+                                       fraction: memoryUsed ?? 0, load: palette(.memory)[0]),
+                         native: Self.memoryNative, width: Self.memory.width)
+                .shadow(color: Tone.dropShadow, radius: 2, y: 1)
+                .hoverRegion(.memory, layout: layout), Self.memory)
+            place(socket, CGRect(x: Self.ssd.minX - 4, y: Self.ssd.minY - 3,
+                                 width: 9 * scale + 6, height: Self.ssd.height + 6))
+            place(scaled(SSDGraphic(fraction: diskUsed ?? 0, colors: palette(.disk),
+                                    label: root.map { "\(formatter.storage($0.availableBytes)) free" },
+                                    surface: Tone.board),
+                         native: Self.ssdNative, width: Self.ssd.width)
+                .shadow(color: Tone.dropShadow, radius: 2, y: 1)
+                .hoverRegion(.disk, layout: layout), Self.ssd)
+            screw.position(x: Self.ssd.maxX, y: Self.ssd.midY)
+        }
     }
 
     // MARK: Readings
 
-    /// Each part's reading in the clear space beside it: under the fans, under the Wi-Fi
-    /// module and the flash, and under the chip, one for each of its parts.
+    /// Each part's reading in the clear space beside it: under the fans and the chips,
+    /// and over the band's parts the way a bento card's header sits over its object.
     private var readings: some View {
         let thermal = engine.thermal.value
         let fans = thermal?.fans ?? []
@@ -389,32 +342,29 @@ struct MacBookView: View {
         let gpu = engine.gpu.value?.primary
         let memory = engine.memory.value
         let root = engine.disk.value?.rootVolume
-        let underChip = Self.readingsTop
         return canvas {
             fanReading(fans.first).hoverRegion(.thermal, layout: layout)
-                .top(at: CGPoint(x: Self.leftFan.midX, y: underChip))
+                .top(at: CGPoint(x: Self.leftFan.midX, y: Self.readingsTop))
             if fans.count > 1 {
                 fanReading(fans[1]).hoverRegion(.thermal, layout: layout)
-                    .top(at: CGPoint(x: Self.rightFan.midX, y: underChip))
+                    .top(at: CGPoint(x: Self.rightFan.midX, y: Self.readingsTop))
             }
-            networkReading.hoverRegion(.network, layout: layout)
-                .top(at: CGPoint(x: Self.wifi.midX, y: Self.wifi.maxY + 10))
-            reading("SSD", root.map { formatter.storage($0.availableBytes) + " free" }, colors: palette(.disk),
-                    size: 12, celsius: Self.hottest(thermal, .storage))
-                .hoverRegion(.disk, layout: layout)
-                .top(at: CGPoint(x: Self.flash.midX, y: Self.flash.maxY + 10))
             reading("CPU", cpu.map { formatter.percent($0.total.busy) }, colors: palette(.cpu),
                     celsius: thermal?.cpuCelsius)
                 .hoverRegion(.cpu, layout: layout)
-                .top(at: CGPoint(x: Self.package.midX - 66, y: underChip))
+                .top(at: CGPoint(x: Self.cpu.midX, y: Self.readingsTop))
             reading("GPU", gpu?.utilization.map { formatter.percent($0) }, colors: palette(.gpu),
                     celsius: thermal?.gpuCelsius)
                 .hoverRegion(.gpu, layout: layout)
-                .top(at: CGPoint(x: Self.package.midX, y: underChip))
-            reading("Memory", memory.map { formatter.percent($0.usedFraction) }, colors: palette(.memory),
-                    detail: memory.map { "of \(formatter.memory($0.totalBytes))" })
+                .top(at: CGPoint(x: Self.gpu.midX, y: Self.readingsTop))
+            label("Memory", memory.map { formatter.memory($0.totalBytes) })
                 .hoverRegion(.memory, layout: layout)
-                .top(at: CGPoint(x: Self.package.midX + 66, y: underChip))
+                .top(at: CGPoint(x: Self.memory.midX, y: Self.labelsTop))
+            network.hoverRegion(.network, layout: layout)
+                .top(at: CGPoint(x: Self.boardColumn.midX, y: Self.labelsTop))
+            label("SSD", root.map { formatter.storage($0.totalBytes) }, celsius: Self.hottest(thermal, .storage))
+                .hoverRegion(.disk, layout: layout)
+                .top(at: CGPoint(x: Self.ssd.midX, y: Self.labelsTop))
         }
     }
 
@@ -430,19 +380,35 @@ struct MacBookView: View {
         }
     }
 
-    private var networkReading: some View {
+    /// The network's name over the Wi-Fi module under its shield, and beside the module
+    /// what is going up and coming down, as the bento's network card sets them.
+    private var network: some View {
         let network = engine.network.value ?? engine.lastKnown.network.value
-        return VStack(spacing: 1) {
+        let can = RoundedRectangle(cornerRadius: 4, style: .continuous)
+        return VStack(spacing: 6) {
             caption(network?.wifi?.ssid ?? (network?.wifi != nil || network == nil ? "Wi-Fi" : "Network"))
-                .frame(maxWidth: 80)
-            Group {
-                Text("↓ " + (network.map { formatter.networkRate($0.downloadBytesPerSecond) } ?? MetricFormatter.unavailable))
-                    .foregroundStyle(gradient(Self.downColors))
-                Text("↑ " + (network.map { formatter.networkRate($0.uploadBytesPerSecond) } ?? MetricFormatter.unavailable))
-                    .foregroundStyle(gradient(Self.upColors))
+                .frame(maxWidth: 150)
+            HStack(spacing: 10) {
+                ZStack {
+                    can.fill(LinearGradient(colors: [Tone.shieldTop, Tone.shield],
+                                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                    DotGrid(pitch: 5, radius: 0.7).fill(Tone.well.opacity(0.7)).padding(5).clipShape(can)
+                    Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(gradient(palette(.network)))
+                    can.strokeBorder(Tone.edge, lineWidth: 1)
+                }
+                .frame(width: 38, height: 38)
+                .shadow(color: Tone.dropShadow, radius: 2, y: 1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("↑ " + (network.map { formatter.networkRate($0.uploadBytesPerSecond) } ?? MetricFormatter.unavailable))
+                        .foregroundStyle(gradient(Self.upColors))
+                    Text("↓ " + (network.map { formatter.networkRate($0.downloadBytesPerSecond) } ?? MetricFormatter.unavailable))
+                        .foregroundStyle(gradient(Self.downColors))
+                }
+                .font(.system(size: 13, weight: .bold).monospacedDigit())
+                .contentTransition(.numericText())
             }
-            .font(.system(size: 12, weight: .bold).monospacedDigit())
-            .contentTransition(.numericText())
         }
         .lineLimit(1)
         .fixedSize()
@@ -459,13 +425,7 @@ struct MacBookView: View {
                 .foregroundStyle(gradient(colors))
                 .contentTransition(.numericText())
             if let celsius {
-                HStack(spacing: 1) {
-                    Image(systemName: "thermometer.medium")
-                        .font(.system(size: 9, weight: .bold))
-                    Text(formatter.temperature(celsius))
-                        .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
-                }
-                .foregroundStyle(gradient(Self.heatColors))
+                temperature(celsius)
             }
             if let detail {
                 Text(detail)
@@ -475,6 +435,34 @@ struct MacBookView: View {
         }
         .lineLimit(1)
         .fixedSize()
+    }
+
+    /// A part's name in small capitals and what it holds beside it, over a part that
+    /// carries its own reading, as a bento card's header names its object.
+    private func label(_ title: String, _ detail: String?, celsius: Double? = nil) -> some View {
+        HStack(spacing: 5) {
+            caption(title)
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(Design.Palette.secondaryText)
+            }
+            if let celsius {
+                temperature(celsius)
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+    }
+
+    private func temperature(_ celsius: Double) -> some View {
+        HStack(spacing: 1) {
+            Image(systemName: "thermometer.medium")
+                .font(.system(size: 9, weight: .bold))
+            Text(formatter.temperature(celsius))
+                .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+        }
+        .foregroundStyle(gradient(Self.heatColors))
     }
 
     private func caption(_ title: String) -> some View {
@@ -633,34 +621,6 @@ struct MacBookView: View {
         .frame(width: 9, height: 9)
     }
 
-    /// How full a part is, tone on tone: a wash of its colour up to the level, and a
-    /// bright line at the level itself. A chip carries the dot that marks its first pin.
-    private func level(_ fraction: Double, color: Color, vertical: Bool, radius: CGFloat,
-                       face: Color, isChip: Bool = false) -> some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        return ZStack {
-            shape.fill(face)
-            Group {
-                if vertical {
-                    FillFromBottom(fraction: fraction).fill(color.opacity(0.45))
-                    LevelLine(fraction: fraction, vertical: true).fill(color)
-                } else {
-                    FillFromLeading(fraction: fraction).fill(color.opacity(0.45))
-                    LevelLine(fraction: fraction, vertical: false).fill(color)
-                }
-            }
-            .clipShape(shape)
-            if isChip {
-                Circle().fill(Color.white.opacity(0.3))
-                    .frame(width: 3, height: 3)
-                    .padding(4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-            shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75)
-        }
-        .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
-    }
-
     /// The whole machine's area, for layers drawn in its own points.
     private func canvas<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         ZStack(alignment: .topLeading, content: content)
@@ -671,6 +631,16 @@ struct MacBookView: View {
     /// for the detail beside the panel is where it is drawn.
     private func place<V: View>(_ view: V, _ rect: CGRect) -> some View {
         view.frame(width: rect.width, height: rect.height).position(x: rect.midX, y: rect.midY)
+    }
+
+    /// One of the bento's parts drawn at the size its card draws it and scaled to `width`,
+    /// so it keeps the card's proportions, lettering and all.
+    private func scaled<V: View>(_ part: V, native: CGSize, width: CGFloat) -> some View {
+        let scale = width / native.width
+        return part
+            .frame(width: native.width, height: native.height)
+            .scaleEffect(scale)
+            .frame(width: width, height: native.height * scale)
     }
 
     private func palette(_ module: PanelModule) -> [Color] {
@@ -933,25 +903,49 @@ private struct LevelLine: Shape {
     }
 }
 
+/// The logic board's outline: a column up the middle and a band across its foot, as one
+/// path so its edge runs round the corners where the two meet.
+private struct BoardOutline: Shape {
+    let column: CGRect
+    /// Sharing the column's foot.
+    let band: CGRect
+    let radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let corners = [CGPoint(x: column.minX, y: column.minY), CGPoint(x: column.maxX, y: column.minY),
+                       CGPoint(x: column.maxX, y: band.minY), CGPoint(x: band.maxX, y: band.minY),
+                       CGPoint(x: band.maxX, y: band.maxY), CGPoint(x: band.minX, y: band.maxY),
+                       CGPoint(x: band.minX, y: band.minY), CGPoint(x: column.minX, y: band.minY)]
+        var path = Path()
+        path.move(to: CGPoint(x: column.midX, y: column.minY))
+        for index in corners.indices {
+            path.addArc(tangent1End: corners[(index + 1) % corners.count],
+                        tangent2End: corners[(index + 2) % corners.count], radius: radius)
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
 /// The small parts around a logic board's big ones, at fixed places so the board looks
-/// the same every time it is drawn: a column of capacitors either side of the chip, and
-/// the power controllers in the board's lower corners with capacitors beside them.
+/// the same every time it is drawn: a column of capacitors between the CPU and the GPU,
+/// and either side of the Wi-Fi module the power controllers with capacitors beside them.
 private struct BoardParts: Shape {
     enum Kind { case chips, capacitors }
 
     let kind: Kind
 
-    /// In the machine's points, the left half; the right half mirrors it.
-    private static let chips = [CGRect(x: 194, y: 196, width: 30, height: 30),
-                                CGRect(x: 232, y: 202, width: 18, height: 12),
-                                CGRect(x: 194, y: 238, width: 18, height: 14)]
+    /// In the machine's points, the band's left half; the right half mirrors it.
+    private static let chips = [CGRect(x: 188, y: 280, width: 26, height: 26),
+                                CGRect(x: 222, y: 284, width: 16, height: 11),
+                                CGRect(x: 188, y: 314, width: 16, height: 12)]
     private static let width: CGFloat = 706
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        func add(_ part: CGRect, radius: CGFloat) {
-            for frame in [part, CGRect(x: Self.width - part.maxX, y: part.minY, width: part.width,
-                                       height: part.height)] {
+        func add(_ part: CGRect, radius: CGFloat, mirrored: Bool = true) {
+            let mirror = CGRect(x: Self.width - part.maxX, y: part.minY, width: part.width, height: part.height)
+            for frame in mirrored ? [part, mirror] : [part] {
                 path.addRoundedRect(in: frame, cornerSize: CGSize(width: radius, height: radius))
             }
         }
@@ -959,17 +953,19 @@ private struct BoardParts: Shape {
             for chip in Self.chips { add(chip, radius: 1.5) }
             return path
         }
-        for y in stride(from: CGFloat(70), through: 214, by: 9) {
-            add(CGRect(x: 258, y: y, width: 4, height: 2.5), radius: 0.5)
+        for y in stride(from: CGFloat(78), through: 178, by: 9) {
+            add(CGRect(x: 323, y: y, width: 4, height: 2.5), radius: 0.5, mirrored: false)
         }
-        for x in stride(from: CGFloat(218), through: 246, by: 7) {
-            add(CGRect(x: x, y: 240, width: 2.5, height: 4), radius: 0.5)
-            add(CGRect(x: x, y: 248, width: 2.5, height: 4), radius: 0.5)
+        for x in stride(from: CGFloat(222), through: 250, by: 7) {
+            add(CGRect(x: x, y: 304, width: 2.5, height: 4), radius: 0.5)
+            add(CGRect(x: x, y: 312, width: 2.5, height: 4), radius: 0.5)
+        }
+        for y in stride(from: CGFloat(278), through: 324, by: 9) {
+            add(CGRect(x: 262, y: y, width: 4, height: 2.5), radius: 0.5)
         }
         return path
     }
 }
-
 /// Holes in rows, each row half a pitch along from the last: a speaker's grille, or the
 /// vents in a shield.
 private struct DotGrid: Shape {
@@ -990,20 +986,6 @@ private struct DotGrid: Shape {
             row += 1
         }
         return path
-    }
-}
-
-/// The bottom `fraction` of a rect.
-private struct FillFromBottom: Shape {
-    var fraction: Double
-    var animatableData: Double {
-        get { fraction }
-        set { fraction = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        let height = rect.height * min(max(fraction, 0), 1)
-        return Path(CGRect(x: rect.minX, y: rect.maxY - height, width: rect.width, height: height))
     }
 }
 
