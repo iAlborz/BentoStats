@@ -30,18 +30,14 @@ sysctl and CoreWLAN.
 
 ## Install
 
-Download it from [airstats.app](https://airstats.app), open the dmg and drag the app to
-Applications. It is signed and notarized, so it opens with no warning.
+Download [BentoStats.dmg](https://github.com/iAlborz/airstats/releases/latest/download/BentoStats.dmg)
+from the [latest release](https://github.com/iAlborz/airstats/releases/latest), open it and
+drag Bento Stats to Applications. It is signed with a Developer ID and notarized, so it
+opens with no warning.
 
-Or with Homebrew:
-
-```sh
-brew install --cask airstats
-```
-
-AirStats updates itself with [Sparkle](https://sparkle-project.org). It asks airstats.app
-once a week whether a newer version exists, and installs one only when you say so. Both of
-those can be turned off in General settings.
+That download is the full version. There is also a lighter Mac App Store version: macOS
+does not let App Store apps read temperatures or fan speeds, so it shows the Mac's thermal
+state in their place.
 
 ## Build from source
 
