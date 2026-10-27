@@ -33,7 +33,9 @@ sysctl and CoreWLAN.
 Download [BentoStats.dmg](https://github.com/iAlborz/BentoStats/releases/latest/download/BentoStats.dmg)
 from the [latest release](https://github.com/iAlborz/BentoStats/releases/latest), open it and
 drag Bento Stats to Applications. It is signed with a Developer ID and notarized, so it
-opens with no warning.
+opens with no warning. From version 1.1 it checks this repository for a new release once a
+day, and installs one when you click Install in its panel, in Settings or on the
+notification that announces it.
 
 That download is the full version. There is also a lighter Mac App Store version: macOS
 does not let App Store apps read temperatures or fan speeds, so it shows the Mac's thermal

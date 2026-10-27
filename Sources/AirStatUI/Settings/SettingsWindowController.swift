@@ -11,13 +11,15 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// Shared with the threshold monitor, so the notifications pane reports the same
     /// grant the alerts actually depend on rather than a second opinion.
     private let authority: NotificationAuthority?
+    private let updater: Updater?
     private var window: NSWindow?
 
     public init(engine: MetricsEngine, settings: SettingsStore,
-                authority: NotificationAuthority? = nil) {
+                authority: NotificationAuthority? = nil, updater: Updater? = nil) {
         self.engine = engine
         self.settings = settings
         self.authority = authority
+        self.updater = updater
         super.init()
     }
 
@@ -48,7 +50,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func makeWindow() -> NSWindow {
         let window = NSWindow()
         let root = SettingsRootView(settings: settings, engine: engine,
-                                    authority: authority) { [weak window] tab in
+                                    authority: authority, updater: updater) { [weak window] tab in
             window?.title = tab.label
         }
         window.delegate = self
@@ -109,6 +111,8 @@ struct SettingsRootView: View {
     let engine: MetricsEngine?
     /// Nil in the offscreen renderer: `UNUserNotificationCenter` traps outside an app bundle.
     let authority: NotificationAuthority?
+    /// Absent unless this copy updates itself.
+    let updater: Updater?
     /// Lets the window title follow the selected pane, which is what System
     /// Settings does and what `navigationTitle` used to give us for free.
     var onPaneChange: ((SettingsTab) -> Void)?
@@ -128,11 +132,12 @@ struct SettingsRootView: View {
     private static let titlebarInset: CGFloat = 28
 
     init(settings: SettingsStore, engine: MetricsEngine? = nil,
-         authority: NotificationAuthority? = nil,
+         authority: NotificationAuthority? = nil, updater: Updater? = nil,
          initialTab: SettingsTab? = nil, onPaneChange: ((SettingsTab) -> Void)? = nil) {
         self.settings = settings
         self.engine = engine
         self.authority = authority
+        self.updater = updater
         self.onPaneChange = onPaneChange
         _tab = State(initialValue: initialTab ?? SettingsTab.renderDefault)
     }
@@ -268,7 +273,7 @@ struct SettingsRootView: View {
     @ViewBuilder
     private var pane: some View {
         switch tab {
-        case .general: GeneralPane(settings: settings)
+        case .general: GeneralPane(settings: settings, updater: updater)
         case .menuBar: MenuBarPane(settings: settings, engine: engine)
         case .appearance: AppearancePane(settings: settings)
         case .notifications: NotificationsPane(settings: settings, engine: engine,

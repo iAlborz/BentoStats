@@ -16,6 +16,8 @@ final class AppCoordinator {
     private let settingsWindow: SettingsWindowController
     private let thresholdMonitor: ThresholdMonitor
     private let hotKeys: GlobalHotKeyCenter
+    /// Only in the copy downloaded from GitHub.
+    private let updater: Updater?
 
     private var observers: [any NSObjectProtocol] = []
     /// Where the panel is currently hung. Kept here because with one status item per
@@ -27,12 +29,14 @@ final class AppCoordinator {
         let store = SettingsStore()
         let engine = MetricsEngine(settingsStore: store)
         let authority = NotificationAuthority()
+        let updater = Updater(settings: store, authority: authority)
         self.settingsStore = store
         self.engine = engine
+        self.updater = updater
         self.statusItem = StatusItemController(engine: engine, settings: store)
-        self.panel = PanelController(engine: engine, settings: store)
+        self.panel = PanelController(engine: engine, settings: store, updater: updater)
         self.settingsWindow = SettingsWindowController(engine: engine, settings: store,
-                                                      authority: authority)
+                                                      authority: authority, updater: updater)
         self.thresholdMonitor = ThresholdMonitor(engine: engine, settings: store, authority: authority)
         self.hotKeys = GlobalHotKeyCenter(settings: store)
     }
@@ -68,6 +72,7 @@ final class AppCoordinator {
         engine.start()
         thresholdMonitor.start()
         hotKeys.start()
+        updater?.start()
 
         registerSystemObservers()
         // The system follows the stored preference, and then the preference follows the
@@ -88,6 +93,7 @@ final class AppCoordinator {
         }
         observers.removeAll()
         hotKeys.stop()
+        updater?.stop()
         thresholdMonitor.stop()
         engine.stop()
         statusItem.remove()

@@ -4,6 +4,8 @@ import AirStatKit
 
 struct GeneralPane: View {
     let settings: SettingsStore
+    /// Absent unless this copy updates itself.
+    var updater: Updater? = nil
 
     /// `LoginItem.synchronize` reports a real failure — a missing bundle, a
     /// revoked approval — and the toggle is worthless if that is swallowed.
@@ -21,6 +23,19 @@ struct GeneralPane: View {
                        isOn: settings.binding(\.general.showsDockIcon, onChange: applyDockIcon))
             } header: {
                 Text("Startup")
+            }
+
+            if let updater {
+                Section {
+                    Toggle("Check for updates automatically",
+                           isOn: settings.binding(\.general.checksForUpdates) { if $0 { updater.checkNow() } })
+                    UpdateStatusRow(updater: updater)
+                    if let failure = updater.failure {
+                        SettingsCaution(failure)
+                    }
+                } header: {
+                    Text("Updates")
+                }
             }
 
             Section {
@@ -64,11 +79,18 @@ struct GeneralPane: View {
             } header: {
                 Text("Privacy")
             } footer: {
-                SettingsFootnote("Left off, the Network module shows your local "
-                                 + "addresses only and Bento Stats contacts nothing.")
+                SettingsFootnote(privacyFootnote)
             }
         }
         .settingsFormStyle()
+    }
+
+    private var privacyFootnote: String {
+        guard updater != nil, settings.settings.general.checksForUpdates else {
+            return "Left off, the Network module shows your local addresses only and Bento Stats contacts nothing."
+        }
+        return "Left off, the Network module shows your local addresses only, and the one thing "
+            + "Bento Stats contacts is GitHub, to check for updates."
     }
 
     // MARK: Side effects
@@ -90,5 +112,51 @@ struct GeneralPane: View {
         } else {
             loginItemError = nil
         }
+    }
+}
+
+/// Where this copy stands: the version, when it last looked, and the one thing to do next.
+private struct UpdateStatusRow: View {
+    let updater: Updater
+
+    var body: some View {
+        LabeledContent {
+            switch updater.activity {
+            case .checking:
+                ProgressView().controlSize(.small)
+            case .installing:
+                HStack(spacing: Design.Space.s) {
+                    ProgressView().controlSize(.small)
+                    Text("Installing…").foregroundStyle(Design.Palette.secondaryText)
+                }
+            case .idle:
+                if updater.available == nil {
+                    Button("Check Now", action: updater.checkNow)
+                } else if updater.failure == nil {
+                    Button("Install", action: updater.install)
+                } else {
+                    Button("Download", action: updater.openReleasePage)
+                }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: Design.Space.xxs) {
+                Text(headline)
+                if let lastCheck = updater.lastCheck {
+                    Text("Last checked \(lastCheck.formatted(.relative(presentation: .named)))")
+                        .font(.callout)
+                        .foregroundStyle(Design.Palette.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var headline: String {
+        if let release = updater.available {
+            return "Bento Stats \(release.version) is available"
+        }
+        if updater.lastCheck != nil, updater.failure == nil {
+            return "Bento Stats \(updater.currentVersion) is up to date"
+        }
+        return "Bento Stats \(updater.currentVersion)"
     }
 }

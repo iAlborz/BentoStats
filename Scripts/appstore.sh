@@ -13,8 +13,9 @@
 # Resources/AppStore.entitlements; Organizer keeps those entitlements when it re-signs.
 # The local build keeps its own bundle ID and stays outside the sandbox.
 #
-# ARCHIVE puts the archive somewhere else, and an empty ENTITLEMENTS signs it with none:
-# Scripts/direct.sh archives the full, unsandboxed app that way.
+# ARCHIVE puts the archive somewhere else, an empty ENTITLEMENTS signs it with none, and
+# RELEASES_URL is where the app looks for updates: Scripts/direct.sh archives the full,
+# unsandboxed app that way. The store's copy has no RELEASES_URL and never updates itself.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -39,6 +40,9 @@ APP="$ARCHIVE/Products/Applications/$NAME.app"
 mkdir -p "$ARCHIVE/Products/Applications" "$ARCHIVE/dSYMs"
 cp -R "$BUILT" "$APP"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Contents/Info.plist"
+if [ -n "${RELEASES_URL:-}" ]; then
+  /usr/libexec/PlistBuddy -c "Add :BentoStatsReleasesURL string $RELEASES_URL" "$APP/Contents/Info.plist"
+fi
 
 # The UI's resource bundle, unpacked into the app's own Resources, where Logo looks
 # first. Organizer re-signs the app but leaves a bundle nested in Resources as it was,

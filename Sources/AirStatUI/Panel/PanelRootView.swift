@@ -37,21 +37,27 @@ public struct PanelRootView: View {
     private let settings: SettingsStore
     /// Absent in renderers and previews, which neither edit the cards nor open details.
     private let layout: PanelLayoutState?
+    /// Absent unless this copy updates itself.
+    private let updater: Updater?
 
     public init(engine: MetricsEngine, settings: SettingsStore) {
         self.engine = engine
         self.settings = settings
         self.layout = nil
+        self.updater = nil
     }
 
-    init(engine: MetricsEngine, settings: SettingsStore, layout: PanelLayoutState) {
+    init(engine: MetricsEngine, settings: SettingsStore, layout: PanelLayoutState,
+         updater: Updater? = nil) {
         self.engine = engine
         self.settings = settings
         self.layout = layout
+        self.updater = updater
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let updater { UpdateBanner(updater: updater) }
             ScrollView(.vertical) {
                 switch style {
                 case .bento:

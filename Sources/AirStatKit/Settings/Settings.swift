@@ -671,6 +671,9 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     /// Fetch the public IP address: the one feature that leaves the machine.
     public var fetchesPublicIP: Bool
     public var showsDockIcon: Bool
+    /// Look for a newer release once a day. Only the copy downloaded from GitHub does:
+    /// the App Store copy is updated by the store, and a build from source by its builder.
+    public var checksForUpdates: Bool
 
     public init(updateInterval: TimeInterval = 2,
                 launchAtLogin: Bool = false,
@@ -682,7 +685,8 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
                 throttlesWhenOccluded: Bool = true,
                 pausesOnLowPower: Bool = false,
                 fetchesPublicIP: Bool = false,
-                showsDockIcon: Bool = false) {
+                showsDockIcon: Bool = false,
+                checksForUpdates: Bool = true) {
         self.updateInterval = updateInterval
         self.launchAtLogin = launchAtLogin
         self.appearance = appearance
@@ -694,6 +698,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         self.pausesOnLowPower = pausesOnLowPower
         self.fetchesPublicIP = fetchesPublicIP
         self.showsDockIcon = showsDockIcon
+        self.checksForUpdates = checksForUpdates
     }
 
     public static let allowedIntervals: [TimeInterval] = [0.5, 1, 2, 3, 5, 10, 30]
@@ -701,7 +706,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case updateInterval, launchAtLogin, appearance, temperatureUnit, networkRateUnit
         case byteUnitStyle, showsPercentSign, throttlesWhenOccluded, pausesOnLowPower
-        case fetchesPublicIP, showsDockIcon
+        case fetchesPublicIP, showsDockIcon, checksForUpdates
     }
 
     public init(from decoder: Decoder) throws {
@@ -717,6 +722,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         pausesOnLowPower = c.value(.pausesOnLowPower, or: false)
         fetchesPublicIP = c.value(.fetchesPublicIP, or: false)
         showsDockIcon = c.value(.showsDockIcon, or: false)
+        checksForUpdates = c.value(.checksForUpdates, or: true)
     }
 }
 

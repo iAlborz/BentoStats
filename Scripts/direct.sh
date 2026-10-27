@@ -3,13 +3,17 @@
 # outside the Mac App Store: signed with the team's Developer ID, notarized, stapled,
 # and put in a .dmg.
 #
-#   Scripts/direct.sh   → dist/BentoStats.dmg
+#   Scripts/direct.sh   → dist/BentoStats.dmg, and dist/BentoStats.zip for the updater
 #
 # The store's copy runs in the App Sandbox, which closes the SMC; this one is archived
 # with no entitlements, so it stays outside it. Xcode does the signing and notarizing:
 # exporting the archive for Developer ID makes the certificate in the cloud if the team
 # has none, and uploads the app to Apple's notary service under the account signed in
 # to Xcode, so this Mac needs no certificate or notarytool profile of its own.
+#
+# This copy checks the repository's latest release once a day and offers to install it
+# (Updater in AirStatUI). Publish both files, under these names, on a release tagged
+# v<CFBundleShortVersionString>: the .dmg for people, the .zip for installed copies.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -18,11 +22,14 @@ NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' Resources/Info.plist)"
 TEAM="${TEAM:-R3S425S3T8}"
 WORK="dist/direct"
 DMG="dist/BentoStats.dmg"
+ZIP="dist/BentoStats.zip"
 
-rm -rf "$WORK" "$DMG"
+rm -rf "$WORK" "$DMG" "$ZIP"
 mkdir -p "$WORK"
 
-ARCHIVE="$(ARCHIVE="$PWD/$WORK/$NAME.xcarchive" ENTITLEMENTS= Scripts/appstore.sh | tail -1)"
+ARCHIVE="$(ARCHIVE="$PWD/$WORK/$NAME.xcarchive" ENTITLEMENTS= \
+  RELEASES_URL="https://api.github.com/repos/iAlborz/BentoStats/releases/latest" \
+  Scripts/appstore.sh | tail -1)"
 
 cat > "$WORK/ExportOptions.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -62,4 +69,9 @@ python3 -m venv "$WORK/venv"
 "$WORK/venv/bin/pip" install --quiet dmgbuild
 "$WORK/venv/bin/dmgbuild" -s Scripts/dmg.py -D app="$APP" -D root="$PWD" "$NAME" "$DMG" >/dev/null
 
+# What an installed copy downloads to update itself. ditto keeps the signature and the
+# stapled ticket intact, as the Finder's Compress would not.
+ditto -c -k --keepParent "$APP" "$ZIP"
+
 echo "$DMG"
+echo "$ZIP"

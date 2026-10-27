@@ -17,6 +17,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
+    private let updater: Updater?
     private var window: PanelWindow?
     private var layout: PanelLayoutState?
 
@@ -73,9 +74,10 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// bursts of use and is only released once the panel has genuinely been left alone.
     private static let windowReleaseDelay: Duration = .seconds(120)
 
-    public init(engine: MetricsEngine, settings: SettingsStore) {
+    public init(engine: MetricsEngine, settings: SettingsStore, updater: Updater? = nil) {
         self.engine = engine
         self.settings = settings
+        self.updater = updater
         super.init()
     }
 
@@ -221,7 +223,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
             self?.hoveredRow = nil
             self?.hideDetail()
         }
-        let root = PanelRootView(engine: engine, settings: settings, layout: layout)
+        let root = PanelRootView(engine: engine, settings: settings, layout: layout, updater: updater)
             .environment(\.panelActions, PanelActions(
                 openSettings: { [weak self] in self?.onRequestSettings?() },
                 quit: { [weak self] in self?.onRequestQuit?() },
