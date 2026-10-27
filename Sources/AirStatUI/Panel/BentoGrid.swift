@@ -2010,7 +2010,7 @@ private struct BentoQuitBody: View {
 /// them, and the efficiency cores as narrower blocks in green beside them, so the two
 /// kinds read apart by shape and by colour. The chip is drawn dark in both appearances:
 /// it is an object, and Apple's chip is black on a white page too.
-private struct ChipGraphic: View {
+struct ChipGraphic: View {
     /// "Apple M1 Max", or whatever the system reports for a chip that is not Apple's.
     let name: String?
     /// Each performance core's busy fraction, then each efficiency core's.
@@ -2066,9 +2066,13 @@ private struct ChipGraphic: View {
     static let silver = LinearGradient(colors: [Color(white: 0.97), Color(white: 0.66)],
                                        startPoint: .top, endPoint: .bottom)
 
-    @ViewBuilder
     private func lettering(side: CGFloat, scale: CGFloat) -> some View {
-        let size = side * scale
+        Self.lettering(name, size: side * scale)
+    }
+
+    /// The chip's name as it is marked on the chip, at a scale set by `size`.
+    @ViewBuilder
+    static func lettering(_ name: String?, size: CGFloat) -> some View {
         if let name, name.hasPrefix("Apple ") {
             // "Apple M1 Max" is set as the chip is marked: "M1" in silver, and the tier
             // under it in that tier's colours. Without Apple's logo, which Apple does
@@ -2112,7 +2116,7 @@ private struct ChipGraphic: View {
 /// The CPU cores laid out on the die: performance cores as squares in two rows, the
 /// efficiency cores beside them as blocks a little over half as wide, each rising from
 /// the bottom with its own load.
-private struct ChipCores: View {
+struct ChipCores: View {
     let performance: [Double]
     let efficiency: [Double]
     /// The area the cores fill, edge to edge.
@@ -2374,7 +2378,7 @@ private struct ChipLegs: Shape {
 
 /// One GPU core on the die: a dark block with a hairline edge, filled and glowing in
 /// the card's colour while lit. All but square-cornered.
-private struct GPUBlock: View {
+struct GPUBlock: View {
     let isLit: Bool
     let colors: [Color]
 
@@ -2397,7 +2401,7 @@ private struct GPUBlock: View {
 ///
 /// A couple of shades lighter in dark appearance, with a brighter bevel all round: the
 /// near-black that stands out on a white card all but disappears into a dark one.
-private struct ChipFace: View {
+struct ChipFace: View {
     private static func shade(light: CGFloat, dark: CGFloat, alpha: CGFloat = 1) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             NSColor(white: appearance.isDark ? dark : light, alpha: alpha)
