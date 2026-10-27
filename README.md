@@ -1,91 +1,127 @@
-<div align="center">
+<p align="center"><img src="docs/screenshots/banner.png" alt="Bento Stats" width="100%"></p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.png">
-  <img src="docs/logo-light.png" alt="" width="104">
-</picture>
+<p align="center">
+  <a href="https://github.com/iAlborz/BentoStats/releases/latest/download/BentoStats.dmg"><b>Download Bento Stats</b></a>
+  &nbsp;·&nbsp; free &nbsp;·&nbsp; macOS 14 or later &nbsp;·&nbsp; Apple silicon
+</p>
 
-<h3>AirStats</h3>
+Bento Stats is a system monitor for the Mac menu bar. Click it and a panel drops down with
+your Mac's vital signs laid out as a bento grid of cards: how hard the CPU and GPU are
+working, how much memory is free, how fast data moves over the network and to the SSD, how
+the battery is doing, and how hot the Mac is running.
 
-An ultra lightweight macOS system monitor.
+It is built to stay light, because a monitor runs all day. It has no Dock icon, reads the
+system through Mach, IOKit, sysctl and CoreWLAN, and keeps everything on your Mac: no
+accounts, no analytics, no tracking.
 
-<hr width="140">
+<img src="docs/screenshots/bento.png" alt="The Bento panel: CPU, memory, SSD, battery, GPU, network, uptime and CPU temperature cards" width="100%">
 
-</div>
+## What it shows
 
-AirStats is a system monitor for the Mac menu bar. It reads CPU, memory, GPU, network,
-disk, battery, temperature, process and host statistics from the kernel and shows them in
-three places: the menu bar itself, a panel that drops down when you click the status item,
-and a desktop widget you can leave on screen.
+- **CPU:** the chip drawn with its performance and efficiency cores, each filling with its own load, and the apps keeping it busiest
+- **GPU:** its cores lighting up as the load rises, and how much memory it is using
+- **Memory:** free memory on a memory module, memory pressure, and the apps using the most
+- **Network and SSD:** download, upload, read and write speeds, with their history
+- **Battery:** charge and time remaining
+- **Temperatures and fans:** the CPU, GPU and every other sensor, and how fast each fan is spinning
+- **System:** uptime and exactly which Mac you have
 
-It is built to be genuinely light. A menu bar monitor runs all day, every day, so AirStats
-holds a few megabytes and a fraction of a percent of one core rather than the tens of
-megabytes its peers take. It has no Dock icon, and reads the system through Mach, IOKit,
-sysctl and CoreWLAN.
+Point at any card for history charts and the details the card leaves out.
 
-## Requirements
+<img src="docs/screenshots/macbook.png" alt="MacBook mode: readings placed on a drawing of the inside of a MacBook, with both fans" width="100%">
 
-- macOS 14 or later
-- Apple silicon
+## Make it yours
+
+- Press and hold a card to rearrange the grid: drag cards around, resize them, and pick from several designs for each
+- **Bento** for the full picture, **Bento Small** for a compact one, or **MacBook mode**
+- Choose what the menu bar itself shows
+- Get a notification when a reading crosses a limit you set
+- Global keyboard shortcuts, and light and dark appearance
+
+<img src="docs/screenshots/bento-small.png" alt="Bento Small" width="49%"> <img src="docs/screenshots/arrange.png" alt="Arranging the grid" width="49%">
 
 ## Install
 
-Download [BentoStats.dmg](https://github.com/iAlborz/BentoStats/releases/latest/download/BentoStats.dmg)
-from the [latest release](https://github.com/iAlborz/BentoStats/releases/latest), open it and
-drag Bento Stats to Applications. It is signed with a Developer ID and notarized, so it
-opens with no warning. From version 1.1 it checks this repository for a new release once a
-day, and installs one when you click Install in its panel, in Settings or on the
-notification that announces it.
+1. Download [BentoStats.dmg](https://github.com/iAlborz/BentoStats/releases/latest/download/BentoStats.dmg) from the [latest release](https://github.com/iAlborz/BentoStats/releases/latest).
+2. Open it and drag Bento Stats into Applications.
+3. Open Bento Stats. It lives in the menu bar, not the Dock.
 
-That download is the full version. There is also a lighter Mac App Store version: macOS
-does not let App Store apps read temperatures or fan speeds, so it shows the Mac's thermal
-state in their place.
+It is signed with a Developer ID and notarized by Apple, so it opens without a warning.
+
+### Updates
+
+Bento Stats checks this repository for a new release once a day. When one is out, an
+**Install** button shows up at the top of the panel, in Settings › General and on a
+notification. One click downloads it, makes sure it is signed by Bento Stats' developer and
+notarized by Apple, installs it and reopens the app. Turn the check off in Settings ›
+General. Version 1.0 predates this, so from 1.0, download the latest release once by hand.
+
+<img src="docs/screenshots/updates.png" alt="The panel with an Install button for a new version at the top" width="100%">
+
+### This download or the Mac App Store?
+
+Bento Stats is also coming to the Mac App Store, but macOS does not let App Store apps read
+temperature sensors or fan speeds, so that version shows the Mac's thermal state (normal,
+elevated, high or critical) in their place.
+
+| | This download | Mac App Store |
+|---|:---:|:---:|
+| CPU, GPU, memory, network, SSD, battery | ✓ | ✓ |
+| Temperatures and fan speeds | ✓ | Thermal state only |
+| Updates | One click, in the app | Automatic, from the App Store |
+
+## Privacy
+
+Bento Stats collects nothing. Your Mac's statistics are read from macOS, shown to you and
+never sent anywhere. It makes two kinds of network request, and you can turn off both: the
+public IP lookup, which is off until you turn it on, and the daily update check to GitHub,
+which only the download makes. [PRIVACY.md](PRIVACY.md) has the details.
 
 ## Build from source
 
-You need the Swift 6 toolchain that ships with Xcode 16.
+You need macOS 14 or later and Xcode 16 or later.
 
 ```sh
-Scripts/build.sh release
-cp -R .build/arm64-apple-macosx/release/AirStats.app /Applications/
-open /Applications/AirStats.app
+git clone https://github.com/iAlborz/BentoStats.git
+cd BentoStats
+open "$(Scripts/build.sh release | tail -n 1)"
 ```
 
-`Scripts/build.sh` wraps the SwiftPM binary in a `.app` bundle, copies `Sparkle.framework`
-into `Contents/Frameworks`, and signs it ad hoc. macOS grants a status item only to a
-signed bundle with `LSUIElement` set. Run the script with no argument for a debug build.
+`Scripts/build.sh` builds with SwiftPM, wraps the binary in a `.app` bundle and signs it ad
+hoc, which is enough for macOS to give it a menu bar item on the Mac that built it. It
+prints the app's path last. With no argument it makes a debug build. A build from source
+never updates itself.
 
-An ad-hoc signature is enough to run a build you made yourself, and not enough to travel:
-macOS refuses an ad-hoc bundle that arrived over the internet. `Scripts/release.sh` is what
-produces the download above, signing with a Developer ID certificate and stapling Apple's
-notarization ticket to the `.dmg`.
+Two more scripts make the copies that ship:
+
+- `Scripts/direct.sh` makes the download: it has Xcode sign the app with the team's
+  Developer ID and Apple notarize it, then writes `dist/BentoStats.dmg`, and
+  `dist/BentoStats.zip` for the updater. A release carries both, under those names, on a
+  tag `v<version>`.
+- `Scripts/appstore.sh` archives the sandboxed Mac App Store version for Xcode's Organizer.
 
 ## Source layout
 
 | Path | What lives there |
 | --- | --- |
-| `Sources/AirStatKit` | Collectors, the sampling engine, settings, formatting. No UI. |
-| `Sources/AirStatUI` | Menu bar drawing, panel, desktop widget, settings window, charts, design system. |
+| `Sources/AirStatKit` | Collectors, the sampling engine, settings, formatting, the update feed and installer. No UI. |
+| `Sources/AirStatUI` | Menu bar drawing, the panel and its cards, settings window, charts, design system, updater. |
 | `Sources/AirStats` | The executable, app delegate, and the probe and render commands. |
-| `Tests/AirStatKitTests` | Contract tests for the collectors, plus settings and formatting. |
+| `Tests/AirStatKitTests` | Contract tests for the collectors, plus settings, layout, formatting and updates. |
 | `Scripts/build.sh` | Builds the binary and assembles the `.app`. |
-| `Scripts/release.sh` | Signs, notarizes and packages the `.dmg` that ships. |
-| `Scripts/appcast.py` | Writes a release into the appcast Sparkle reads. |
-| `Scripts/benchmark.py` | Samples the menu bar monitors on your Mac over one shared window. |
+| `Scripts/direct.sh` | Signs, notarizes and packages the download. |
+| `Scripts/appstore.sh` | Archives the Mac App Store version. |
+| `Scripts/make-icon.swift` | Draws the app icon, size by size. |
 
+The targets keep the names they had in AirStats, which nobody using the app ever sees.
 `AirStatKit` never imports SwiftUI or AppKit, which is what lets the tests and the probe
 run in a windowless process.
 
-## Contributing
+## Feedback
 
-[CONTRIBUTING.md](CONTRIBUTING.md) has the checks to run before a pull request and the
-house rules.
+Bugs and ideas go on the [issue tracker](https://github.com/iAlborz/BentoStats/issues).
 
-## Contact
+## Credits and license
 
-Bugs and feature requests go on the [issue tracker](https://github.com/byrencheema/airstats/issues).
-For anything private, email [hello@airstats.app](mailto:hello@airstats.app).
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+Bento Stats is based on [AirStats](https://github.com/byrencheema/airstats) 1.5, the
+open-source monitor by Byren Cheema. MIT, see [LICENSE](LICENSE).
