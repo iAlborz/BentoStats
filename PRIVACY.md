@@ -19,6 +19,6 @@ nothing else with it. Turn the setting off and the app makes no network requests
 
 ## Contact
 
-Questions about privacy: [open an issue](https://github.com/iAlborz/airstats/issues).
+Questions about privacy: [open an issue](https://github.com/iAlborz/BentoStats/issues).
 
 Last updated October 21, 2026.

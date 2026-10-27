@@ -30,8 +30,8 @@ sysctl and CoreWLAN.
 
 ## Install
 
-Download [BentoStats.dmg](https://github.com/iAlborz/airstats/releases/latest/download/BentoStats.dmg)
-from the [latest release](https://github.com/iAlborz/airstats/releases/latest), open it and
+Download [BentoStats.dmg](https://github.com/iAlborz/BentoStats/releases/latest/download/BentoStats.dmg)
+from the [latest release](https://github.com/iAlborz/BentoStats/releases/latest), open it and
 drag Bento Stats to Applications. It is signed with a Developer ID and notarized, so it
 opens with no warning.
 
