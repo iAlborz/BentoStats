@@ -10,36 +10,39 @@ import AirStatKit
 /// Laid out the way the machine is, but spaced out so each part has room for its
 /// reading: the hinge and its vents along the top; a blower fan in each upper corner,
 /// spinning with the fan's real speed and blowing through copper fins into the hinge;
-/// the logic board up the middle, with heat pipes from the fins to the CPU and the GPU,
-/// and across under the fans for the memory in its slot, the Wi-Fi module and the SSD
-/// in its socket; then the battery's cells either side of the trackpad, a speaker at
-/// each edge, and the ports along the sides.
+/// the logic board up between the fans and right across under them, its edge running
+/// round their housings, with heat pipes from the fins to the CPU and the GPU, a
+/// thermometer on the outer side of each, and under the fans the memory in its slot,
+/// the Wi-Fi module and the SSD in its socket; then the battery's cells either side of
+/// the trackpad, a speaker at each edge, and the ports along the sides.
 ///
-///     ┌── hinge ────────────────── vents ────────────────── hinge ──┐
-///     │ ┌ fins ┐  ┌─────────── logic board ───────────┐  ┌ fins ┐ │
-///     │ │ fan  │  │  ┌ CPU ┐      ┌──── GPU ────┐     │  │ fan  │ │
-///     │ ╰──────╯  │  └─────┘      └─────────────┘     │  ╰──────╯ │
-///     │   27%     │    34%             18%            │    26%    │
-///     │ ┌─────────┘                                   └─────────┐ │
-///     │ │ memory: 7.7 GB free   Wi-Fi ↑ ↓   SSD: 185 GB free    │ │
-///     │ └───────────────────────────────────────────────────────┘ │
-///     │ ┌─┐┌ cells ┐ ┌──────── trackpad ────────┐ ┌ cells ┐┌─┐ │
-///     │ └─┘└───────┘ └──────────────────────────┘ └───────┘└─┘ │
-///     └──────────────────────────────────────────────────────────┘
+///     ┌── hinge ─────────────────── vents ──────────────────── hinge ──┐
+///     │ ┌ fins ┐ ╭────────────── logic board ───────────────╮ ┌ fins ┐ │
+///     │ │ fan  │ │   ┃  ┌─ CPU ─┐  ┌────── GPU ──────┐  ┃   │ │ fan  │ │
+///     │ │ 27%  │ │   ┃  │  34%  │  │       18%       │  ┃   │ │ 26%  │ │
+///     │ ╰──────╯ │   ●  └───────┘  └─────────────────┘  ●   │ ╰──────╯ │
+///     │ ╭────────╯   52°                              43°   ╰────────╮ │
+///     │ │   memory: 7.7 GB free     Wi-Fi ↑ ↓     SSD: 185 GB free   │ │
+///     │ ╰────────────────────────────────────────────────────────────╯ │
+///     │ ┌─┐ ┌ cells ┐ ┌─────────── trackpad ───────────┐ ┌ cells ┐ ┌─┐ │
+///     │ └─┘ └───────┘ └────────────────────────────────┘ └───────┘ └─┘ │
+///     └────────────────────────────────────────────────────────────────┘
 ///
 /// The case is drawn tone on tone in one neutral, as those wallpapers are drawn in one
 /// hue, and the bento's parts keep their own dark finish, so the colour on it is the
 /// data: the cores lit by their load, the memory and the drive filled by how full they
-/// are, the cells by their charge. Every reading sits in clear space beside its part,
-/// or on the part where the bento prints it, as it prints what is free on the memory
-/// and the drive. Pointing at a part opens its detail beside the panel, as a bento card
-/// does. Built from shapes, never a `Canvas`: see `PlotShape` for why.
+/// are, the cells by their charge. Every reading sits on its part, as the bento prints
+/// what is free on the memory and the drive: a fan's speed on its hub, a chip's load
+/// under its name, the network's rates on the Wi-Fi module's label. A chip's
+/// temperature stands on a thermometer beside it, and the band's parts are named over
+/// them. Pointing at a part opens its detail beside the panel, as a bento card does.
+/// Built from shapes, never a `Canvas`: see `PlotShape` for why.
 struct MacBookView: View {
     let engine: MetricsEngine
     let settings: SettingsStore
     let layout: PanelLayoutState?
 
-    private static let size = CGSize(width: 706, height: 520)
+    private static let size = CGSize(width: 706, height: 470)
     private static let inset: CGFloat = 14
     static let width = size.width + inset * 2
 
@@ -47,37 +50,36 @@ struct MacBookView: View {
     private static let leftHinge = CGRect(x: 40, y: 16, width: 96, height: 14)
     private static let rightHinge = CGRect(x: 570, y: 16, width: 96, height: 14)
     private static let vent = CGRect(x: 148, y: 17, width: 410, height: 12)
-    /// The fin stack above, the housing below it. Down to the board in the App Store's
-    /// copy, which has no fan speeds to show under them.
-    private static let fanHeight: CGFloat = Capabilities.readsSensors ? 158 : 208
-    private static let leftFan = CGRect(x: 26, y: 40, width: 140, height: fanHeight)
-    private static let rightFan = CGRect(x: 540, y: 40, width: 140, height: fanHeight)
-    /// The logic board: a column up the middle between the fans, and a band right across
-    /// under them.
-    private static let boardColumn = CGRect(x: 178, y: 40, width: 350, height: 302)
-    private static let boardBand = CGRect(x: 12, y: 260, width: 682, height: 82)
-    /// The bento's parts at the sizes their cards draw them, and where they sit here.
+    /// The fin stack above, the housing below it, round at its foot.
+    private static let leftFan = CGRect(x: 20, y: 40, width: 140, height: 158)
+    private static let rightFan = CGRect(x: 546, y: 40, width: 140, height: 158)
+    /// The logic board: up between the fans from `boardTop`, and right across under
+    /// them to `boardBottom`, its edge running `boardGap` clear of each fan's housing.
+    private static let boardTop: CGFloat = 40
+    private static let boardBottom: CGFloat = 292
+    private static let boardGap: CGFloat = 8
+    /// The bento's parts at the sizes their cards draw them, and where they sit here:
+    /// the chips centred on the fans' hubs, a thermometer on the outer side of each.
     private static let chipNative = CGSize(width: 140, height: 140)
     private static let gpuNative = CGSize(width: 200, height: 106)
     private static let memoryNative = CGSize(width: 200, height: 56)
     private static let ssdNative = CGSize(width: 200, height: 44)
-    private static let cpu = CGRect(x: 192, y: 66, width: 124, height: 124)
-    private static let gpu = CGRect(x: 334, y: 80.3, width: 180, height: 95.4)
-    /// The module and the drive at one scale, centred on one line.
-    private static let memory = CGRect(x: 20, y: 288, width: 152, height: 42.56)
-    private static let ssd = CGRect(x: 534, y: 292.56, width: 152, height: 33.44)
-    private static let leftSpeaker = CGRect(x: 20, y: 354, width: 28, height: 150)
-    private static let leftCells = CGRect(x: 58, y: 354, width: 168, height: 150)
-    private static let trackpad = CGRect(x: 238, y: 354, width: 230, height: 150)
-    private static let rightCells = CGRect(x: 480, y: 354, width: 168, height: 150)
-    private static let rightSpeaker = CGRect(x: 658, y: 354, width: 28, height: 150)
-    /// Where the readings under the fans start.
-    private static let readingsTop: CGFloat = 206
-    /// How far the CPU's and the GPU's readings sit under their chips: as far as the
-    /// fans' readings sit under the fans.
-    private static let chipGap: CGFloat = 8
+    private static let cpu = CGRect(x: 206, y: 70, width: 116, height: 116)
+    private static let gpu = CGRect(x: 338, y: 85.07, width: 162, height: 85.86)
+    private static let cpuThermometer = CGRect(x: 174, y: 74, width: 26, height: 108)
+    private static let gpuThermometer = CGRect(x: 506, y: 74, width: 26, height: 108)
+    /// The module and the drive at one scale, centred on one line, and the Wi-Fi module
+    /// between them.
+    private static let memory = CGRect(x: 22, y: 238, width: 152, height: 42.56)
+    private static let ssd = CGRect(x: 532, y: 242.56, width: 152, height: 33.44)
+    private static let wifi = CGRect(x: 276, y: 234.28, width: 154, height: 50)
+    private static let leftSpeaker = CGRect(x: 20, y: 304, width: 28, height: 150)
+    private static let leftCells = CGRect(x: 58, y: 304, width: 168, height: 150)
+    private static let trackpad = CGRect(x: 238, y: 304, width: 230, height: 150)
+    private static let rightCells = CGRect(x: 480, y: 304, width: 168, height: 150)
+    private static let rightSpeaker = CGRect(x: 658, y: 304, width: 28, height: 150)
     /// Where the labels over the band's parts start.
-    private static let labelsTop: CGFloat = 270
+    private static let labelsTop: CGFloat = 220
 
     private var formatter: MetricFormatter {
         MetricFormatter(settings: settings.settings.general)
@@ -162,18 +164,29 @@ struct MacBookView: View {
 
     // MARK: Fans
 
+    /// Each fan with how fast it is going on its hub. A Mac without fans has "None" on
+    /// the left one; the App Store's copy, which cannot read them, has nothing: its
+    /// blades are the drawing's, not a reading.
     private var fans: some View {
         let fans = engine.thermal.value?.fans ?? []
+        let left = fanSpeed(fans.first) ?? (Capabilities.readsSensors ? "None" : nil)
         return canvas {
-            place(fan(fans.first, isMirrored: false).hoverRegion(.thermal, layout: layout), Self.leftFan)
-            place(fan(fans.count > 1 ? fans[1] : fans.first, isMirrored: true)
+            place(fan(fans.first, isMirrored: false, speed: left).hoverRegion(.thermal, layout: layout),
+                  Self.leftFan)
+            place(fan(fans.count > 1 ? fans[1] : fans.first, isMirrored: true,
+                      speed: fans.count > 1 ? fanSpeed(fans[1]) : nil)
                 .hoverRegion(.thermal, layout: layout), Self.rightFan)
         }
     }
 
+    private func fanSpeed(_ fan: FanInfo?) -> String? {
+        fan.map { $0.currentRPM < 1 ? "Off" : formatter.percent($0.speedFraction) }
+    }
+
     /// The fin stack the fan blows through, and the fan in its housing: square where it
-    /// meets the fins, round where it wraps the blades.
-    private func fan(_ fan: FanInfo?, isMirrored: Bool) -> some View {
+    /// meets the fins, round where it wraps the blades, its speed on a cap over the hub
+    /// that stays still while the blades turn.
+    private func fan(_ fan: FanInfo?, isMirrored: Bool, speed: String?) -> some View {
         let fins = RoundedRectangle(cornerRadius: 3, style: .continuous)
         let radius = Self.leftFan.width / 2
         let housing = UnevenRoundedRectangle(cornerRadii: .init(topLeading: 6, bottomLeading: radius,
@@ -194,6 +207,17 @@ struct MacBookView: View {
                     SpinningFan(fraction: fan?.speedFraction ?? 0, isSpinning: (fan?.currentRPM ?? 0) >= 1,
                                 isMirrored: isMirrored)
                         .frame(width: 114, height: 114)
+                    if let speed {
+                        Text(speed)
+                            .font(.system(size: 13, weight: .bold).monospacedDigit())
+                            .foregroundStyle(gradient(Self.fanColors))
+                            .contentTransition(.numericText())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(width: 46, height: 46)
+                            .background(Circle().fill(Tone.well))
+                            .overlay(Circle().strokeBorder(Tone.edge, lineWidth: 1))
+                    }
                 }
                 .frame(width: 124, height: 124)
                 .padding(.bottom, radius - 62)
@@ -212,7 +236,8 @@ struct MacBookView: View {
     // MARK: Board
 
     private var board: some View {
-        let outline = BoardOutline(column: Self.boardColumn, band: Self.boardBand, radius: 12)
+        let outline = BoardOutline(top: Self.boardTop, bottom: Self.boardBottom, leftFan: Self.leftFan,
+                                   rightFan: Self.rightFan, gap: Self.boardGap, radius: 12)
         return canvas {
             outline.fill(LinearGradient(colors: [Tone.boardTop, Tone.board], startPoint: .top, endPoint: .bottom))
             outline.stroke(Tone.edge, lineWidth: 1)
@@ -225,14 +250,14 @@ struct MacBookView: View {
         }
     }
 
-    private static let boardScrews = [CGPoint(x: 353, y: 50), CGPoint(x: 196, y: 334), CGPoint(x: 510, y: 334)]
+    private static let boardScrews = [CGPoint(x: 353, y: 50), CGPoint(x: 196, y: 284), CGPoint(x: 510, y: 284)]
 
     /// Copper, from along the foot of the fins at each fan's outlet, over the top of the
     /// board and down under the CPU on the left and the GPU on the right, which cover
     /// their ends.
     private var heatPipes: some View {
-        let pipes = [HeatPipe(from: CGPoint(x: 46, y: 55), along: 226, to: CGPoint(x: 246, y: 90)),
-                     HeatPipe(from: CGPoint(x: 660, y: 55), along: 486, to: CGPoint(x: 466, y: 104))]
+        let pipes = [HeatPipe(from: CGPoint(x: 40, y: 55), along: 240, to: CGPoint(x: 260, y: 94)),
+                     HeatPipe(from: CGPoint(x: 666, y: 55), along: 472, to: CGPoint(x: 452, y: 109))]
         return canvas {
             ForEach(pipes.indices, id: \.self) { index in
                 pipes[index].stroke(Color.black.opacity(0.18),
@@ -249,7 +274,8 @@ struct MacBookView: View {
     // MARK: Chips
 
     /// The bento's CPU chip, its cores lit by their load, and its GPU, its cores switching
-    /// on as the load rises, side by side where the heat pipes end.
+    /// on as the load rises, side by side where the heat pipes end: each with its load
+    /// under its name, and its temperature on a thermometer on its outer side.
     private var chips: some View {
         let cpu = engine.cpu.value
         let kinds = cpu?.coreKinds ?? []
@@ -259,36 +285,66 @@ struct MacBookView: View {
         let performance = loads.indices.filter { $0 >= kinds.count || kinds[$0] != .efficiency }.map { loads[$0] }
         let efficiency = loads.indices.filter { $0 < kinds.count && kinds[$0] == .efficiency }.map { loads[$0] }
         let device = engine.gpu.value?.primary
+        let thermal = engine.thermal.value
         return canvas {
             place(scaled(ChipGraphic(name: engine.system.value?.chipName,
                                      performance: performance, efficiency: efficiency,
                                      performanceColors: [.white, .white],
-                                     efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)]),
+                                     efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)],
+                                     reading: cpu.map { formatter.percent($0.total.busy) } ?? MetricFormatter.unavailable),
                          native: Self.chipNative, width: Self.cpu.width)
                 .shadow(color: Tone.dropShadow, radius: 3, y: 1)
                 .hoverRegion(.cpu, layout: layout), Self.cpu)
             place(gpuDie(cores: device?.coreCount ?? engine.system.value?.gpuCoreCount ?? 0,
-                         load: device?.utilization ?? 0)
+                         load: device?.utilization ?? 0,
+                         reading: device?.utilization.map { formatter.percent($0) } ?? MetricFormatter.unavailable)
                 .shadow(color: Tone.dropShadow, radius: 3, y: 1)
                 .hoverRegion(.gpu, layout: layout), Self.gpu)
+            place(thermometer(thermal?.cpuCelsius).hoverRegion(.cpu, layout: layout), Self.cpuThermometer)
+            place(thermometer(thermal?.gpuCelsius).hoverRegion(.gpu, layout: layout), Self.gpuThermometer)
         }
     }
 
     @ViewBuilder
-    private func gpuDie(cores: Int, load: Double) -> some View {
+    private func gpuDie(cores: Int, load: Double, reading: String) -> some View {
         if cores > 0 {
-            scaled(GPUDie(cores: cores, load: load, colors: palette(.gpu), size: Self.gpuNative),
+            scaled(GPUDie(cores: cores, load: load, colors: palette(.gpu), size: Self.gpuNative, reading: reading),
                    native: Self.gpuNative, width: Self.gpu.width)
         } else {
-            // No core count to lay the cores out by: the package and its name alone.
+            // No core count to lay the cores out by: the package, its name and its load.
             ZStack {
                 ChipFace()
-                Text("GPU")
-                    .font(.system(size: 29, weight: .semibold))
-                    .tracking(1.4)
-                    .foregroundStyle(ChipGraphic.silver)
+                VStack(spacing: 0) {
+                    Text("GPU")
+                        .font(.system(size: 29, weight: .semibold))
+                        .tracking(1.4)
+                    Text(reading)
+                        .font(.system(size: 14, weight: .bold).monospacedDigit())
+                        .contentTransition(.numericText())
+                }
+                .foregroundStyle(ChipGraphic.silver)
             }
             .padding(4)
+        }
+    }
+
+    /// A chip's temperature on a thermometer standing beside it, as the bento's
+    /// temperature cards draw them, with the figure under the bulb. Nothing where there
+    /// is no sensor to read, as in the App Store's copy.
+    @ViewBuilder
+    private func thermometer(_ celsius: Double?) -> some View {
+        if let celsius {
+            VStack(spacing: 3) {
+                ThermometerGraphic(fraction: min(max((celsius - 30) / 70, 0), 1), colors: Self.heatColors,
+                                   scale: 0.6)
+                    .frame(width: 17)
+                Text(formatter.temperature(celsius))
+                    .font(.system(size: 11, weight: .bold).monospacedDigit())
+                    .foregroundStyle(gradient(Self.heatColors))
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
     }
 
@@ -333,91 +389,66 @@ struct MacBookView: View {
 
     // MARK: Readings
 
-    /// Each part's reading in the clear space beside it: under the fans and the chips,
-    /// and over the band's parts the way a bento card's header sits over its object.
+    /// The labels over the band's parts, the way a bento card's header sits over its
+    /// object, and the Wi-Fi module between them.
     private var readings: some View {
         let thermal = engine.thermal.value
-        let fans = thermal?.fans ?? []
-        let cpu = engine.cpu.value
-        let gpu = engine.gpu.value?.primary
         let memory = engine.memory.value
         let root = engine.disk.value?.rootVolume
         return canvas {
-            fanReading(fans.first).hoverRegion(.thermal, layout: layout)
-                .top(at: CGPoint(x: Self.leftFan.midX, y: Self.readingsTop))
-            if fans.count > 1 {
-                fanReading(fans[1]).hoverRegion(.thermal, layout: layout)
-                    .top(at: CGPoint(x: Self.rightFan.midX, y: Self.readingsTop))
-            }
-            reading("CPU", cpu.map { formatter.percent($0.total.busy) }, colors: palette(.cpu),
-                    celsius: thermal?.cpuCelsius)
-                .hoverRegion(.cpu, layout: layout)
-                .top(at: CGPoint(x: Self.cpu.midX, y: Self.cpu.maxY + Self.chipGap))
-            reading("GPU", gpu?.utilization.map { formatter.percent($0) }, colors: palette(.gpu),
-                    celsius: thermal?.gpuCelsius)
-                .hoverRegion(.gpu, layout: layout)
-                .top(at: CGPoint(x: Self.gpu.midX, y: Self.gpu.maxY + Self.chipGap))
             label("Memory", memory.map { formatter.memory($0.totalBytes) })
                 .hoverRegion(.memory, layout: layout)
                 .top(at: CGPoint(x: Self.memory.midX, y: Self.labelsTop))
-            network.hoverRegion(.network, layout: layout)
-                .top(at: CGPoint(x: Self.boardColumn.midX, y: Self.labelsTop))
+            place(network.hoverRegion(.network, layout: layout), Self.wifi)
             label("SSD", root.map { formatter.storage($0.totalBytes) }, celsius: Self.hottest(thermal, .storage))
                 .hoverRegion(.disk, layout: layout)
                 .top(at: CGPoint(x: Self.ssd.midX, y: Self.labelsTop))
         }
     }
 
-    /// How fast a fan is going. Nothing under a fan the App Store's copy cannot read: its
-    /// blades are the drawing's, not a reading.
-    @ViewBuilder
-    private func fanReading(_ fan: FanInfo?) -> some View {
-        if let fan {
-            reading(fan.name, fan.currentRPM < 1 ? "Off" : formatter.percent(fan.speedFraction),
-                    colors: Self.fanColors, detail: fan.currentRPM < 1 ? nil : formatter.rpm(fan.currentRPM))
-        } else if Capabilities.readsSensors {
-            reading("Fans", "None", colors: [Design.Palette.secondaryText])
-        }
-    }
-
-    /// The network's name over the Wi-Fi module under its shield, and beside the module
-    /// what is going up and coming down, as the bento's network card sets them.
+    /// The Wi-Fi module under its shield, with what is going up and coming down printed
+    /// on a label on it, as the bento's network card sets them.
     private var network: some View {
         let network = engine.network.value ?? engine.lastKnown.network.value
-        let can = RoundedRectangle(cornerRadius: 4, style: .continuous)
-        return VStack(spacing: 6) {
-            caption(network?.wifi?.ssid ?? (network?.wifi != nil || network == nil ? "Wi-Fi" : "Network"))
-                .frame(maxWidth: 150)
-            HStack(spacing: 10) {
-                ZStack {
-                    can.fill(LinearGradient(colors: [Tone.shieldTop, Tone.shield],
-                                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                    DotGrid(pitch: 5, radius: 0.7).fill(Tone.well.opacity(0.7)).padding(5).clipShape(can)
-                    Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(gradient(palette(.network)))
-                    can.strokeBorder(Tone.edge, lineWidth: 1)
-                }
-                .frame(width: 38, height: 38)
-                .shadow(color: Tone.dropShadow, radius: 2, y: 1)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("↑ " + (network.map { formatter.networkRate($0.uploadBytesPerSecond) } ?? MetricFormatter.unavailable))
-                        .foregroundStyle(gradient(Self.upColors))
-                    Text("↓ " + (network.map { formatter.networkRate($0.downloadBytesPerSecond) } ?? MetricFormatter.unavailable))
-                        .foregroundStyle(gradient(Self.downColors))
-                }
-                .font(.system(size: 13, weight: .bold).monospacedDigit())
-                .contentTransition(.numericText())
+        let can = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        let sticker = RoundedRectangle(cornerRadius: 3, style: .continuous)
+        return HStack(spacing: 0) {
+            Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(gradient(palette(.network)))
+                .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("↑ " + (network.map { formatter.networkRate($0.uploadBytesPerSecond) } ?? MetricFormatter.unavailable))
+                    .foregroundStyle(gradient(Self.upColors))
+                Text("↓ " + (network.map { formatter.networkRate($0.downloadBytesPerSecond) } ?? MetricFormatter.unavailable))
+                    .foregroundStyle(gradient(Self.downColors))
+            }
+            .font(.system(size: 13, weight: .bold).monospacedDigit())
+            .contentTransition(.numericText())
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 7)
+            .frame(width: 102, alignment: .leading)
+            .frame(maxHeight: .infinity)
+            .background(sticker.fill(Tone.well))
+            .overlay(sticker.strokeBorder(Tone.edge, lineWidth: 0.75))
+            .padding(6)
+        }
+        .background {
+            ZStack {
+                can.fill(LinearGradient(colors: [Tone.shieldTop, Tone.shield],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                DotGrid(pitch: 5, radius: 0.7).fill(Tone.well.opacity(0.7)).padding(5).clipShape(can)
             }
         }
-        .lineLimit(1)
-        .fixedSize()
+        .overlay(can.strokeBorder(Tone.edge, lineWidth: 1))
+        .shadow(color: Tone.dropShadow, radius: 2, y: 1)
     }
 
     /// A part's reading: what it is in small capitals, the figure in the part's colours,
-    /// and under it the part's temperature where it has a sensor, or a detail.
+    /// and under it the part's temperature where it has a sensor.
     private func reading(_ title: String, _ value: String?, colors: [Color], size: CGFloat = 16,
-                         celsius: Double? = nil, detail: String? = nil) -> some View {
+                         celsius: Double? = nil) -> some View {
         VStack(spacing: 1) {
             caption(title)
             Text(value ?? MetricFormatter.unavailable)
@@ -426,11 +457,6 @@ struct MacBookView: View {
                 .contentTransition(.numericText())
             if let celsius {
                 temperature(celsius)
-            }
-            if let detail {
-                Text(detail)
-                    .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(Design.Palette.secondaryText)
             }
         }
         .lineLimit(1)
@@ -888,25 +914,37 @@ private struct LevelLine: Shape {
     }
 }
 
-/// The logic board's outline: a column up the middle and a band across its foot, as one
-/// path so its edge runs round the corners where the two meet.
+/// The logic board's outline: up between the fans and right across under them, its
+/// edge running `gap` clear of each housing, down its sides and round its foot, which
+/// is half a circle as wide as the fan.
 private struct BoardOutline: Shape {
-    let column: CGRect
-    /// Sharing the column's foot.
-    let band: CGRect
+    let top: CGFloat
+    let bottom: CGFloat
+    let leftFan: CGRect
+    let rightFan: CGRect
+    let gap: CGFloat
+    /// The board's own corners.
     let radius: CGFloat
 
     func path(in rect: CGRect) -> Path {
-        let corners = [CGPoint(x: column.minX, y: column.minY), CGPoint(x: column.maxX, y: column.minY),
-                       CGPoint(x: column.maxX, y: band.minY), CGPoint(x: band.maxX, y: band.minY),
-                       CGPoint(x: band.maxX, y: band.maxY), CGPoint(x: band.minX, y: band.maxY),
-                       CGPoint(x: band.minX, y: band.minY), CGPoint(x: column.minX, y: band.minY)]
+        let left = leftFan.insetBy(dx: -gap, dy: -gap)
+        let right = rightFan.insetBy(dx: -gap, dy: -gap)
+        let leftHub = CGPoint(x: leftFan.midX, y: leftFan.maxY - leftFan.width / 2)
+        let rightHub = CGPoint(x: rightFan.midX, y: rightFan.maxY - rightFan.width / 2)
         var path = Path()
-        path.move(to: CGPoint(x: column.midX, y: column.minY))
-        for index in corners.indices {
-            path.addArc(tangent1End: corners[(index + 1) % corners.count],
-                        tangent2End: corners[(index + 2) % corners.count], radius: radius)
-        }
+        path.move(to: CGPoint(x: (left.maxX + right.minX) / 2, y: top))
+        path.addArc(tangent1End: CGPoint(x: right.minX, y: top), tangent2End: CGPoint(x: right.minX, y: rightHub.y),
+                    radius: radius)
+        path.addArc(center: rightHub, radius: right.width / 2, startAngle: .degrees(180), endAngle: .degrees(0),
+                    clockwise: true)
+        path.addArc(tangent1End: CGPoint(x: right.maxX, y: bottom), tangent2End: CGPoint(x: left.minX, y: bottom),
+                    radius: radius)
+        path.addArc(tangent1End: CGPoint(x: left.minX, y: bottom), tangent2End: CGPoint(x: left.minX, y: leftHub.y),
+                    radius: radius)
+        path.addArc(center: leftHub, radius: left.width / 2, startAngle: .degrees(180), endAngle: .degrees(0),
+                    clockwise: true)
+        path.addArc(tangent1End: CGPoint(x: left.maxX, y: top), tangent2End: CGPoint(x: right.minX, y: top),
+                    radius: radius)
         path.closeSubpath()
         return path
     }
@@ -921,9 +959,9 @@ private struct BoardParts: Shape {
     let kind: Kind
 
     /// In the machine's points, the band's left half; the right half mirrors it.
-    private static let chips = [CGRect(x: 188, y: 280, width: 26, height: 26),
-                                CGRect(x: 222, y: 284, width: 16, height: 11),
-                                CGRect(x: 188, y: 314, width: 16, height: 12)]
+    private static let chips = [CGRect(x: 188, y: 230, width: 26, height: 26),
+                                CGRect(x: 222, y: 234, width: 16, height: 11),
+                                CGRect(x: 188, y: 264, width: 16, height: 12)]
     private static let width: CGFloat = 706
 
     func path(in rect: CGRect) -> Path {
@@ -938,14 +976,14 @@ private struct BoardParts: Shape {
             for chip in Self.chips { add(chip, radius: 1.5) }
             return path
         }
-        for y in stride(from: CGFloat(78), through: 178, by: 9) {
-            add(CGRect(x: 323, y: y, width: 4, height: 2.5), radius: 0.5, mirrored: false)
+        for y in stride(from: CGFloat(82), through: 172, by: 9) {
+            add(CGRect(x: 328, y: y, width: 4, height: 2.5), radius: 0.5, mirrored: false)
         }
         for x in stride(from: CGFloat(222), through: 250, by: 7) {
-            add(CGRect(x: x, y: 304, width: 2.5, height: 4), radius: 0.5)
-            add(CGRect(x: x, y: 312, width: 2.5, height: 4), radius: 0.5)
+            add(CGRect(x: x, y: 254, width: 2.5, height: 4), radius: 0.5)
+            add(CGRect(x: x, y: 262, width: 2.5, height: 4), radius: 0.5)
         }
-        for y in stride(from: CGFloat(278), through: 324, by: 9) {
+        for y in stride(from: CGFloat(228), through: 274, by: 9) {
             add(CGRect(x: 262, y: y, width: 4, height: 2.5), radius: 0.5)
         }
         return path

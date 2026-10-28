@@ -2027,6 +2027,8 @@ struct ChipGraphic: View {
     let efficiencyColors: [Color]
     /// The whole CPU's load, filling the die from the bottom, in place of its cores.
     var load: Double? = nil
+    /// A figure set under the name, as the MacBook prints the CPU's load on its chip.
+    var reading: String? = nil
 
     private var loadColour: Color { performanceColors.first ?? .white }
 
@@ -2052,7 +2054,7 @@ struct ChipGraphic: View {
                     // The name in the top half, the cores filling the bottom half to within
                     // 4pt of the die's edges.
                     VStack(spacing: 0) {
-                        lettering(side: side, scale: 0.62)
+                        lettering(side: side, scale: reading == nil ? 0.62 : 0.56)
                             .frame(height: side / 2)
                         ChipCores(performance: performance, efficiency: efficiency,
                                   size: CGSize(width: side - ChipCores.gap * 2,
@@ -2093,14 +2095,30 @@ struct ChipGraphic: View {
                         .foregroundStyle(LinearGradient(colors: Self.tierColors(String(words[1])),
                                                         startPoint: .leading, endPoint: .trailing))
                 }
+                readingText(side: side)
             }
             .offset(x: -size * 0.01)
         } else if let name {
-            Text(name)
-                .font(.system(size: size * 0.1, weight: .semibold))
-                .multilineTextAlignment(.center)
+            VStack(spacing: 0) {
+                Text(name)
+                    .font(.system(size: size * 0.1, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Self.silver)
+                    .padding(size * 0.08)
+                readingText(side: side)
+            }
+        } else {
+            readingText(side: side)
+        }
+    }
+
+    @ViewBuilder
+    private func readingText(side: CGFloat) -> some View {
+        if let reading {
+            Text(reading)
+                .font(.system(size: side * 0.12, weight: .bold).monospacedDigit())
                 .foregroundStyle(Self.silver)
-                .padding(size * 0.08)
+                .contentTransition(.numericText())
         }
     }
 
@@ -2286,6 +2304,8 @@ struct GPUDie: View {
     let colors: [Color]
     /// The whole chip, legs included; the blocks follow from it.
     let size: CGSize
+    /// A figure set under "GPU", as the MacBook prints the GPU's load on its die.
+    var reading: String? = nil
 
     /// How far the legs stand off the package.
     private static let leg: CGFloat = 4
@@ -2344,12 +2364,19 @@ struct GPUDie: View {
     /// "GPU", set in the CPU chip's silver, with a dark halo so it reads over lit cores
     /// and dark ones alike.
     private var label: some View {
-        Text("GPU")
-            .font(.system(size: 32, weight: .semibold))
-            .tracking(1.5)
-            .foregroundStyle(ChipGraphic.silver)
-            .shadow(color: .black.opacity(0.7), radius: 3)
-            .shadow(color: .black.opacity(0.4), radius: 8)
+        VStack(spacing: 0) {
+            Text("GPU")
+                .font(.system(size: 32, weight: .semibold))
+                .tracking(1.5)
+            if let reading {
+                Text(reading)
+                    .font(.system(size: 17, weight: .bold).monospacedDigit())
+                    .contentTransition(.numericText())
+            }
+        }
+        .foregroundStyle(ChipGraphic.silver)
+        .shadow(color: .black.opacity(0.7), radius: 3)
+        .shadow(color: .black.opacity(0.4), radius: 8)
     }
 }
 
