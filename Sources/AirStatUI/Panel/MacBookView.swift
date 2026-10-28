@@ -71,8 +71,11 @@ struct MacBookView: View {
     private static let trackpad = CGRect(x: 238, y: 354, width: 230, height: 150)
     private static let rightCells = CGRect(x: 480, y: 354, width: 168, height: 150)
     private static let rightSpeaker = CGRect(x: 658, y: 354, width: 28, height: 150)
-    /// Where the readings under the fans and the chips start.
+    /// Where the readings under the fans start.
     private static let readingsTop: CGFloat = 206
+    /// How far the CPU's and the GPU's readings sit under their chips: as far as the
+    /// fans' readings sit under the fans.
+    private static let chipGap: CGFloat = 8
     /// Where the labels over the band's parts start.
     private static let labelsTop: CGFloat = 270
 
@@ -108,7 +111,6 @@ struct MacBookView: View {
             shell.fill(LinearGradient(colors: [Tone.rimTop, Tone.rim], startPoint: .top, endPoint: .bottom))
             shell.strokeBorder(Tone.edge, lineWidth: 1)
             floor.fill(Tone.floor).padding(8)
-            floor.strokeBorder(Tone.shadow, lineWidth: 1).padding(8)
             ports
         }
     }
@@ -130,7 +132,6 @@ struct MacBookView: View {
     private var hinge: some View {
         let barrel = ZStack {
             Capsule().fill(LinearGradient(colors: [Tone.partTop, Tone.part], startPoint: .top, endPoint: .bottom))
-            Capsule().fill(Tone.shadow).frame(height: 2)
             Capsule().strokeBorder(Tone.edge, lineWidth: 1)
         }
         let state = Capabilities.readsSensors ? nil : engine.thermal.value?.pressure
@@ -190,7 +191,6 @@ struct MacBookView: View {
                 housing.strokeBorder(Tone.edge, lineWidth: 1)
                 ZStack {
                     Circle().fill(Tone.well)
-                    Circle().strokeBorder(Tone.shadow, lineWidth: 1)
                     SpinningFan(fraction: fan?.speedFraction ?? 0, isSpinning: (fan?.currentRPM ?? 0) >= 1,
                                 isMirrored: isMirrored)
                         .frame(width: 114, height: 114)
@@ -352,11 +352,11 @@ struct MacBookView: View {
             reading("CPU", cpu.map { formatter.percent($0.total.busy) }, colors: palette(.cpu),
                     celsius: thermal?.cpuCelsius)
                 .hoverRegion(.cpu, layout: layout)
-                .top(at: CGPoint(x: Self.cpu.midX, y: Self.readingsTop))
+                .top(at: CGPoint(x: Self.cpu.midX, y: Self.cpu.maxY + Self.chipGap))
             reading("GPU", gpu?.utilization.map { formatter.percent($0) }, colors: palette(.gpu),
                     celsius: thermal?.gpuCelsius)
                 .hoverRegion(.gpu, layout: layout)
-                .top(at: CGPoint(x: Self.gpu.midX, y: Self.readingsTop))
+                .top(at: CGPoint(x: Self.gpu.midX, y: Self.gpu.maxY + Self.chipGap))
             label("Memory", memory.map { formatter.memory($0.totalBytes) })
                 .hoverRegion(.memory, layout: layout)
                 .top(at: CGPoint(x: Self.memory.midX, y: Self.labelsTop))
@@ -679,49 +679,34 @@ struct MacBookView: View {
         }
     }
 
-    /// One neutral in steps, light aluminium or dark graphite, for everything that is
-    /// not data.
+    /// One neutral in steps of dark graphite, for everything that is not data. Dark only:
+    /// the panel is always dark while it draws the MacBook (see `PanelController.show`).
     private enum Tone {
-        private static func shade(light: CGFloat, dark: CGFloat, alpha: CGFloat = 1) -> Color {
-            Color(nsColor: NSColor(name: nil) { appearance in
-                NSColor(white: appearance.isDark ? dark : light, alpha: alpha)
-            })
+        private static func shade(_ white: CGFloat, alpha: CGFloat = 1) -> Color {
+            Color(nsColor: NSColor(white: white, alpha: alpha))
         }
 
-        private static func ink(light: CGFloat, dark: CGFloat) -> Color {
-            Color(nsColor: NSColor(name: nil) { appearance in
-                appearance.isDark ? NSColor(white: 1, alpha: dark) : NSColor(white: 0, alpha: light)
-            })
-        }
-
-        static let rimTop = shade(light: 0.86, dark: 0.24)
-        static let rim = shade(light: 0.76, dark: 0.16)
-        static let floor = shade(light: 0.93, dark: 0.095)
-        static let boardTop = shade(light: 0.85, dark: 0.165)
-        static let board = shade(light: 0.81, dark: 0.14)
-        static let partTop = shade(light: 0.82, dark: 0.235)
-        static let part = shade(light: 0.75, dark: 0.195)
-        static let well = shade(light: 0.62, dark: 0.11)
-        static let substrateTop = shade(light: 0.36, dark: 0.29)
-        static let substrate = shade(light: 0.27, dark: 0.23)
-        static let chipFace = shade(light: 0.13, dark: 0.08)
-        static let shieldTop = shade(light: 0.93, dark: 0.42)
-        static let shield = shade(light: 0.74, dark: 0.27)
-        static let glassTop = shade(light: 0.97, dark: 0.15)
-        static let glass = shade(light: 0.90, dark: 0.115)
-        static let sticker = shade(light: 0.98, dark: 0.15, alpha: 0.94)
-        static let screwTop = shade(light: 0.88, dark: 0.48)
-        static let screw = shade(light: 0.66, dark: 0.30)
-        static let component = shade(light: 0.68, dark: 0.25)
-        static let boardChip = shade(light: 0.30, dark: 0.10)
-        static let cable = shade(light: 0.45, dark: 0.32)
-        static let vent = shade(light: 0.6, dark: 0.03)
-        static let port = shade(light: 0.18, dark: 0.02)
-        static let edge = ink(light: 0.12, dark: 0.13)
-        static let shadow = ink(light: 0.10, dark: 0)
-        static let dropShadow = Color(nsColor: NSColor(name: nil) { appearance in
-            NSColor(white: 0, alpha: appearance.isDark ? 0.45 : 0.16)
-        })
+        static let rimTop = shade(0.24)
+        static let rim = shade(0.16)
+        static let floor = shade(0.095)
+        static let boardTop = shade(0.165)
+        static let board = shade(0.14)
+        static let partTop = shade(0.235)
+        static let part = shade(0.195)
+        static let well = shade(0.11)
+        static let shieldTop = shade(0.42)
+        static let shield = shade(0.27)
+        static let glassTop = shade(0.15)
+        static let glass = shade(0.115)
+        static let sticker = shade(0.15, alpha: 0.94)
+        static let screwTop = shade(0.48)
+        static let screw = shade(0.30)
+        static let component = shade(0.25)
+        static let boardChip = shade(0.10)
+        static let vent = shade(0.03)
+        static let port = shade(0.02)
+        static let edge = shade(1, alpha: 0.13)
+        static let dropShadow = shade(0, alpha: 0.45)
     }
 
     /// The heat pipes and the fins they run through.

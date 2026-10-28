@@ -101,6 +101,11 @@ public final class PanelController: NSObject, NSWindowDelegate {
         releaseTask?.cancel()
         releaseTask = nil
         let window = existingOrNewWindow()
+        // The MacBook is drawn dark only, whatever the theme, and the detail beside it
+        // matches. Set on every show: the layout can change while the panel is closed.
+        let appearance = settings.settings.panel.style == .macbook ? NSAppearance(named: .darkAqua) : nil
+        window.appearance = appearance
+        detailWindow?.appearance = appearance
         lastAnchor = anchor
         itemClickDismissal = nil
         lastScreen = screen ?? anchor.flatMap(Self.screen(containing:))

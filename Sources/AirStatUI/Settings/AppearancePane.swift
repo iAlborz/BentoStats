@@ -33,7 +33,8 @@ struct AppearancePane: View {
             } footer: {
                 SettingsFootnote("Bento and Bento Small each keep their own arrangement. To "
                                  + "arrange the cards, press and hold one, or Control-click it "
-                                 + "and choose Edit Layout. Point at a card to see its detail.")
+                                 + "and choose Edit Layout. Point at a card to see its detail. "
+                                 + "MacBook is always dark.")
             }
 
             Section {
