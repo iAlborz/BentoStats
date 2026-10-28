@@ -11,10 +11,11 @@ import AirStatKit
 /// reading: the hinge and its vents along the top; a blower fan in each upper corner,
 /// spinning with the fan's real speed and blowing through copper fins into the hinge;
 /// the logic board up between the fans and right across under them, its edge running
-/// round their housings, with heat pipes from the fins to the CPU and the GPU, a
-/// thermometer on the outer side of each, and under the fans the memory in its slot,
-/// the Wi-Fi module and the SSD in its socket; then the battery's cells either side of
-/// the trackpad, a speaker at each edge, and the ports along the sides.
+/// round their housings, with heat pipes from the fins along the tops of the CPU and
+/// the GPU, a thermometer on the outer side of each, under the fans the memory in its
+/// slot, the Wi-Fi module and the SSD in its socket, and traces running between them
+/// all; then the battery's cells either side of the trackpad, a speaker at each edge,
+/// and the ports along the sides.
 ///
 ///     ┌── hinge ─────────────────── vents ──────────────────── hinge ──┐
 ///     │ ┌ fins ┐ ╭────────────── logic board ───────────────╮ ┌ fins ┐ │
@@ -34,8 +35,8 @@ import AirStatKit
 /// are, the cells by their charge. Every reading sits on its part, as the bento prints
 /// what is free on the memory and the drive: a fan's speed on its hub, a chip's load
 /// under its name, the network's rates on the Wi-Fi module's label. A chip's
-/// temperature stands on a thermometer beside it, and the band's parts are named over
-/// them. Pointing at a part opens its detail beside the panel, as a bento card does.
+/// temperature stands on a thermometer beside it, and the memory and the SSD are named
+/// under them. Pointing at a part opens its detail beside the panel, as a bento card does.
 /// Built from shapes, never a `Canvas`: see `PlotShape` for why.
 struct MacBookView: View {
     let engine: MetricsEngine
@@ -68,18 +69,18 @@ struct MacBookView: View {
     private static let gpu = CGRect(x: 338, y: 85.07, width: 162, height: 85.86)
     private static let cpuThermometer = CGRect(x: 174, y: 74, width: 26, height: 108)
     private static let gpuThermometer = CGRect(x: 506, y: 74, width: 26, height: 108)
-    /// The module and the drive at one scale, centred on one line, and the Wi-Fi module
-    /// between them.
-    private static let memory = CGRect(x: 22, y: 238, width: 152, height: 42.56)
-    private static let ssd = CGRect(x: 532, y: 242.56, width: 152, height: 33.44)
-    private static let wifi = CGRect(x: 276, y: 234.28, width: 154, height: 50)
+    /// The module and the drive at one scale, centred on one line, and the Wi-Fi module,
+    /// pins and all, between them.
+    private static let memory = CGRect(x: 22, y: 216, width: 152, height: 42.56)
+    private static let ssd = CGRect(x: 532, y: 220.56, width: 152, height: 33.44)
+    private static let wifi = CGRect(x: 272, y: 208.28, width: 162, height: 58)
     private static let leftSpeaker = CGRect(x: 20, y: 304, width: 28, height: 150)
     private static let leftCells = CGRect(x: 58, y: 304, width: 168, height: 150)
     private static let trackpad = CGRect(x: 238, y: 304, width: 230, height: 150)
     private static let rightCells = CGRect(x: 480, y: 304, width: 168, height: 150)
     private static let rightSpeaker = CGRect(x: 658, y: 304, width: 28, height: 150)
-    /// Where the labels over the band's parts start.
-    private static let labelsTop: CGFloat = 220
+    /// Where the labels under the memory and the SSD start.
+    private static let labelsTop: CGFloat = 267
 
     private var formatter: MetricFormatter {
         MetricFormatter(settings: settings.settings.general)
@@ -241,32 +242,61 @@ struct MacBookView: View {
         return canvas {
             outline.fill(LinearGradient(colors: [Tone.boardTop, Tone.board], startPoint: .top, endPoint: .bottom))
             outline.stroke(Tone.edge, lineWidth: 1)
+            BoardTraces(buses: Self.traces)
+                .stroke(Tone.trace, style: StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round))
             BoardParts(kind: .capacitors).fill(Tone.component)
             BoardParts(kind: .chips).fill(Tone.boardChip)
             BoardParts(kind: .chips).stroke(Color.white.opacity(0.14), lineWidth: 0.75)
-            ForEach(Array(Self.boardScrews.enumerated()), id: \.offset) { _, point in
-                screw.position(point)
-            }
         }
     }
 
-    private static let boardScrews = [CGPoint(x: 353, y: 50), CGPoint(x: 196, y: 284), CGPoint(x: 510, y: 284)]
+    /// The traces, run in under the parts' edges: the GPU's left pins straight across
+    /// into the CPU; buses up into the CPU's foot from the memory, from the Wi-Fi
+    /// module's pins and, along under the GPU, from the SSD; and three of the GPU's pins
+    /// down to its power controller. Pins are where `ChipLegs` sets them: 8pt apart from
+    /// 12pt in, at the GPU's scale.
+    private static let traces: [BoardTraces.Bus] = {
+        let gpuScale = gpu.width / gpuNative.width
+        let gpuPinsMiddle = gpu.minY + (12 + 8 * 5) * gpuScale
+        let wifiPinsMiddle = wifi.minY + 12 + 8
+        let street: CGFloat = 196
+        return [
+            BoardTraces.Bus(route: [CGPoint(x: cpu.maxX - 4, y: gpuPinsMiddle),
+                                    CGPoint(x: gpu.minX + 4, y: gpuPinsMiddle)],
+                            count: 11, pitch: 8 * gpuScale),
+            BoardTraces.Bus(route: [CGPoint(x: memory.maxX - 4, y: memory.midY - 1), CGPoint(x: 200, y: memory.midY - 1),
+                                    CGPoint(x: 221, y: memory.midY - 22), CGPoint(x: 221, y: cpu.maxY - 4)],
+                            count: 4, pitch: 6),
+            BoardTraces.Bus(route: [CGPoint(x: wifi.minX + 4, y: wifiPinsMiddle), CGPoint(x: 262, y: wifiPinsMiddle),
+                                    CGPoint(x: 250, y: wifiPinsMiddle - 12), CGPoint(x: 250, y: cpu.maxY - 4)],
+                            count: 3, pitch: 8),
+            BoardTraces.Bus(route: [CGPoint(x: ssd.minX + 4, y: ssd.midY), CGPoint(x: 482, y: ssd.midY),
+                                    CGPoint(x: 482 - (ssd.midY - street), y: street), CGPoint(x: 316, y: street),
+                                    CGPoint(x: 306, y: street - 10), CGPoint(x: 306, y: cpu.maxY - 4)],
+                            count: 3, pitch: 5),
+            BoardTraces.Bus(route: [CGPoint(x: gpu.minX + (12 + 8 * 21) * gpuScale, y: gpu.maxY - 4),
+                                    CGPoint(x: gpu.minX + (12 + 8 * 21) * gpuScale, y: 194)],
+                            count: 3, pitch: 8 * gpuScale),
+        ]
+    }()
 
-    /// Copper, from along the foot of the fins at each fan's outlet, over the top of the
-    /// board and down under the CPU on the left and the GPU on the right, which cover
-    /// their ends.
+    /// Copper, thicker than before, from the fan's outer edge right along the foot of its
+    /// fins, down in an S over the board, and along the top edge of the chip it cools: the
+    /// CPU on the left, the GPU on the right.
     private var heatPipes: some View {
-        let pipes = [HeatPipe(from: CGPoint(x: 40, y: 55), along: 240, to: CGPoint(x: 260, y: 94)),
-                     HeatPipe(from: CGPoint(x: 666, y: 55), along: 472, to: CGPoint(x: 452, y: 109))]
+        let pipes = [HeatPipe(from: CGPoint(x: 26, y: 52), leaves: 200, lands: 236,
+                              to: CGPoint(x: Self.cpu.maxX - 6, y: Self.cpu.minY - 3)),
+                     HeatPipe(from: CGPoint(x: 680, y: 52), leaves: 506, lands: 470,
+                              to: CGPoint(x: Self.gpu.minX + 6, y: Self.gpu.minY - 3))]
         return canvas {
             ForEach(pipes.indices, id: \.self) { index in
-                pipes[index].stroke(Color.black.opacity(0.18),
-                                    style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
-                    .offset(y: 1)
-                pipes[index].stroke(Copper.pipe, style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+                pipes[index].stroke(Color.black.opacity(0.2),
+                                    style: StrokeStyle(lineWidth: 14, lineCap: .round, lineJoin: .round))
+                    .offset(y: 1.5)
+                pipes[index].stroke(Copper.pipe, style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round))
                 pipes[index].stroke(Copper.shine.opacity(0.8),
-                                    style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                    .offset(y: -2)
+                                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    .offset(y: -2.5)
             }
         }
     }
@@ -389,8 +419,7 @@ struct MacBookView: View {
 
     // MARK: Readings
 
-    /// The labels over the band's parts, the way a bento card's header sits over its
-    /// object, and the Wi-Fi module between them.
+    /// The labels under the memory and the SSD, and the Wi-Fi module between them.
     private var readings: some View {
         let thermal = engine.thermal.value
         let memory = engine.memory.value
@@ -406,42 +435,34 @@ struct MacBookView: View {
         }
     }
 
-    /// The Wi-Fi module under its shield, with what is going up and coming down printed
-    /// on a label on it, as the bento's network card sets them.
+    /// The Wi-Fi module drawn as the bento draws its chips, a dark package on gold pins,
+    /// with what is going up and coming down printed on it, as the bento's network card
+    /// sets them.
     private var network: some View {
         let network = engine.network.value ?? engine.lastKnown.network.value
-        let can = RoundedRectangle(cornerRadius: 5, style: .continuous)
-        let sticker = RoundedRectangle(cornerRadius: 3, style: .continuous)
-        return HStack(spacing: 0) {
-            Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
-                .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(gradient(palette(.network)))
-                .frame(maxWidth: .infinity)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("↑ " + (network.map { formatter.networkRate($0.uploadBytesPerSecond) } ?? MetricFormatter.unavailable))
-                    .foregroundStyle(gradient(Self.upColors))
-                Text("↓ " + (network.map { formatter.networkRate($0.downloadBytesPerSecond) } ?? MetricFormatter.unavailable))
-                    .foregroundStyle(gradient(Self.downColors))
+        let leg: CGFloat = 4
+        return ZStack {
+            ChipLegs(leg: leg).fill(ChipLegs.gold)
+            ChipFace().padding(leg)
+            HStack(spacing: 0) {
+                Image(systemName: network?.wifi != nil || network == nil ? "wifi" : "network")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(gradient(palette(.network)))
+                    .frame(width: 44)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("↑ " + (network.map { formatter.networkRate($0.uploadBytesPerSecond) } ?? MetricFormatter.unavailable))
+                        .foregroundStyle(gradient(Self.upColors))
+                    Text("↓ " + (network.map { formatter.networkRate($0.downloadBytesPerSecond) } ?? MetricFormatter.unavailable))
+                        .foregroundStyle(gradient(Self.downColors))
+                }
+                .font(.system(size: 13, weight: .bold).monospacedDigit())
+                .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .font(.system(size: 13, weight: .bold).monospacedDigit())
-            .contentTransition(.numericText())
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, 7)
-            .frame(width: 102, alignment: .leading)
-            .frame(maxHeight: .infinity)
-            .background(sticker.fill(Tone.well))
-            .overlay(sticker.strokeBorder(Tone.edge, lineWidth: 0.75))
-            .padding(6)
+            .padding(.horizontal, leg + 8)
         }
-        .background {
-            ZStack {
-                can.fill(LinearGradient(colors: [Tone.shieldTop, Tone.shield],
-                                        startPoint: .topLeading, endPoint: .bottomTrailing))
-                DotGrid(pitch: 5, radius: 0.7).fill(Tone.well.opacity(0.7)).padding(5).clipShape(can)
-            }
-        }
-        .overlay(can.strokeBorder(Tone.edge, lineWidth: 1))
         .shadow(color: Tone.dropShadow, radius: 2, y: 1)
     }
 
@@ -463,8 +484,8 @@ struct MacBookView: View {
         .fixedSize()
     }
 
-    /// A part's name in small capitals and what it holds beside it, over a part that
-    /// carries its own reading, as a bento card's header names its object.
+    /// A part's name in small capitals and what it holds beside it, under a part that
+    /// carries its own reading.
     private func label(_ title: String, _ detail: String?, celsius: Double? = nil) -> some View {
         HStack(spacing: 5) {
             caption(title)
@@ -637,14 +658,16 @@ struct MacBookView: View {
 
     // MARK: Pieces
 
-    /// What holds a part down.
+    /// What holds a part down: a Phillips head.
     private var screw: some View {
-        ZStack {
+        let slot = Capsule().fill(Tone.well)
+        return ZStack {
             Circle().fill(LinearGradient(colors: [Tone.screwTop, Tone.screw], startPoint: .top, endPoint: .bottom))
             Circle().strokeBorder(Tone.edge, lineWidth: 0.75)
-            Circle().fill(Tone.well).frame(width: 3.5, height: 3.5)
+            slot.frame(width: 5.5, height: 1.6)
+            slot.frame(width: 1.6, height: 5.5)
         }
-        .frame(width: 9, height: 9)
+        .frame(width: 10, height: 10)
     }
 
     /// The whole machine's area, for layers drawn in its own points.
@@ -715,13 +738,13 @@ struct MacBookView: View {
         static let rimTop = shade(0.24)
         static let rim = shade(0.16)
         static let floor = shade(0.095)
-        static let boardTop = shade(0.165)
-        static let board = shade(0.14)
+        static let boardTop = shade(0.135)
+        static let board = shade(0.115)
+        /// Darker than the board, so the traces read as cut into it.
+        static let trace = shade(0.07)
         static let partTop = shade(0.235)
         static let part = shade(0.195)
         static let well = shade(0.11)
-        static let shieldTop = shade(0.42)
-        static let shield = shade(0.27)
         static let glassTop = shade(0.15)
         static let glass = shade(0.115)
         static let sticker = shade(0.15, alpha: 0.94)
@@ -862,17 +885,22 @@ private struct FanBlades: Shape {
     }
 }
 
-/// A heat pipe: straight along from the fins to `along`, then curving down into the chip.
+/// A heat pipe: straight along from the fins, down in an S from `leaves` to `lands`, and
+/// straight on along the chip's top edge to its end.
 private struct HeatPipe: Shape {
     let from: CGPoint
-    let along: CGFloat
+    let leaves: CGFloat
+    let lands: CGFloat
     let to: CGPoint
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
+        let middle = (leaves + lands) / 2
         path.move(to: from)
-        path.addLine(to: CGPoint(x: along, y: from.y))
-        path.addQuadCurve(to: to, control: CGPoint(x: to.x, y: from.y))
+        path.addLine(to: CGPoint(x: leaves, y: from.y))
+        path.addCurve(to: CGPoint(x: lands, y: to.y), control1: CGPoint(x: middle, y: from.y),
+                      control2: CGPoint(x: middle, y: to.y))
+        path.addLine(to: to)
         return path
     }
 }
@@ -917,13 +945,16 @@ private struct LevelLine: Shape {
 /// The logic board's outline: up between the fans and right across under them, its
 /// edge running `gap` clear of each housing, down its sides and round its foot, which
 /// is half a circle as wide as the fan.
+///
+/// Where the curve round a fan comes back up to the board's outer side, the two would
+/// meet in a point; a corner of `radius` rounds it off before they do.
 private struct BoardOutline: Shape {
     let top: CGFloat
     let bottom: CGFloat
     let leftFan: CGRect
     let rightFan: CGRect
     let gap: CGFloat
-    /// The board's own corners.
+    /// The board's own corners, and those where its sides meet the curves.
     let radius: CGFloat
 
     func path(in rect: CGRect) -> Path {
@@ -931,18 +962,35 @@ private struct BoardOutline: Shape {
         let right = rightFan.insetBy(dx: -gap, dy: -gap)
         let leftHub = CGPoint(x: leftFan.midX, y: leftFan.maxY - leftFan.width / 2)
         let rightHub = CGPoint(x: rightFan.midX, y: rightFan.maxY - rightFan.width / 2)
+        let cut = left.width / 2
+        // The rounding corner's centre: `radius` in from the side, and `radius` clear of the
+        // curve, so it touches both.
+        func corner(hub: CGPoint, side: CGFloat) -> CGPoint {
+            let x = side + (side < hub.x ? radius : -radius)
+            return CGPoint(x: x, y: hub.y + sqrt(pow(cut + radius, 2) - pow(x - hub.x, 2)))
+        }
+        // Angles in radians with y down the screen, each arc swept the short way: the
+        // curves through the foot of each fan, the rounding corners over their tops.
+        func angle(from a: CGPoint, to b: CGPoint) -> Double { atan2(b.y - a.y, b.x - a.x) }
+        let leftCorner = corner(hub: leftHub, side: left.minX)
+        let rightCorner = corner(hub: rightHub, side: right.maxX)
+
         var path = Path()
         path.move(to: CGPoint(x: (left.maxX + right.minX) / 2, y: top))
         path.addArc(tangent1End: CGPoint(x: right.minX, y: top), tangent2End: CGPoint(x: right.minX, y: rightHub.y),
                     radius: radius)
-        path.addArc(center: rightHub, radius: right.width / 2, startAngle: .degrees(180), endAngle: .degrees(0),
-                    clockwise: true)
+        path.addArc(center: rightHub, radius: cut, startAngle: .radians(.pi),
+                    endAngle: .radians(angle(from: rightHub, to: rightCorner)), clockwise: true)
+        path.addArc(center: rightCorner, radius: radius, startAngle: .radians(angle(from: rightCorner, to: rightHub)),
+                    endAngle: .zero, clockwise: false)
         path.addArc(tangent1End: CGPoint(x: right.maxX, y: bottom), tangent2End: CGPoint(x: left.minX, y: bottom),
                     radius: radius)
         path.addArc(tangent1End: CGPoint(x: left.minX, y: bottom), tangent2End: CGPoint(x: left.minX, y: leftHub.y),
                     radius: radius)
-        path.addArc(center: leftHub, radius: left.width / 2, startAngle: .degrees(180), endAngle: .degrees(0),
-                    clockwise: true)
+        path.addArc(center: leftCorner, radius: radius, startAngle: .radians(.pi),
+                    endAngle: .radians(angle(from: leftCorner, to: leftHub) + 2 * .pi), clockwise: false)
+        path.addArc(center: leftHub, radius: cut, startAngle: .radians(angle(from: leftHub, to: leftCorner)),
+                    endAngle: .zero, clockwise: true)
         path.addArc(tangent1End: CGPoint(x: left.maxX, y: top), tangent2End: CGPoint(x: right.minX, y: top),
                     radius: radius)
         path.closeSubpath()
@@ -950,47 +998,77 @@ private struct BoardOutline: Shape {
     }
 }
 
+/// The board's traces: buses of thin lines running square and at 45°, each trace kept
+/// its pitch from the next round every bend, as a board's traces are routed.
+private struct BoardTraces: Shape {
+    /// A bus: the line down its middle, how many traces it carries, and how far apart.
+    struct Bus {
+        let route: [CGPoint]
+        let count: Int
+        let pitch: CGFloat
+    }
+
+    let buses: [Bus]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for bus in buses {
+            for index in 0..<bus.count {
+                path.addLines(Self.offset(bus.route, by: (CGFloat(index) - CGFloat(bus.count - 1) / 2) * bus.pitch))
+            }
+        }
+        return path
+    }
+
+    /// `route` moved `distance` to one side, square to each of its runs: at each bend, to
+    /// where the two moved runs cross.
+    private static func offset(_ route: [CGPoint], by distance: CGFloat) -> [CGPoint] {
+        let normals = zip(route, route.dropFirst()).map { a, b in
+            let length = hypot(b.x - a.x, b.y - a.y)
+            return CGVector(dx: (a.y - b.y) / length, dy: (b.x - a.x) / length)
+        }
+        return route.indices.map { index in
+            let before = normals[max(index - 1, 0)]
+            let after = normals[min(index, normals.count - 1)]
+            let scale = distance / (1 + before.dx * after.dx + before.dy * after.dy)
+            return CGPoint(x: route[index].x + (before.dx + after.dx) * scale,
+                           y: route[index].y + (before.dy + after.dy) * scale)
+        }
+    }
+}
+
 /// The small parts around a logic board's big ones, at fixed places so the board looks
-/// the same every time it is drawn: a column of capacitors between the CPU and the GPU,
-/// and either side of the Wi-Fi module the power controllers with capacitors beside them.
+/// the same every time it is drawn, clear of the traces: the GPU's power controller
+/// under it, and either side of the Wi-Fi module a controller, a smaller part and a row
+/// of capacitors.
 private struct BoardParts: Shape {
     enum Kind { case chips, capacitors }
 
     let kind: Kind
 
-    /// In the machine's points, the band's left half; the right half mirrors it.
-    private static let chips = [CGRect(x: 188, y: 230, width: 26, height: 26),
-                                CGRect(x: 222, y: 234, width: 16, height: 11),
-                                CGRect(x: 188, y: 264, width: 16, height: 12)]
-    private static let width: CGFloat = 706
+    /// In the machine's points.
+    private static let chips = [CGRect(x: 471, y: 190, width: 26, height: 20),
+                                CGRect(x: 190, y: 252, width: 24, height: 24),
+                                CGRect(x: 226, y: 256, width: 16, height: 11),
+                                CGRect(x: 492, y: 252, width: 24, height: 24),
+                                CGRect(x: 464, y: 256, width: 16, height: 11)]
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        func add(_ part: CGRect, radius: CGFloat, mirrored: Bool = true) {
-            let mirror = CGRect(x: Self.width - part.maxX, y: part.minY, width: part.width, height: part.height)
-            for frame in mirrored ? [part, mirror] : [part] {
-                path.addRoundedRect(in: frame, cornerSize: CGSize(width: radius, height: radius))
-            }
-        }
         guard kind == .capacitors else {
-            for chip in Self.chips { add(chip, radius: 1.5) }
+            for chip in Self.chips {
+                path.addRoundedRect(in: chip, cornerSize: CGSize(width: 1.5, height: 1.5))
+            }
             return path
         }
-        for y in stride(from: CGFloat(82), through: 172, by: 9) {
-            add(CGRect(x: 328, y: y, width: 4, height: 2.5), radius: 0.5, mirrored: false)
-        }
-        for x in stride(from: CGFloat(222), through: 250, by: 7) {
-            add(CGRect(x: x, y: 254, width: 2.5, height: 4), radius: 0.5)
-            add(CGRect(x: x, y: 262, width: 2.5, height: 4), radius: 0.5)
-        }
-        for y in stride(from: CGFloat(228), through: 274, by: 9) {
-            add(CGRect(x: 262, y: y, width: 4, height: 2.5), radius: 0.5)
+        for x in Array(stride(from: CGFloat(226), through: 254, by: 7)) + Array(stride(from: CGFloat(450), through: 478, by: 7)) {
+            path.addRoundedRect(in: CGRect(x: x, y: 280, width: 2.5, height: 4), cornerSize: CGSize(width: 0.5, height: 0.5))
         }
         return path
     }
 }
-/// Holes in rows, each row half a pitch along from the last: a speaker's grille, or the
-/// vents in a shield.
+
+/// Holes in rows, each row half a pitch along from the last: a speaker's grille.
 private struct DotGrid: Shape {
     let pitch: CGFloat
     let radius: CGFloat

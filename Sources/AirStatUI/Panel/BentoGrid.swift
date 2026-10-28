@@ -2328,10 +2328,7 @@ struct GPUDie: View {
                            height: (package.height - Self.inset * 2 - down) / CGFloat(rows))
         let lit = Int((min(max(load, 0), 1) * Double(cores)).rounded())
         ZStack {
-            ChipLegs(leg: Self.leg)
-                .fill(LinearGradient(colors: [Color(red: 0.93, green: 0.78, blue: 0.4),
-                                              Color(red: 0.72, green: 0.55, blue: 0.22)],
-                                     startPoint: .top, endPoint: .bottom))
+            ChipLegs(leg: Self.leg).fill(ChipLegs.gold)
             ChipFace()
                 .frame(width: package.width, height: package.height)
             VStack(spacing: 0) {
@@ -2382,8 +2379,12 @@ struct GPUDie: View {
 
 /// A packaged chip's legs: short pins standing off all four edges of a package inset
 /// `leg` into the rect, each running a point under the package so none floats.
-private struct ChipLegs: Shape {
+struct ChipLegs: Shape {
     let leg: CGFloat
+
+    static let gold = LinearGradient(colors: [Color(red: 0.93, green: 0.78, blue: 0.4),
+                                              Color(red: 0.72, green: 0.55, blue: 0.22)],
+                                     startPoint: .top, endPoint: .bottom)
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
