@@ -75,7 +75,6 @@ struct BentoGrid: View {
     @State private var working: [BentoTile]?
     @State private var drag: TileDrag?
     @State private var resizeStart: BentoTileSize?
-    @State private var jiggle = false
     /// The card under the pointer in the gallery, which shows its design's name.
     @State private var labelled: UUID?
     /// Set while a card is held by its body or its corner, and cleared however the
@@ -139,13 +138,8 @@ struct BentoGrid: View {
             resizeStart = nil
             commit()
         }
-        .onChange(of: isEditing, initial: true) { _, editing in
+        .onChange(of: isEditing) { _, editing in
             if !editing { commit() }
-            var still = Transaction()
-            still.disablesAnimations = true
-            withTransaction(still) { jiggle = false }
-            guard editing, !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 0.14).repeatForever(autoreverses: true)) { jiggle = true }
         }
     }
 
@@ -157,8 +151,10 @@ struct BentoGrid: View {
     private func placed(_ tile: BentoTile, frame: CGRect, index: Int) -> some View {
         let isDragged = drag?.id == tile.id
         let origin = isDragged ? drag?.origin ?? frame.origin : frame.origin
-        // Neighbours lean opposite ways, so the grid shimmers rather than sways.
-        let tilt = (index.isMultiple(of: 2) ? 1.0 : -1.0) * (jiggle ? 0.6 : -0.6)
+        // Neighbours lean opposite ways, so the grid shimmers rather than sways. Level
+        // whenever the card is not jiggling: keyframes that stop repeating hold wherever
+        // they had got to, which would leave the card a fraction of a degree askew.
+        let lean = isEditing && !isDragged ? (index.isMultiple(of: 2) ? 1.0 : -1.0) : 0
         tileView(tile, size: frame.size)
             .frame(width: frame.width, height: frame.height)
             .allowsHitTesting(!isEditing)
@@ -190,7 +186,18 @@ struct BentoGrid: View {
             // Not the Settings card: holding its Quit must not quit on the way.
             .gesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in layout?.beginEditing() },
                      including: isEditing || tile.kind.isAction || !canEdit ? .subviews : .all)
-            .rotationEffect(.degrees(isEditing && !isDragged ? tilt : 0))
+            // Keyframes rather than a repeating animation of a state: a repeating
+            // animation runs on after its value is set back without one, so the cards
+            // went on jiggling after Done.
+            .keyframeAnimator(initialValue: 0.0, repeating: isEditing && !reduceMotion) { content, angle in
+                content.rotationEffect(.degrees(angle * lean))
+            } keyframes: { _ in
+                KeyframeTrack {
+                    CubicKeyframe(0.6, duration: 0.07)
+                    CubicKeyframe(-0.6, duration: 0.14)
+                    CubicKeyframe(0, duration: 0.07)
+                }
+            }
             .scaleEffect(isDragged ? 1.04 : 1)
             .shadow(color: .black.opacity(isDragged ? 0.25 : 0), radius: 12, y: 4)
             .zIndex(isDragged ? 1 : 0)
