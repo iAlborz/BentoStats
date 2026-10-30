@@ -25,12 +25,12 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
-        case .general: return "General"
-        case .menuBar: return "Menu Bar"
-        case .appearance: return "Appearance"
-        case .notifications: return "Notifications"
-        case .shortcuts: return "Shortcuts"
-        case .about: return "About"
+        case .general: return String(localized: "General")
+        case .menuBar: return String(localized: "Menu Bar")
+        case .appearance: return String(localized: "Appearance")
+        case .notifications: return String(localized: "Notifications")
+        case .shortcuts: return String(localized: "Shortcuts")
+        case .about: return String(localized: "About")
         }
     }
 
@@ -169,27 +169,27 @@ struct MetricAvailability {
         case .cpuFrequency:
             // No public API reports Apple Silicon core frequency, so this readout
             // cannot work on any current Mac.
-            return "macOS does not report core frequency on Apple Silicon."
+            return String(localized: "macOS does not report core frequency on Apple Silicon.")
         case .cpuTemperature:
             guard let thermal = snapshot.thermal.value else { return nil }
             if thermal.cpuCelsius == nil {
-                return thermal.sensorsUnavailableReason ?? "No readable CPU temperature sensor."
+                return thermal.sensorsUnavailableReason ?? String(localized: "No readable CPU temperature sensor.")
             }
         case .fanSpeed:
             if let thermal = snapshot.thermal.value, thermal.fans.isEmpty {
-                return "This Mac has no fans."
+                return String(localized: "This Mac has no fans.")
             }
         case .battery, .batteryTime:
             if let power = snapshot.power.value, power.percentage == nil {
-                return "This Mac has no battery."
+                return String(localized: "This Mac has no battery.")
             }
         case .systemPower:
             if let power = snapshot.power.value, power.systemWatts == nil {
-                return "This Mac does not report system power draw."
+                return String(localized: "This Mac does not report system power draw.")
             }
         case .gpuUsage:
             if let gpu = snapshot.gpu.value, gpu.primary?.utilization == nil {
-                return "No GPU utilisation source on this Mac."
+                return String(localized: "No GPU utilisation source on this Mac.")
             }
         default:
             return nil
@@ -478,12 +478,12 @@ struct ReorderControls: View {
     var body: some View {
         HStack(spacing: Design.Space.xxs) {
             RowIconButton(systemName: "chevron.up",
-                          help: "Move \(itemLabel) up",
-                          label: "Move \(itemLabel) up") { move(-1) }
+                          help: String(localized: "Move \(itemLabel) up"),
+                          label: String(localized: "Move \(itemLabel) up")) { move(-1) }
                 .disabled(!canMoveUp)
             RowIconButton(systemName: "chevron.down",
-                          help: "Move \(itemLabel) down",
-                          label: "Move \(itemLabel) down") { move(1) }
+                          help: String(localized: "Move \(itemLabel) down"),
+                          label: String(localized: "Move \(itemLabel) down")) { move(1) }
                 .disabled(!canMoveDown)
         }
     }
@@ -604,18 +604,18 @@ struct RowIconButton: View {
 enum SettingsLabels {
 
     static func interval(_ seconds: TimeInterval) -> String {
-        if seconds < 1 { return "\(Int(seconds * 1000)) ms" }
-        if seconds == 1 { return "1 second" }
-        return "\(Int(seconds)) seconds"
+        if seconds < 1 { return String(localized: "\(Int(seconds * 1000)) ms") }
+        if seconds == 1 { return String(localized: "1 second") }
+        return String(localized: "\(Int(seconds)) seconds")
     }
 
     static func duration(_ seconds: TimeInterval) -> String {
-        if seconds <= 0 { return "Immediately" }
-        if seconds < 60 { return "\(Int(seconds)) seconds" }
+        if seconds <= 0 { return String(localized: "Immediately") }
+        if seconds < 60 { return String(localized: "\(Int(seconds)) seconds") }
         let minutes = Int(seconds / 60)
-        if minutes < 60 { return minutes == 1 ? "1 minute" : "\(minutes) minutes" }
+        if minutes < 60 { return minutes == 1 ? String(localized: "1 minute") : String(localized: "\(minutes) minutes") }
         let hours = Int(seconds / 3600)
-        return hours == 1 ? "1 hour" : "\(hours) hours"
+        return hours == 1 ? String(localized: "1 hour") : String(localized: "\(hours) hours")
     }
 
     static func points(_ value: Double) -> String { "\(Int(value.rounded())) pt" }
@@ -744,8 +744,8 @@ struct MenuBarPreviewStrip: View {
     }
 
     private var accessibilityValue: String {
-        if isEmpty { return "No readouts enabled" }
+        if isEmpty { return String(localized: "No readouts enabled") }
         guard isTruncated else { return model.accessibilityDescription }
-        return model.accessibilityDescription + ". Scroll the preview to see the rest"
+        return model.accessibilityDescription + String(localized: ". Scroll the preview to see the rest")
     }
 }

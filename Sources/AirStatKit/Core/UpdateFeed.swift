@@ -100,11 +100,11 @@ public enum UpdateError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .server(let status): return "GitHub answered with status \(status)."
-        case .noApp: return "The download holds no app."
-        case .notThisApp: return "The download is not Bento Stats."
-        case .notNewer: return "The download is not a newer version."
-        case .untrusted: return "The download is not signed by Bento Stats' developer and notarized by Apple."
+        case .server(let status): return String(localized: "GitHub answered with status \(status).")
+        case .noApp: return String(localized: "The download holds no app.")
+        case .notThisApp: return String(localized: "The download is not Bento Stats.")
+        case .notNewer: return String(localized: "The download is not a newer version.")
+        case .untrusted: return String(localized: "The download is not signed by Bento Stats' developer and notarized by Apple.")
         case .tool(let message): return message
         }
     }

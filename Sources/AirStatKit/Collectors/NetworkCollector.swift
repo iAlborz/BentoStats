@@ -558,21 +558,21 @@ public final class NetworkCollector: MetricSource {
     }
 
     private func classify(_ link: Link) -> (type: ConnectionType, displayName: String) {
-        if link.flags & IFF_LOOPBACK != 0 { return (.loopback, "Loopback") }
+        if link.flags & IFF_LOOPBACK != 0 { return (.loopback, String(localized: "Loopback")) }
         if let port = hardwarePorts[link.name] { return (port.type, port.displayName) }
         if link.name == wifiInterfaceName { return (.wifi, "Wi-Fi") }
 
         let name = link.name
         if name.hasPrefix("utun") || name.hasPrefix("ipsec") || name.hasPrefix("ppp")
             || name.hasPrefix("tun") || name.hasPrefix("tap") {
-            return (.vpn, "Tunnel (\(name))")
+            return (.vpn, String(localized: "Tunnel (\(name))"))
         }
         if name.hasPrefix("awdl") { return (.other, "AirDrop") }
-        if name.hasPrefix("llw") { return (.other, "Low Latency WLAN") }
-        if name.hasPrefix("anpi") { return (.other, "Apple Network Processor") }
-        if name.hasPrefix("ap") { return (.other, "Personal Hotspot") }
-        if name.hasPrefix("bridge") { return (.ethernet, "Bridge (\(name))") }
-        if name.hasPrefix("gif") || name.hasPrefix("stf") { return (.other, "Transition Tunnel") }
+        if name.hasPrefix("llw") { return (.other, String(localized: "Low Latency WLAN")) }
+        if name.hasPrefix("anpi") { return (.other, String(localized: "Apple Network Processor")) }
+        if name.hasPrefix("ap") { return (.other, String(localized: "Personal Hotspot")) }
+        if name.hasPrefix("bridge") { return (.ethernet, String(localized: "Bridge (\(name))")) }
+        if name.hasPrefix("gif") || name.hasPrefix("stf") { return (.other, String(localized: "Transition Tunnel")) }
         if name.hasPrefix("en") || name.hasPrefix("eth") { return (.ethernet, name) }
         return (.other, name)
     }
@@ -671,22 +671,22 @@ public final class NetworkCollector: MetricSource {
 
     private static func securityLabel(_ security: CWSecurity) -> String? {
         switch security {
-        case .none: return "Open"
+        case .none: return String(localized: "Open")
         case .WEP: return "WEP"
-        case .wpaPersonal: return "WPA Personal"
-        case .wpaPersonalMixed: return "WPA/WPA2 Personal"
-        case .wpa2Personal: return "WPA2 Personal"
-        case .personal: return "Personal"
-        case .dynamicWEP: return "Dynamic WEP"
-        case .wpaEnterprise: return "WPA Enterprise"
-        case .wpaEnterpriseMixed: return "WPA/WPA2 Enterprise"
-        case .wpa2Enterprise: return "WPA2 Enterprise"
-        case .enterprise: return "Enterprise"
-        case .wpa3Personal: return "WPA3 Personal"
-        case .wpa3Enterprise: return "WPA3 Enterprise"
-        case .wpa3Transition: return "WPA2/WPA3 Transition"
-        case .OWE: return "Enhanced Open"
-        case .oweTransition: return "Enhanced Open Transition"
+        case .wpaPersonal: return String(localized: "WPA Personal")
+        case .wpaPersonalMixed: return String(localized: "WPA/WPA2 Personal")
+        case .wpa2Personal: return String(localized: "WPA2 Personal")
+        case .personal: return String(localized: "Personal")
+        case .dynamicWEP: return String(localized: "Dynamic WEP")
+        case .wpaEnterprise: return String(localized: "WPA Enterprise")
+        case .wpaEnterpriseMixed: return String(localized: "WPA/WPA2 Enterprise")
+        case .wpa2Enterprise: return String(localized: "WPA2 Enterprise")
+        case .enterprise: return String(localized: "Enterprise")
+        case .wpa3Personal: return String(localized: "WPA3 Personal")
+        case .wpa3Enterprise: return String(localized: "WPA3 Enterprise")
+        case .wpa3Transition: return String(localized: "WPA2/WPA3 Transition")
+        case .OWE: return String(localized: "Enhanced Open")
+        case .oweTransition: return String(localized: "Enhanced Open Transition")
         case .unknown: return nil
         @unknown default: return nil
         }

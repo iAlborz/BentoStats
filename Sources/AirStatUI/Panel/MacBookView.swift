@@ -149,7 +149,7 @@ struct MacBookView: View {
                 place(VentSlots().fill(Tone.vent),
                       CGRect(x: Self.vent.maxX - run, y: Self.vent.minY, width: run, height: Self.vent.height))
                 HStack(spacing: Design.Space.s) {
-                    caption("Thermal state")
+                    caption(String(localized: "Thermal state"))
                     Text(Self.stateWord(state))
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(gradient(Self.stateColors(state)))
@@ -170,7 +170,7 @@ struct MacBookView: View {
     /// blades are the drawing's, not a reading.
     private var fans: some View {
         let fans = engine.thermal.value?.fans ?? []
-        let left = fanSpeed(fans.first) ?? (Capabilities.readsSensors ? "None" : nil)
+        let left = fanSpeed(fans.first) ?? (Capabilities.readsSensors ? String(localized: "None") : nil)
         return canvas {
             place(fan(fans.first, isMirrored: false, speed: left).hoverRegion(.thermal, layout: layout),
                   Self.leftFan)
@@ -181,7 +181,7 @@ struct MacBookView: View {
     }
 
     private func fanSpeed(_ fan: FanInfo?) -> String? {
-        fan.map { $0.currentRPM < 1 ? "Off" : formatter.percent($0.speedFraction) }
+        fan.map { $0.currentRPM < 1 ? String(localized: "Off") : formatter.percent($0.speedFraction) }
     }
 
     /// The fin stack the fan blows through, and the fan in its housing: square where it
@@ -400,7 +400,7 @@ struct MacBookView: View {
         return canvas {
             place(socket, CGRect(x: Self.memory.minX - 4, y: Self.memory.maxY - 8 * scale - 2,
                                  width: Self.memory.width + 8, height: 8 * scale + 5))
-            place(scaled(MemoryGraphic(label: memoryFree.map { "\(formatter.memory($0)) free" },
+            place(scaled(MemoryGraphic(label: memoryFree.map { String(localized: "\(formatter.memory($0)) free") },
                                        fraction: memoryUsed ?? 0, load: palette(.memory)[0]),
                          native: Self.memoryNative, width: Self.memory.width)
                 .shadow(color: Tone.dropShadow, radius: 2, y: 1)
@@ -408,7 +408,7 @@ struct MacBookView: View {
             place(socket, CGRect(x: Self.ssd.minX - 4, y: Self.ssd.minY - 3,
                                  width: 9 * scale + 6, height: Self.ssd.height + 6))
             place(scaled(SSDGraphic(fraction: diskUsed ?? 0, colors: palette(.disk),
-                                    label: root.map { "\(formatter.storage($0.availableBytes)) free" },
+                                    label: root.map { String(localized: "\(formatter.storage($0.availableBytes)) free") },
                                     surface: Tone.board),
                          native: Self.ssdNative, width: Self.ssd.width)
                 .shadow(color: Tone.dropShadow, radius: 2, y: 1)
@@ -425,11 +425,11 @@ struct MacBookView: View {
         let memory = engine.memory.value
         let root = engine.disk.value?.rootVolume
         return canvas {
-            label("Memory", memory.map { formatter.memory($0.totalBytes) })
+            label(String(localized: "Memory"), memory.map { formatter.memory($0.totalBytes) })
                 .hoverRegion(.memory, layout: layout)
                 .top(at: CGPoint(x: Self.memory.midX, y: Self.labelsTop))
             place(network.hoverRegion(.network, layout: layout), Self.wifi)
-            label("SSD", root.map { formatter.storage($0.totalBytes) }, celsius: Self.hottest(thermal, .storage))
+            label(String(localized: "SSD"), root.map { formatter.storage($0.totalBytes) }, celsius: Self.hottest(thermal, .storage))
                 .hoverRegion(.disk, layout: layout)
                 .top(at: CGPoint(x: Self.ssd.midX, y: Self.labelsTop))
         }
@@ -533,12 +533,12 @@ struct MacBookView: View {
         let state = power.map(powerState)
         return canvas {
             place(cells(charge: charge, color: colors[0], tabsTrailing: true) {
-                reading("Battery", power?.percentage.map { formatter.percentValue($0) }, colors: colors,
+                reading(String(localized: "Battery"), power?.percentage.map { formatter.percentValue($0) }, colors: colors,
                         size: 17, celsius: power?.temperatureCelsius ?? Self.hottest(engine.thermal.value, .battery))
             }
             .hoverRegion(.battery, layout: layout), Self.leftCells)
             place(cells(charge: charge, color: colors[0], tabsTrailing: false) {
-                reading(state?.title ?? "Power", state?.value, colors: colors, size: 15)
+                reading(state?.title ?? String(localized: "Power"), state?.value, colors: colors, size: 15)
             }
             .hoverRegion(.battery, layout: layout), Self.rightCells)
         }
@@ -599,13 +599,13 @@ struct MacBookView: View {
 
     /// What the power is doing, and for how long, where the system says.
     private func powerState(_ power: PowerSnapshot) -> (title: String, value: String) {
-        guard power.hasBattery else { return ("Power", "Adapter") }
+        guard power.hasBattery else { return (String(localized: "Power"), String(localized: "Adapter")) }
         if power.isCharging {
-            return power.timeToFull.map { ("Charging", "Full in \(formatter.duration($0))") } ?? ("Power", "Charging")
+            return power.timeToFull.map { (String(localized: "Charging"), String(localized: "Full in \(formatter.duration($0))")) } ?? (String(localized: "Power"), String(localized: "Charging"))
         }
-        if power.isFullyCharged { return ("Power", "Charged") }
-        if power.isPluggedIn { return ("Power", "Plugged in") }
-        return power.timeToEmpty.map { ("On battery", "\(formatter.duration($0)) left") } ?? ("Power", "On battery")
+        if power.isFullyCharged { return (String(localized: "Power"), String(localized: "Charged")) }
+        if power.isPluggedIn { return (String(localized: "Power"), String(localized: "Plugged in")) }
+        return power.timeToEmpty.map { (String(localized: "On battery"), String(localized: "\(formatter.duration($0)) left")) } ?? (String(localized: "Power"), String(localized: "On battery"))
     }
 
     /// The trackpad, with what the machine is written on it.
@@ -712,10 +712,10 @@ struct MacBookView: View {
     /// The bento's words and colours for macOS's thermal states.
     private static func stateWord(_ state: ThermalPressure) -> String {
         switch state {
-        case .nominal: "Normal"
-        case .fair: "Elevated"
-        case .serious: "High"
-        case .critical: "Critical"
+        case .nominal: String(localized: "Normal")
+        case .fair: String(localized: "Elevated")
+        case .serious: String(localized: "High")
+        case .critical: String(localized: "Critical")
         }
     }
 

@@ -422,32 +422,32 @@ public struct HistoryChart: View {
         if let scrub {
             lead.append(scrubReadout(scrub, in: window))
         } else if window.range == .day, window.collectedSpan < window.span - 3_600 {
-            lead.append("since \(HistoryAxis.clock(window.end.addingTimeInterval(-window.collectedSpan)))")
+            lead.append(String(localized: "since \(HistoryAxis.clock(window.end.addingTimeInterval(-window.collectedSpan)))"))
         }
         let prefix = lead.isEmpty ? "" : lead.joined() + separator
         guard window.supportsTrend else {
             // Too few points for a trend: the peak alone on a derived scale, since it
             // is what says how tall the plot is, and otherwise just the lead.
             guard window.scale.isDerived else { return [lead.joined()] }
-            let peak = "peak \(window.string(window.scale.peak, using: formatter))"
+            let peak = String(localized: "peak \(window.string(window.scale.peak, using: formatter))")
             return [prefix + peak, lead.joined()]
         }
         let primary = window.primary
-        let average = "avg \(window.string(primary.average, using: formatter))"
-        let maximum = "max \(window.string(primary.maximum, using: formatter))"
+        let average = String(localized: "avg \(window.string(primary.average, using: formatter))")
+        let maximum = String(localized: "max \(window.string(primary.maximum, using: formatter))")
         let explained = primary.peakNote.map { "\(maximum) \($0)" } ?? maximum
         var tiers: [String]
         if let secondary = window.secondary {
-            let other = "\(module.secondaryGlyph) avg \(window.string(secondary.average, using: formatter))"
-                + "  max \(window.string(secondary.maximum, using: formatter))"
-            let otherMax = "\(module.secondaryGlyph) max \(window.string(secondary.maximum, using: formatter))"
+            let other = String(localized: "\(module.secondaryGlyph) avg \(window.string(secondary.average, using: formatter))")
+                + String(localized: "  max \(window.string(secondary.maximum, using: formatter))")
+            let otherMax = String(localized: "\(module.secondaryGlyph) max \(window.string(secondary.maximum, using: formatter))")
             tiers = [
                 "\(prefix)\(module.glyph) \(average)  \(maximum)   \(other)",
                 "\(prefix)\(module.glyph) \(maximum)   \(otherMax)",
                 "\(prefix)\(maximum)",
             ]
         } else {
-            let minimum = "min \(window.string(primary.minimum, using: formatter))"
+            let minimum = String(localized: "min \(window.string(primary.minimum, using: formatter))")
             tiers = [
                 "\(prefix)\(minimum)  \(average)  \(explained)",
                 "\(prefix)\(average)  \(explained)",
@@ -463,7 +463,7 @@ public struct HistoryChart: View {
     private func scrubReadout(_ scrub: Scrub, in window: Window) -> String {
         var parts = [window.timeLabel(at: scrub.fraction)]
         guard let column = scrub.column else {
-            parts.append("no samples")
+            parts.append(String(localized: "no samples"))
             return parts.joined(separator: "  ")
         }
         if window.secondary != nil {
@@ -475,27 +475,27 @@ public struct HistoryChart: View {
             parts.append(window.string(column.mean, using: formatter))
         }
         if window.shade != nil, let shade = scrub.shade {
-            parts.append(shade.mean >= Self.shadeThreshold ? "on power" : "on battery")
+            parts.append(shade.mean >= Self.shadeThreshold ? String(localized: "on power") : String(localized: "on battery"))
         }
         if let note = column.note { parts.append(note) }
         return parts.joined(separator: "  ")
     }
 
     private func summary(_ window: Window) -> String {
-        let over = window.range == .day ? "the last 24 hours" : ChartCaption.window(window.span)
-        guard !window.isEmpty else { return "No history yet over \(over)." }
+        let over = window.range == .day ? String(localized: "the last 24 hours") : ChartCaption.window(window.span)
+        guard !window.isEmpty else { return String(localized: "No history yet over \(over).") }
         func sentence(_ label: String, _ track: Track) -> String {
             var text = label
-            if let last = track.last { text += ": now \(window.string(last, using: formatter))" }
+            if let last = track.last { text += String(localized: ": now \(window.string(last, using: formatter))") }
             if track.supportsTrend {
-                text += ", average \(window.string(track.average, using: formatter))"
-                text += ", range \(window.string(track.minimum, using: formatter))"
-                text += " to \(window.string(track.maximum, using: formatter))"
+                text += String(localized: ", average \(window.string(track.average, using: formatter))")
+                text += String(localized: ", range \(window.string(track.minimum, using: formatter))")
+                text += String(localized: " to \(window.string(track.maximum, using: formatter))")
             }
-            if let note = track.peakNote { text += ", highest while \(note) led" }
+            if let note = track.peakNote { text += String(localized: ", highest while \(note) led") }
             return text
         }
-        var text = sentence("\(module.key.label) over \(over)", window.primary)
+        var text = sentence(String(localized: "\(module.key.label) over \(over)"), window.primary)
         if let secondary = module.secondary, let track = window.secondary {
             text += ". " + sentence(secondary.label, track)
         }
@@ -693,10 +693,10 @@ public struct HistorySilhouette: View {
     }
 
     private var summary: String {
-        guard !minutes.isEmpty else { return "No history yet." }
+        guard !minutes.isEmpty else { return String(localized: "No history yet.") }
         let format = ChartValueFormat.standard(for: minutes.key)
-        return "average \(format.string(minutes.average, using: formatter)), range "
-            + "\(format.string(minutes.minimum, using: formatter)) to "
+        return String(localized: "average \(format.string(minutes.average, using: formatter)), range ")
+            + String(localized: "\(format.string(minutes.minimum, using: formatter)) to ")
             + "\(format.string(minutes.maximum, using: formatter))."
     }
 }

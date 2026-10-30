@@ -331,8 +331,8 @@ public final class PowerCollector: MetricSource {
             return kIOPSPermanentFailureValue
         }
         switch source?[kIOPSBatteryHealthKey] as? String {
-        case kIOPSGoodValue: return "Normal"
-        case kIOPSFairValue, kIOPSPoorValue: return "Service Recommended"
+        case kIOPSGoodValue: return String(localized: "Normal")
+        case kIOPSFairValue, kIOPSPoorValue: return String(localized: "Service Recommended")
         default: return nil
         }
     }

@@ -87,7 +87,7 @@ struct MenuBarPane: View {
 
             RowMenu(title: item.metric.label,
                     width: Self.metricColumn,
-                    label: "\(item.metric.label) metric") {
+                    label: String(localized: "\(item.metric.label) metric")) {
                 Picker("Metric", selection: metricBinding(for: item)) {
                     ForEach(MenuBarMetric.allCases, id: \.self) { metric in
                         Text(metric.label).tag(metric)
@@ -120,16 +120,16 @@ struct MenuBarPane: View {
             // list of the same metrics doing the same job.
             RowIconButton(systemName: "trash",
                           help: items.count <= 1
-                              ? "The last readout cannot be removed."
-                              : "Remove \(item.metric.label) from the menu bar",
-                          label: "Remove \(item.metric.label)") {
+                              ? String(localized: "The last readout cannot be removed.")
+                              : String(localized: "Remove \(item.metric.label) from the menu bar"),
+                          label: String(localized: "Remove \(item.metric.label)")) {
                 remove(item)
             }
             .disabled(items.count <= 1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.metric.label)
-        .accessibilityValue("\(item.isEnabled ? "Shown" : "Hidden"), \(item.style.label) style")
+        .accessibilityValue("\(item.isEnabled ? String(localized: "Shown") : String(localized: "Hidden")), \(item.style.label) style")
     }
 
     /// The style popup, carrying the caption toggle with it.
@@ -139,7 +139,7 @@ struct MenuBarPane: View {
     /// competing with the one that means "shown".
     private func styleMenu(_ item: MenuBarItemConfig) -> some View {
         RowMenu(title: item.style.label,
-                label: "\(item.metric.label) display style") {
+                label: String(localized: "\(item.metric.label) display style")) {
             Picker("Display as", selection: styleBinding(for: item)) {
                 ForEach(item.metric.supportedStyles, id: \.self) { style in
                     Text(style.label).tag(style)
@@ -170,7 +170,7 @@ struct MenuBarPane: View {
                         // a readout this machine cannot serve may work on the next.
                         Text(availability.note(for: metric) == nil
                              ? metric.label
-                             : "\(metric.label) (unavailable here)")
+                             : String(localized: "\(metric.label) (unavailable here)"))
                     }
                 }
             } label: {
@@ -190,14 +190,14 @@ struct MenuBarPane: View {
     private func captionToggleTitle(for item: MenuBarItemConfig) -> String {
         if item.style == .bar {
             let label = MenuBarRenderModel.sideCaptionText(for: item.metric) ?? item.metric.label
-            return "Show \"\(label)\" beside the bar"
+            return String(localized: "Show \"\(label)\" beside the bar")
         }
         if item.style == .tile {
             let label = MenuBarRenderModel.sideCaptionText(for: item.metric) ?? item.metric.label
-            return "Show \"\(label)\" inside the tile"
+            return String(localized: "Show \"\(label)\" inside the tile")
         }
         let label = MenuBarRenderModel.captionText(for: item.metric) ?? item.metric.label
-        return "Show \"\(label)\" above the value"
+        return String(localized: "Show \"\(label)\" above the value")
     }
 
     // MARK: Model access

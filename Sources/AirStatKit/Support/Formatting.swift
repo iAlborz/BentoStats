@@ -206,7 +206,7 @@ public struct MetricFormatter: Sendable {
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         if hours > 0 { return "\(hours):\(String(format: "%02d", minutes))" }
-        return "\(minutes)m"
+        return String(localized: "\(minutes)m")
     }
 
     /// Uptime, in the "12d 4h" register Apple uses in About This Mac.
@@ -215,9 +215,9 @@ public struct MetricFormatter: Sendable {
         let days = total / 86400
         let hours = (total % 86400) / 3600
         let minutes = (total % 3600) / 60
-        if days > 0 { return "\(days)d \(hours)h" }
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        return "\(minutes)m"
+        if days > 0 { return String(localized: "\(days)d \(hours)h") }
+        if hours > 0 { return String(localized: "\(hours)h \(minutes)m") }
+        return String(localized: "\(minutes)m")
     }
 
     public func compactUptime(_ seconds: TimeInterval) -> String {
@@ -225,16 +225,16 @@ public struct MetricFormatter: Sendable {
         let days = total / 86400
         let hours = (total % 86400) / 3600
         let minutes = (total % 3600) / 60
-        if days > 0 { return "\(days)d" }
-        if hours > 0 { return "\(hours)h" }
-        return "\(minutes)m"
+        if days > 0 { return String(localized: "\(days)d") }
+        if hours > 0 { return String(localized: "\(hours)h") }
+        return String(localized: "\(minutes)m")
     }
 
     // MARK: Misc
 
     public func rpm(_ value: Double?) -> String {
         guard let value, value >= 0, let whole = Self.whole(value) else { return Self.unavailable }
-        return "\(whole) RPM"
+        return String(localized: "\(whole) RPM")
     }
 
     public func watts(_ value: Double?, decimals: Int = 1) -> String {
@@ -306,9 +306,9 @@ public struct MetricFormatter: Sendable {
         case .systemPower:
             return "99.9 W"
         case .fanSpeed:
-            return "9999 RPM"
+            return rpm(9999)
         case .uptime:
-            return "999d"
+            return compactUptime(999 * 86400)
         }
     }
 }

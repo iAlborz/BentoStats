@@ -83,9 +83,9 @@ public enum MemoryPressureLevel: Int, Sendable, Equatable, Hashable, Codable, Co
 
     public var label: String {
         switch self {
-        case .normal: return "Normal"
-        case .warning: return "Warning"
-        case .critical: return "Critical"
+        case .normal: return String(localized: "Normal")
+        case .warning: return String(localized: "Warning")
+        case .critical: return String(localized: "Critical")
         }
     }
 }
@@ -185,7 +185,7 @@ public struct GPUDevice: Sendable, Equatable, Hashable, Identifiable {
     }
 
     /// What to call this device's memory in the UI.
-    public var memoryLabel: String { hasUnifiedMemory ? "Memory" : "VRAM" }
+    public var memoryLabel: String { hasUnifiedMemory ? String(localized: "Memory") : String(localized: "VRAM") }
 }
 
 public struct GPUSnapshot: Sendable, Equatable {
@@ -211,13 +211,13 @@ public enum ConnectionType: String, Sendable, Equatable, Hashable, Codable {
 
     public var label: String {
         switch self {
-        case .wifi: return "Wi-Fi"
-        case .ethernet: return "Ethernet"
-        case .cellular: return "Cellular"
-        case .vpn: return "VPN"
-        case .loopback: return "Loopback"
-        case .other: return "Other"
-        case .none: return "Offline"
+        case .wifi: return String(localized: "Wi-Fi")
+        case .ethernet: return String(localized: "Ethernet")
+        case .cellular: return String(localized: "Cellular")
+        case .vpn: return String(localized: "VPN")
+        case .loopback: return String(localized: "Loopback")
+        case .other: return String(localized: "Other")
+        case .none: return String(localized: "Offline")
         }
     }
 }
@@ -512,10 +512,10 @@ public enum ThermalPressure: Int, Sendable, Equatable, Hashable, Codable, Compar
 
     public var label: String {
         switch self {
-        case .nominal: return "Nominal"
-        case .fair: return "Fair"
-        case .serious: return "Serious"
-        case .critical: return "Critical"
+        case .nominal: return String(localized: "Nominal")
+        case .fair: return String(localized: "Fair")
+        case .serious: return String(localized: "Serious")
+        case .critical: return String(localized: "Critical")
         }
     }
 }
@@ -599,13 +599,13 @@ public enum ProcessSortKey: String, Sendable, Equatable, Hashable, Codable, Case
 
     public var label: String {
         switch self {
-        case .cpu: return "CPU"
-        case .memory: return "Memory"
-        case .energy: return "Energy"
-        case .diskIO: return "Disk"
-        case .networkIO: return "Network"
-        case .name: return "Name"
-        case .pid: return "PID"
+        case .cpu: return String(localized: "CPU")
+        case .memory: return String(localized: "Memory")
+        case .energy: return String(localized: "Energy")
+        case .diskIO: return String(localized: "Disk")
+        case .networkIO: return String(localized: "Network")
+        case .name: return String(localized: "Name")
+        case .pid: return String(localized: "PID")
         }
     }
 }

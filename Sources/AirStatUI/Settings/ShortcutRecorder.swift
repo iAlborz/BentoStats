@@ -28,10 +28,10 @@ enum ShortcutDisplay {
     static func accessibleString(for shortcut: AirStatKit.KeyboardShortcut) -> String {
         let flags = NSEvent.ModifierFlags(rawValue: shortcut.modifierFlags)
         var parts: [String] = []
-        if flags.contains(.control) { parts.append("Control") }
-        if flags.contains(.option) { parts.append("Option") }
-        if flags.contains(.shift) { parts.append("Shift") }
-        if flags.contains(.command) { parts.append("Command") }
+        if flags.contains(.control) { parts.append(String(localized: "Control")) }
+        if flags.contains(.option) { parts.append(String(localized: "Option")) }
+        if flags.contains(.shift) { parts.append(String(localized: "Shift")) }
+        if flags.contains(.command) { parts.append(String(localized: "Command")) }
         parts.append(keyName(for: shortcut))
         return parts.joined(separator: " ")
     }
@@ -41,14 +41,14 @@ enum ShortcutDisplay {
     static func keyName(for shortcut: AirStatKit.KeyboardShortcut) -> String {
         if let named = namedKeys[shortcut.keyCode] { return named }
         let characters = shortcut.characters.trimmingCharacters(in: .whitespacesAndNewlines)
-        if characters.isEmpty { return "Key \(shortcut.keyCode)" }
+        if characters.isEmpty { return String(localized: "Key \(shortcut.keyCode)") }
         return characters.uppercased()
     }
 
     /// Virtual key codes for keys with no printable character. Values are the
     /// stable `kVK_` constants from Carbon's Events.h.
     private static let namedKeys: [UInt16: String] = [
-        36: "↩", 48: "⇥", 49: "Space", 51: "⌫", 53: "⎋", 76: "⌤", 117: "⌦",
+        36: "↩", 48: "⇥", 49: String(localized: "Space (key)", defaultValue: "Space"), 51: "⌫", 53: "⎋", 76: "⌤", 117: "⌦",
         122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6",
         98: "F7", 100: "F8", 101: "F9", 109: "F10", 103: "F11", 111: "F12",
         115: "↖", 116: "⇞", 119: "↘", 121: "⇟",
@@ -111,14 +111,14 @@ struct ShortcutRecorderField: View {
     }
 
     private var fieldTitle: String {
-        if isRecording { return "Recording…" }
-        guard let shortcut else { return "Record Shortcut" }
+        if isRecording { return String(localized: "Recording…") }
+        guard let shortcut else { return String(localized: "Record Shortcut") }
         return ShortcutDisplay.string(for: shortcut)
     }
 
     private var accessibleValue: String {
-        if isRecording { return "Recording" }
-        guard let shortcut else { return "None" }
+        if isRecording { return String(localized: "Recording") }
+        guard let shortcut else { return String(localized: "None") }
         return ShortcutDisplay.accessibleString(for: shortcut)
     }
 
@@ -167,7 +167,7 @@ struct ShortcutRecorderField: View {
         guard !flags.intersection(significant).isEmpty else {
             // A bare key, or Shift plus a key, would fire while the user is typing
             // anywhere on the system.
-            rejection = "Include ⌘, ⌃ or ⌥."
+            rejection = String(localized: "Include ⌘, ⌃ or ⌥.")
             return
         }
 

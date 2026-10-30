@@ -23,8 +23,8 @@ public enum TemperatureUnit: String, Sendable, Codable, CaseIterable, Equatable,
 
     public var label: String {
         switch self {
-        case .celsius: return "Celsius (°C)"
-        case .fahrenheit: return "Fahrenheit (°F)"
+        case .celsius: return String(localized: "Celsius (°C)")
+        case .fahrenheit: return String(localized: "Fahrenheit (°F)")
         }
     }
     public var suffix: String {
@@ -42,8 +42,8 @@ public enum NetworkRateUnit: String, Sendable, Codable, CaseIterable, Equatable,
 
     public var label: String {
         switch self {
-        case .bytes: return "Bytes per second (MB/s)"
-        case .bits: return "Bits per second (Mbps)"
+        case .bytes: return String(localized: "Bytes per second (MB/s)")
+        case .bits: return String(localized: "Bits per second (Mbps)")
         }
     }
 }
@@ -57,8 +57,8 @@ public enum ByteUnitStyle: String, Sendable, Codable, CaseIterable, Equatable, H
 
     public var label: String {
         switch self {
-        case .binary: return "Binary (1 GB = 1024 MB)"
-        case .decimal: return "Decimal (1 GB = 1000 MB)"
+        case .binary: return String(localized: "Binary (1 GB = 1024 MB)")
+        case .decimal: return String(localized: "Decimal (1 GB = 1000 MB)")
         }
     }
     public var base: Double { self == .binary ? 1024 : 1000 }
@@ -69,9 +69,9 @@ public enum AppearanceMode: String, Sendable, Codable, CaseIterable, Equatable, 
 
     public var label: String {
         switch self {
-        case .system: return "Match System"
-        case .light: return "Light"
-        case .dark: return "Dark"
+        case .system: return String(localized: "Match System")
+        case .light: return String(localized: "Light")
+        case .dark: return String(localized: "Dark")
         }
     }
 }
@@ -91,22 +91,22 @@ public enum MenuBarMetric: String, Sendable, Codable, CaseIterable, Equatable, H
 
     public var label: String {
         switch self {
-        case .cpuUsage: return "CPU Usage"
-        case .cpuTemperature: return "CPU Temperature"
-        case .cpuFrequency: return "CPU Frequency"
-        case .memoryUsage: return "Memory Usage"
-        case .memoryPressure: return "Memory Pressure"
-        case .gpuUsage: return "GPU Usage"
-        case .networkThroughput: return "Network (Up & Down)"
-        case .networkUpload: return "Network Upload"
-        case .networkDownload: return "Network Download"
-        case .diskActivity: return "Disk Activity"
-        case .diskFree: return "Disk Free"
-        case .battery: return "Battery"
-        case .batteryTime: return "Battery Time Remaining"
-        case .systemPower: return "System Power"
-        case .fanSpeed: return "Fan Speed"
-        case .uptime: return "Uptime"
+        case .cpuUsage: return String(localized: "CPU Usage")
+        case .cpuTemperature: return String(localized: "CPU Temperature")
+        case .cpuFrequency: return String(localized: "CPU Frequency")
+        case .memoryUsage: return String(localized: "Memory Usage")
+        case .memoryPressure: return String(localized: "Memory Pressure")
+        case .gpuUsage: return String(localized: "GPU Usage")
+        case .networkThroughput: return String(localized: "Network (Up & Down)")
+        case .networkUpload: return String(localized: "Network Upload")
+        case .networkDownload: return String(localized: "Network Download")
+        case .diskActivity: return String(localized: "Disk Activity")
+        case .diskFree: return String(localized: "Disk Free")
+        case .battery: return String(localized: "Battery")
+        case .batteryTime: return String(localized: "Battery Time Remaining")
+        case .systemPower: return String(localized: "System Power")
+        case .fanSpeed: return String(localized: "Fan Speed")
+        case .uptime: return String(localized: "Uptime")
         }
     }
 
@@ -180,14 +180,14 @@ public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equata
 
     public var label: String {
         switch self {
-        case .text: return "Text"
-        case .graph: return "Graph"
-        case .textAndGraph: return "Text & Graph"
-        case .iconAndText: return "Icon & Text"
-        case .battery: return "Battery Indicator"
-        case .statusDot: return "Status Dot"
-        case .bar: return "Compact Bar"
-        case .tile: return "Tile"
+        case .text: return String(localized: "Text")
+        case .graph: return String(localized: "Graph")
+        case .textAndGraph: return String(localized: "Text & Graph")
+        case .iconAndText: return String(localized: "Icon & Text")
+        case .battery: return String(localized: "Battery Indicator")
+        case .statusDot: return String(localized: "Status Dot")
+        case .bar: return String(localized: "Compact Bar")
+        case .tile: return String(localized: "Tile")
         }
     }
 
@@ -333,15 +333,15 @@ public enum PanelModule: String, Sendable, Codable, CaseIterable, Equatable, Has
 
     public var label: String {
         switch self {
-        case .cpu: return "CPU"
-        case .memory: return "Memory"
-        case .gpu: return "GPU"
-        case .network: return "Network"
-        case .disk: return "Disk"
-        case .battery: return "Battery"
-        case .thermal: return "Temperature"
-        case .processes: return "Top Processes"
-        case .system: return "System"
+        case .cpu: return String(localized: "CPU")
+        case .memory: return String(localized: "Memory")
+        case .gpu: return String(localized: "GPU")
+        case .network: return String(localized: "Network")
+        case .disk: return String(localized: "Disk")
+        case .battery: return String(localized: "Battery")
+        case .thermal: return String(localized: "Temperature")
+        case .processes: return String(localized: "Top Processes")
+        case .system: return String(localized: "System")
         }
     }
 
@@ -376,10 +376,10 @@ public enum PanelStyle: String, Sendable, Codable, CaseIterable, Equatable {
 
     public var label: String {
         switch self {
-        case .bento: return "Bento"
-        case .bentoSmall: return "Bento Small"
-        case .macbook: return "MacBook"
-        case .debug: return "Debug"
+        case .bento: return String(localized: "Bento")
+        case .bentoSmall: return String(localized: "Bento Small")
+        case .macbook: return String(localized: "MacBook")
+        case .debug: return String(localized: "Debug")
         }
     }
 }
@@ -438,9 +438,9 @@ public enum ChartStyle: String, Sendable, Codable, CaseIterable, Equatable, Hash
 
     public var label: String {
         switch self {
-        case .line: return "Line"
-        case .filledLine: return "Filled Line"
-        case .bars: return "Bars"
+        case .line: return String(localized: "Line")
+        case .filledLine: return String(localized: "Filled Line")
+        case .bars: return String(localized: "Bars")
         }
     }
 }
@@ -497,13 +497,13 @@ public enum ThresholdMetric: String, Sendable, Codable, CaseIterable, Equatable,
 
     public var label: String {
         switch self {
-        case .cpuUsage: return "Sustained CPU usage above"
-        case .memoryPressure: return "Memory pressure above"
-        case .diskFree: return "Startup disk free space below"
-        case .batteryLow: return "Battery drops below"
-        case .batteryFull: return "Battery reaches"
-        case .cpuTemperature: return "CPU temperature above"
-        case .thermalPressure: return "Thermal pressure reaches"
+        case .cpuUsage: return String(localized: "Sustained CPU usage above")
+        case .memoryPressure: return String(localized: "Memory pressure above")
+        case .diskFree: return String(localized: "Startup disk free space below")
+        case .batteryLow: return String(localized: "Battery drops below")
+        case .batteryFull: return String(localized: "Battery reaches")
+        case .cpuTemperature: return String(localized: "CPU temperature above")
+        case .thermalPressure: return String(localized: "Thermal pressure reaches")
         }
     }
 
@@ -629,9 +629,9 @@ public enum ShortcutAction: String, Sendable, Codable, CaseIterable, Equatable, 
 
     public var label: String {
         switch self {
-        case .togglePanel: return "Show / Hide Panel"
-        case .toggleMenuBarItem: return "Show / Hide Menu Bar Item"
-        case .openSettings: return "Open Settings"
+        case .togglePanel: return String(localized: "Show / Hide Panel")
+        case .toggleMenuBarItem: return String(localized: "Show / Hide Menu Bar Item")
+        case .openSettings: return String(localized: "Open Settings")
         }
     }
 }

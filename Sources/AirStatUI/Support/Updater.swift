@@ -93,7 +93,7 @@ public final class Updater {
                 available = nil
             }
         } catch {
-            failure = "Couldn't check for updates. \(error.localizedDescription)"
+            failure = String(localized: "Couldn't check for updates. \(error.localizedDescription)")
             WindowLog.log("update check failed: \(error)")
         }
     }
@@ -102,7 +102,7 @@ public final class Updater {
     public func install() {
         guard let release = available, activity == .idle else { return }
         guard let team = UpdateInstaller.runningTeamID, let bundleID = Bundle.main.bundleIdentifier else {
-            failure = "This copy is not signed, so it cannot check an update's signature. Download it instead."
+            failure = String(localized: "This copy is not signed, so it cannot check an update's signature. Download it instead.")
             return
         }
         activity = .installing
@@ -114,7 +114,7 @@ public final class Updater {
                     .install(release, over: target, newerThan: currentVersion)
                 relaunch(target)
             } catch {
-                failure = "Couldn't install the update. \(error.localizedDescription)"
+                failure = String(localized: "Couldn't install the update. \(error.localizedDescription)")
                 activity = .idle
                 WindowLog.log("update install failed: \(error)")
             }
@@ -132,8 +132,8 @@ public final class Updater {
         guard defaults.string(forKey: Self.announcedKey) != release.version else { return }
         if authority.request("update notices") {
             authority.post(identifier: Self.notificationID,
-                           title: "Bento Stats \(release.version) is available",
-                           body: "Click to install it.")
+                           title: String(localized: "Bento Stats \(release.version) is available"),
+                           body: String(localized: "Click to install it."))
             defaults.set(release.version, forKey: Self.announcedKey)
         } else if authority.state == .requesting {
             // The answer comes from a prompt the user may leave up for a while, or, once
@@ -157,7 +157,7 @@ public final class Updater {
         do {
             try process.run()
         } catch {
-            failure = "The update is installed. Quit and reopen Bento Stats to finish."
+            failure = String(localized: "The update is installed. Quit and reopen Bento Stats to finish.")
             activity = .idle
             return
         }

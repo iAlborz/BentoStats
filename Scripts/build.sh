@@ -30,6 +30,11 @@ if [ -f Resources/AppIcon.icns ]; then
   cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
 
+# Translations: compile the string catalog into <language>.lproj folders, as Xcode does.
+# The UI target looks strings up in the main bundle, so they belong here, not in the
+# UI target's resource bundle.
+xcrun xcstringstool compile Resources/Localizable.xcstrings --output-directory "$APP/Contents/Resources"
+
 # SwiftPM emits the UI target's resources as a bundle beside the binary. A signed app
 # may hold resources only under Contents/Resources: putting this beside Contents leaves
 # an unsealed object at the bundle root. Logo resolves this packaged location before it

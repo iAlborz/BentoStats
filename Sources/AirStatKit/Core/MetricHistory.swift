@@ -154,28 +154,28 @@ public enum SeriesKey: String, Sendable, Equatable, Hashable, CaseIterable, Coda
 
     public var label: String {
         switch self {
-        case .cpuTotal: return "CPU"
-        case .cpuUser: return "User"
-        case .cpuSystem: return "System"
-        case .cpuPerformance: return "P-Cores"
-        case .cpuEfficiency: return "E-Cores"
-        case .memoryUsed: return "Memory Used"
-        case .memoryPressure: return "Memory Pressure"
-        case .memorySwap: return "Swap"
-        case .gpuUtilization: return "GPU"
-        case .gpuVRAM: return "VRAM"
-        case .networkUpload: return "Upload"
-        case .networkDownload: return "Download"
-        case .diskRead: return "Read"
-        case .diskWrite: return "Write"
-        case .diskUsed: return "Disk Used"
-        case .batteryPercent: return "Battery"
-        case .batteryWatts: return "Battery Power"
-        case .systemWatts: return "System Power"
-        case .cpuTemperature: return "CPU Temp"
-        case .gpuTemperature: return "GPU Temp"
-        case .fanRPM: return "Fan"
-        case .batteryPlugged: return "On Power"
+        case .cpuTotal: return String(localized: "CPU")
+        case .cpuUser: return String(localized: "User")
+        case .cpuSystem: return String(localized: "System")
+        case .cpuPerformance: return String(localized: "P-Cores")
+        case .cpuEfficiency: return String(localized: "E-Cores")
+        case .memoryUsed: return String(localized: "Memory Used")
+        case .memoryPressure: return String(localized: "Memory Pressure")
+        case .memorySwap: return String(localized: "Swap")
+        case .gpuUtilization: return String(localized: "GPU")
+        case .gpuVRAM: return String(localized: "VRAM")
+        case .networkUpload: return String(localized: "Upload")
+        case .networkDownload: return String(localized: "Download")
+        case .diskRead: return String(localized: "Read")
+        case .diskWrite: return String(localized: "Write")
+        case .diskUsed: return String(localized: "Disk Used")
+        case .batteryPercent: return String(localized: "Battery")
+        case .batteryWatts: return String(localized: "Battery Power")
+        case .systemWatts: return String(localized: "System Power")
+        case .cpuTemperature: return String(localized: "CPU Temp")
+        case .gpuTemperature: return String(localized: "GPU Temp")
+        case .fanRPM: return String(localized: "Fan")
+        case .batteryPlugged: return String(localized: "On Power")
         }
     }
 

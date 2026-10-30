@@ -144,10 +144,10 @@ final class AppCoordinator {
 
     private func showContextMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Settings…", action: #selector(menuShowSettings), keyEquivalent: ",")
+        menu.addItem(withTitle: String(localized: "Settings…"), action: #selector(menuShowSettings), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Bento Stats", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: String(localized: "Quit Bento Stats"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.presentMenu(menu)
     }
 

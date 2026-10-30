@@ -186,7 +186,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         var unavailable = true
         // Named, not a bare "unavailable": VoiceOver reads the whole item as one string,
         // and three anonymous "unavailable"s in a row say nothing about what is missing.
-        var accessibilityValue = "\(metric.label) unavailable"
+        var accessibilityValue = String(localized: "\(metric.label) unavailable")
         // Set only by the two-number metrics; its presence is what makes the readout
         // stack rather than run on.
         var secondary: MenuBarLine?
@@ -203,7 +203,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 valueText = formatter.percent(busy)
                 unavailable = false
                 level = busy
-                accessibilityValue = "CPU \(valueText)"
+                accessibilityValue = String(localized: "CPU \(valueText)")
             }
             seriesKey = .cpuTotal
 
@@ -211,7 +211,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let temp = snapshot.thermal.value?.cpuCelsius {
                 valueText = formatter.temperature(temp)
                 unavailable = false
-                accessibilityValue = "CPU temperature \(valueText)"
+                accessibilityValue = String(localized: "CPU temperature \(valueText)")
             }
             seriesKey = .cpuTemperature
 
@@ -224,7 +224,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 valueText = formatter.percent(mem.usedFraction)
                 unavailable = false
                 level = mem.usedFraction
-                accessibilityValue = "Memory \(valueText)"
+                accessibilityValue = String(localized: "Memory \(valueText)")
             }
             seriesKey = .memoryUsed
 
@@ -233,7 +233,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 valueText = formatter.percent(mem.pressureFraction)
                 unavailable = false
                 level = mem.pressureFraction
-                accessibilityValue = "Memory pressure \(valueText)"
+                accessibilityValue = String(localized: "Memory pressure \(valueText)")
             }
             seriesKey = .memoryPressure
 
@@ -242,7 +242,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 valueText = formatter.percent(util)
                 unavailable = false
                 level = util
-                accessibilityValue = "GPU \(valueText)"
+                accessibilityValue = String(localized: "GPU \(valueText)")
             }
             seriesKey = .gpuUtilization
 
@@ -261,8 +261,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 valueText = formatter.networkRate(net.downloadBytesPerSecond, compact: true)
                 uploadText = formatter.networkRate(net.uploadBytesPerSecond, compact: true)
                 unavailable = false
-                accessibilityValue = "Network down \(formatter.networkRate(net.downloadBytesPerSecond)), "
-                    + "up \(formatter.networkRate(net.uploadBytesPerSecond))"
+                accessibilityValue = String(localized: "Network down \(formatter.networkRate(net.downloadBytesPerSecond)), ")
+                    + String(localized: "up \(formatter.networkRate(net.uploadBytesPerSecond))")
                 let online = net.connectionType != .none
                 networkStatus = .init(
                     isOnline: online,
@@ -270,7 +270,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                                                           history, .networkDownload),
                     isSending: online && recentlyActive(net.uploadBytesPerSecond,
                                                         history, .networkUpload))
-                if !online { accessibilityValue = "Network offline" }
+                if !online { accessibilityValue = String(localized: "Network offline") }
             }
             // Down and up share one scale so the two stacked graphs are comparable;
             // normalising each to its own peak would make a trickle of upload look
@@ -289,7 +289,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let net = snapshot.network.value {
                 valueText = formatter.networkRate(net.uploadBytesPerSecond)
                 unavailable = false
-                accessibilityValue = "Network upload \(valueText)"
+                accessibilityValue = String(localized: "Network upload \(valueText)")
             }
             seriesKey = .networkUpload
 
@@ -297,7 +297,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let net = snapshot.network.value {
                 valueText = formatter.networkRate(net.downloadBytesPerSecond)
                 unavailable = false
-                accessibilityValue = "Network download \(valueText)"
+                accessibilityValue = String(localized: "Network download \(valueText)")
             }
             seriesKey = .networkDownload
 
@@ -308,8 +308,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 valueText = formatter.diskRate(disk.readBytesPerSecond, compact: true)
                 writeText = formatter.diskRate(disk.writeBytesPerSecond, compact: true)
                 unavailable = false
-                accessibilityValue = "Disk read \(formatter.diskRate(disk.readBytesPerSecond)), "
-                    + "write \(formatter.diskRate(disk.writeBytesPerSecond))"
+                accessibilityValue = String(localized: "Disk read \(formatter.diskRate(disk.readBytesPerSecond)), ")
+                    + String(localized: "write \(formatter.diskRate(disk.writeBytesPerSecond))")
             }
             let pair = jointlyNormalized(history, .diskRead, .diskWrite)
             secondary = MenuBarLine(glyph: "W", valueText: writeText,
@@ -325,7 +325,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let root = snapshot.disk.value?.rootVolume {
                 valueText = formatter.storage(root.availableBytes)
                 unavailable = false
-                accessibilityValue = "Disk free \(valueText)"
+                accessibilityValue = String(localized: "Disk free \(valueText)")
             }
 
         case .battery:
@@ -342,11 +342,11 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 // The indicator style takes the digits off the screen, so this is the
                 // only place the exact charge is still stated. It says everything the
                 // shape says: the number, that power is going in, that it is low.
-                accessibilityValue = "Battery \(valueText)"
+                accessibilityValue = String(localized: "Battery \(valueText)")
                 if power.isCharging {
-                    accessibilityValue += ", charging"
+                    accessibilityValue += String(localized: ", charging")
                 } else if isLow {
-                    accessibilityValue += ", low"
+                    accessibilityValue += String(localized: ", low")
                 }
             }
             seriesKey = .batteryPercent
@@ -357,7 +357,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 if let remaining {
                     valueText = formatter.duration(remaining)
                     unavailable = false
-                    accessibilityValue = "Battery time \(valueText)"
+                    accessibilityValue = String(localized: "Battery time \(valueText)")
                 }
             }
 
@@ -365,7 +365,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let watts = snapshot.power.value?.systemWatts {
                 valueText = formatter.watts(watts)
                 unavailable = false
-                accessibilityValue = "System power \(valueText)"
+                accessibilityValue = String(localized: "System power \(valueText)")
             }
             seriesKey = .systemWatts
 
@@ -373,7 +373,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let fan = snapshot.thermal.value?.fans.first {
                 valueText = formatter.rpm(fan.currentRPM)
                 unavailable = false
-                accessibilityValue = "Fan \(valueText)"
+                accessibilityValue = String(localized: "Fan \(valueText)")
             }
             seriesKey = .fanRPM
 
@@ -381,7 +381,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let system = snapshot.system.value {
                 valueText = formatter.compactUptime(system.uptime)
                 unavailable = false
-                accessibilityValue = "Uptime \(valueText)"
+                accessibilityValue = String(localized: "Uptime \(valueText)")
             }
         }
 
@@ -446,10 +446,12 @@ public struct MenuBarRenderModel: Equatable, Sendable {
     }
 
     /// The caption stacked beside a bar or inside a tile, one letter to a row. Three rows is all a
-    /// 22-point item has room for, so "PRESS" does not fit.
+    /// 22-point item has room for, so "PRESS" does not fit. Memory has its own string here
+    /// too: a translation that reads well on one line can be too long or too tall to stack.
     public static func sideCaptionText(for metric: MenuBarMetric) -> String? {
         switch metric {
-        case .memoryPressure: return "PRS"
+        case .memoryPressure: return String(localized: "PRS")
+        case .memoryUsage: return String(localized: "MEM (stacked)", defaultValue: "MEM")
         default: return captionText(for: metric)
         }
     }
@@ -458,22 +460,22 @@ public struct MenuBarRenderModel: Equatable, Sendable {
     /// quote the exact string the menu bar will draw rather than describing it.
     public static func captionText(for metric: MenuBarMetric) -> String? {
         switch metric {
-        case .cpuUsage: return "CPU"
-        case .cpuTemperature: return "TEMP"
-        case .cpuFrequency: return "FREQ"
-        case .memoryUsage: return "MEM"
-        case .memoryPressure: return "PRESS"
-        case .gpuUsage: return "GPU"
+        case .cpuUsage: return String(localized: "CPU")
+        case .cpuTemperature: return String(localized: "TEMP")
+        case .cpuFrequency: return String(localized: "FREQ")
+        case .memoryUsage: return String(localized: "MEM")
+        case .memoryPressure: return String(localized: "PRESS")
+        case .gpuUsage: return String(localized: "GPU")
         case .networkThroughput: return nil
-        case .networkUpload: return "NET ↑"
-        case .networkDownload: return "NET ↓"
+        case .networkUpload: return String(localized: "NET ↑")
+        case .networkDownload: return String(localized: "NET ↓")
         case .diskActivity: return nil
-        case .diskFree: return "FREE"
-        case .battery: return "BATT"
-        case .batteryTime: return "LEFT"
-        case .systemPower: return "PWR"
-        case .fanSpeed: return "FAN"
-        case .uptime: return "UP"
+        case .diskFree: return String(localized: "FREE")
+        case .battery: return String(localized: "BATT")
+        case .batteryTime: return String(localized: "LEFT")
+        case .systemPower: return String(localized: "PWR")
+        case .fanSpeed: return String(localized: "FAN")
+        case .uptime: return String(localized: "UP")
         }
     }
 

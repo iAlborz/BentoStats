@@ -82,11 +82,11 @@ public final class SettingsStore {
         /// than one of these.
         public var label: String {
             switch self {
-            case .general: return "General"
-            case .menuBar: return "Menu Bar"
-            case .charts: return "Charts"
-            case .notifications: return "Notifications"
-            case .shortcuts: return "Shortcuts"
+            case .general: return String(localized: "General")
+            case .menuBar: return String(localized: "Menu Bar")
+            case .charts: return String(localized: "Charts")
+            case .notifications: return String(localized: "Notifications")
+            case .shortcuts: return String(localized: "Shortcuts")
             }
         }
     }

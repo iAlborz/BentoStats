@@ -214,7 +214,7 @@ struct BentoGrid: View {
             .overlay(alignment: .topLeading) {
                 // Settings stays: its card is the panel's way to Settings and to Quit.
                 if !tile.kind.isAction {
-                    badge("minus", label: "Remove \(tile.kind.label)") {
+                    badge("minus", label: String(localized: "Remove \(tile.kind.label)")) {
                         edit { $0.removeAll { $0.id == tile.id } }
                     }
                     .offset(x: -7, y: -7)
@@ -358,14 +358,14 @@ struct BentoGrid: View {
                     }
                 }
             } label: {
-                pill("plus", "Add Card")
+                pill("plus", String(localized: "Add Card"))
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
             Button { edit { $0 = arrangement.defaults } } label: {
-                pill("arrow.counterclockwise", "Reset")
+                pill("arrow.counterclockwise", String(localized: "Reset"))
             }
             .buttonStyle(.plain)
             Spacer(minLength: 0)
@@ -374,7 +374,7 @@ struct BentoGrid: View {
                 .foregroundStyle(Design.Palette.tertiaryText)
             Spacer(minLength: 0)
             Button { layout?.isEditing = false } label: {
-                pill(nil, "Done", isProminent: true)
+                pill(nil, String(localized: "Done"), isProminent: true)
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.defaultAction)
@@ -544,7 +544,7 @@ struct BentoGrid: View {
     /// too small to read one by one, so the whole chip says how busy it is.
     private var cpuChipSmall: some View {
         let box = Self.box(.cpuChipSmall, header: true)
-        return card(.cpuChipSmall, header: CardHeader("CPU", cpuLoadReading)) {
+        return card(.cpuChipSmall, header: CardHeader(String(localized: "CPU"), cpuLoadReading)) {
             fit(AnyView(chipLoad), native: CGSize(width: 140, height: 140), in: box)
         }
     }
@@ -563,8 +563,8 @@ struct BentoGrid: View {
                         meterRow("E", e, colors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)],
                                  labelWidth: 10)
                     } else if let cpu {
-                        meterRow("User", cpu.total.user, colors: palette(.cpu), labelWidth: 30)
-                        meterRow("Sys", cpu.total.system, colors: palette(.cpu), labelWidth: 30)
+                        meterRow(String(localized: "User"), cpu.total.user, colors: palette(.cpu), labelWidth: 30)
+                        meterRow(String(localized: "Sys"), cpu.total.system, colors: palette(.cpu), labelWidth: 30)
                     }
                 }
             }
@@ -605,7 +605,7 @@ struct BentoGrid: View {
     private var memoryPressure: some View {
         let memory = engine.memory.value
         let colours = memory.map { Self.pressureColors($0.memoryPressure) } ?? palette(.memory)
-        return card(.memoryPressure, header: CardHeader("Memory")) {
+        return card(.memoryPressure, header: CardHeader(String(localized: "Memory"))) {
             VStack(spacing: Design.Space.xs) {
                 Ring(fraction: memory?.pressureFraction ?? 0, colors: colours, lineWidth: 7)
                     .frame(width: 48, height: 48)
@@ -647,7 +647,7 @@ struct BentoGrid: View {
                                 Text("Swap").foregroundStyle(Design.Palette.secondaryText)
                                 Spacer(minLength: 0)
                                 Text(memory.swapTotalBytes > 0
-                                     ? "\(formatter.memory(memory.swapUsedBytes)) of \(formatter.memory(memory.swapTotalBytes))"
+                                     ? String(localized: "\(formatter.memory(memory.swapUsedBytes)) of \(formatter.memory(memory.swapTotalBytes))")
                                      : formatter.memory(memory.swapUsedBytes))
                                     .fontWeight(.semibold)
                                     .foregroundStyle(Design.Palette.primaryText)
@@ -865,7 +865,7 @@ struct BentoGrid: View {
         let word = state.map(Self.stateWord)
         switch variant.size {
         case .small:
-            card(variant, header: CardHeader("Thermal")) {
+            card(variant, header: CardHeader(String(localized: "Thermal"))) {
                 HStack(spacing: Design.Space.s) {
                     ThermometerGraphic(fraction: Self.stateLevel(state), colors: colors, scale: 0.45)
                         .frame(width: 14, height: 63)
@@ -873,7 +873,7 @@ struct BentoGrid: View {
                 }
             }
         case .tall:
-            card(variant, header: CardHeader("Thermal")) {
+            card(variant, header: CardHeader(String(localized: "Thermal"))) {
                 VStack(spacing: Design.Space.m) {
                     ThermometerGraphic(fraction: Self.stateLevel(state), colors: colors)
                         .frame(width: 30, height: 140)
@@ -895,7 +895,7 @@ struct BentoGrid: View {
                 }
             }
         default:
-            card(variant, header: CardHeader("Thermal state")) {
+            card(variant, header: CardHeader(String(localized: "Thermal state"))) {
                 HStack(spacing: Design.Space.l) {
                     ThermometerGraphic(fraction: Self.stateLevel(state), colors: colors)
                         .frame(width: 30, height: 140)
@@ -931,19 +931,19 @@ struct BentoGrid: View {
     /// macOS's names for the states are its own; these are what they mean.
     private static func stateWord(_ state: ThermalPressure) -> String {
         switch state {
-        case .nominal: "Normal"
-        case .fair: "Elevated"
-        case .serious: "High"
-        case .critical: "Critical"
+        case .nominal: String(localized: "Normal")
+        case .fair: String(localized: "Elevated")
+        case .serious: String(localized: "High")
+        case .critical: String(localized: "Critical")
         }
     }
 
     private static func stateLine(_ state: ThermalPressure) -> String {
         switch state {
-        case .nominal: "Running cool. Nothing is held back."
-        case .fair: "Warming up. macOS may start to ease off."
-        case .serious: "Hot. macOS is slowing things down to cool off."
-        case .critical: "Very hot. Performance is cut back hard."
+        case .nominal: String(localized: "Running cool. Nothing is held back.")
+        case .fair: String(localized: "Warming up. macOS may start to ease off.")
+        case .serious: String(localized: "Hot. macOS is slowing things down to cool off.")
+        case .critical: String(localized: "Very hot. Performance is cut back hard.")
         }
     }
 
@@ -980,9 +980,9 @@ struct BentoGrid: View {
         let thermal = engine.thermal.value
         let power = engine.power.value
         let readings: [(String, Double?)] = [
-            ("CPU", thermal?.cpuCelsius), ("GPU", thermal?.gpuCelsius),
-            ("SSD", Self.hottest(thermal, .storage)),
-            ("Battery", power?.temperatureCelsius ?? Self.hottest(thermal, .battery)),
+            (String(localized: "CPU"), thermal?.cpuCelsius), (String(localized: "GPU"), thermal?.gpuCelsius),
+            (String(localized: "SSD"), Self.hottest(thermal, .storage)),
+            (String(localized: "Battery"), power?.temperatureCelsius ?? Self.hottest(thermal, .battery)),
         ]
         let shown = readings.compactMap { name, celsius in celsius.map { (name, $0) } }
         return card(.thermalSensors, header: nil) {
@@ -1083,7 +1083,7 @@ struct BentoGrid: View {
                     coolingFan(fan, diameter: 62, isMirrored: index == 1)
                         .position(x: columns[index == 0 ? 0 : 2], y: bulb)
                 }
-                coolingReading(temperatureReading ?? "—", "CPU", colors: palette(.thermal))
+                coolingReading(temperatureReading ?? "—", String(localized: "CPU"), colors: palette(.thermal))
                     .position(x: columns[1], y: bulb + 44)
                 ForEach(Array(fans.prefix(2).enumerated()), id: \.offset) { index, fan in
                     coolingReading(fanReading(fan), fan.name,
@@ -1098,7 +1098,7 @@ struct BentoGrid: View {
     /// A fan's speed as a share of its top speed, or Off: "Off" says a stopped fan is
     /// normal, where "0%" would read as a fault. The detail gives the RPM.
     private func fanReading(_ fan: FanInfo) -> String {
-        fan.currentRPM < 1 ? "Off" : formatter.percent(fan.speedFraction)
+        fan.currentRPM < 1 ? String(localized: "Off") : formatter.percent(fan.speedFraction)
     }
 
     private func coolingFan(_ fan: FanInfo, diameter: CGFloat, isMirrored: Bool) -> some View {
@@ -1166,10 +1166,10 @@ struct BentoGrid: View {
                     }
                     Rectangle().fill(Design.Palette.separator).frame(height: 1)
                     VStack(spacing: 3) {
-                        detailRow("Chip", system.chipName)
-                        detailRow("Memory", Self.marketingCapacity(system.totalMemoryBytes))
+                        detailRow(String(localized: "Chip"), system.chipName)
+                        detailRow(String(localized: "Memory"), Self.marketingCapacity(system.totalMemoryBytes))
                         detailRow(system.osName, system.osVersion)
-                        detailRow("Uptime", formatter.uptime(system.uptime))
+                        detailRow(String(localized: "Uptime"), formatter.uptime(system.uptime))
                     }
                 }
                 .lineLimit(1)
@@ -1351,7 +1351,7 @@ struct BentoGrid: View {
         let system = engine.system.value
         let cores = system.map(\.physicalCores).flatMap { $0 > 0 ? $0 : nil }
             ?? engine.cpu.value.map(\.perCore.count)
-        return CardHeader("CPU", cores.map { "\($0) cores" })
+        return CardHeader(String(localized: "CPU"), cores.map { String(localized: "\($0) cores") })
     }
 
     /// The five busiest processes, each icon over its share.
@@ -1389,7 +1389,7 @@ struct BentoGrid: View {
             }
             .lastKnown(processes?.isLastKnown == true)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Busiest processes: " + busiest.map(\.name).joined(separator: ", "))
+            .accessibilityLabel(String(localized: "Busiest processes: ") + busiest.map(\.name).joined(separator: ", "))
         }
     }
 
@@ -1400,13 +1400,13 @@ struct BentoGrid: View {
     }
 
     private var memoryHeader: CardHeader {
-        CardHeader("Memory", engine.memory.value.map { Self.marketingCapacity($0.totalBytes) })
+        CardHeader(String(localized: "Memory"), engine.memory.value.map { Self.marketingCapacity($0.totalBytes) })
     }
 
     private var memoryStick: some View {
         let memory = engine.memory.value
         let used = memory.map { $0.totalBytes > 0 ? Double($0.usedBytes) / Double($0.totalBytes) : 0 }
-        return MemoryGraphic(label: memoryFree.map { "\(formatter.memory($0)) free" },
+        return MemoryGraphic(label: memoryFree.map { String(localized: "\(formatter.memory($0)) free") },
                              fraction: used ?? 0, load: palette(.memory)[0])
     }
 
@@ -1492,19 +1492,19 @@ struct BentoGrid: View {
         // have: not memory of its own, a share of the one pool the Memory card shows.
         var memory: GPUChannel?
         if let used = device?.vramUsedBytes, let total = device?.vramTotalBytes, total > 0 {
-            memory = GPUChannel(name: "Memory", value: Double(used) / Double(total),
-                                detail: "\(formatter.memory(used)) of \(formatter.memory(total))")
+            memory = GPUChannel(name: String(localized: "Memory"), value: Double(used) / Double(total),
+                                detail: String(localized: "\(formatter.memory(used)) of \(formatter.memory(total))"))
         }
         return GPUMeters(channels: [memory,
-                                    device?.rendererUtilization.map { GPUChannel(name: "Renderer", value: $0) },
-                                    device?.tilerUtilization.map { GPUChannel(name: "Tiler", value: $0) }]
+                                    device?.rendererUtilization.map { GPUChannel(name: String(localized: "Renderer"), value: $0) },
+                                    device?.tilerUtilization.map { GPUChannel(name: String(localized: "Tiler"), value: $0) }]
                              .compactMap { $0 },
                          colors: palette(.gpu), formatter: formatter)
             .padding(.horizontal, Design.Space.xs)
     }
 
     private var diskHeader: CardHeader {
-        CardHeader("SSD", engine.disk.value?.rootVolume.map { formatter.storage($0.totalBytes) })
+        CardHeader(String(localized: "SSD"), engine.disk.value?.rootVolume.map { formatter.storage($0.totalBytes) })
     }
 
     /// How full the disk is, from the same available space as the label printed on it so
@@ -1514,14 +1514,14 @@ struct BentoGrid: View {
         return SSDGraphic(fraction: root.map { $0.totalBytes > 0
                               ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 } ?? 0,
                           colors: palette(.disk),
-                          label: root.map { "\(formatter.storage($0.availableBytes)) free" })
+                          label: root.map { String(localized: "\(formatter.storage($0.availableBytes)) free") })
     }
 
     private var diskRates: some View {
         HStack(spacing: Design.Space.xl) {
-            diskRate("Read", engine.disk.value?.readBytesPerSecond,
+            diskRate(String(localized: "Read"), engine.disk.value?.readBytesPerSecond,
                      symbol: "arrow.down.circle.fill", colors: Self.downColors)
-            diskRate("Write", engine.disk.value?.writeBytesPerSecond,
+            diskRate(String(localized: "Write"), engine.disk.value?.writeBytesPerSecond,
                      symbol: "arrow.up.circle.fill", colors: Self.upColors)
         }
     }
@@ -1590,7 +1590,7 @@ struct BentoGrid: View {
     /// The CPU's, and the thermal state only once it is past nominal: the state is worth
     /// a word when the Mac is holding itself back, not while all is well.
     private var thermalHeader: CardHeader {
-        CardHeader(engine.thermal.value?.cpuCelsius == nil ? "Thermal state" : "CPU", alert: thermalAlert)
+        CardHeader(engine.thermal.value?.cpuCelsius == nil ? String(localized: "Thermal state") : String(localized: "CPU"), alert: thermalAlert)
     }
 
     private var thermalAlert: String? {
@@ -1754,12 +1754,12 @@ struct BentoGrid: View {
     }
 
     private func batteryCaption(_ power: PowerSnapshot) -> String {
-        guard power.hasBattery else { return "Power adapter" }
+        guard power.hasBattery else { return String(localized: "Power adapter") }
         if power.isCharging {
-            return power.timeToFull.map { "Full in \(formatter.duration($0))" } ?? "Charging"
+            return power.timeToFull.map { String(localized: "Full in \(formatter.duration($0))") } ?? String(localized: "Charging")
         }
-        if power.isFullyCharged { return "Fully charged" }
-        return power.timeToEmpty.map { "\(formatter.duration($0)) left" } ?? "On battery"
+        if power.isFullyCharged { return String(localized: "Fully charged") }
+        return power.timeToEmpty.map { String(localized: "\(formatter.duration($0)) left") } ?? String(localized: "On battery")
     }
 
     private func gradient(_ module: PanelModule) -> LinearGradient {

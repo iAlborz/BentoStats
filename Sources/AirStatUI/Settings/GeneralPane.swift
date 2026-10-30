@@ -87,10 +87,9 @@ struct GeneralPane: View {
 
     private var privacyFootnote: String {
         guard updater != nil, settings.settings.general.checksForUpdates else {
-            return "Left off, the Network module shows your local addresses only and Bento Stats contacts nothing."
+            return String(localized: "Left off, the Network module shows your local addresses only and Bento Stats contacts nothing.")
         }
-        return "Left off, the Network module shows your local addresses only, and the one thing "
-            + "Bento Stats contacts is GitHub, to check for updates."
+        return String(localized: "Left off, the Network module shows your local addresses only, and the one thing Bento Stats contacts is GitHub, to check for updates.")
     }
 
     // MARK: Side effects
@@ -106,7 +105,9 @@ struct GeneralPane: View {
 
     private func applyLoginItem(_ enabled: Bool) {
         if let error = LoginItem.synchronize(enabled: enabled) {
-            loginItemError = "macOS refused to \(enabled ? "register" : "remove") the login item: \(error.localizedDescription)"
+            loginItemError = enabled
+                ? String(localized: "macOS refused to register the login item: \(error.localizedDescription)")
+                : String(localized: "macOS refused to remove the login item: \(error.localizedDescription)")
             // The stored preference must not claim something the system rejected.
             settings.update { $0.general.launchAtLogin = LoginItem.isEnabled }
         } else {
@@ -152,11 +153,11 @@ private struct UpdateStatusRow: View {
 
     private var headline: String {
         if let release = updater.available {
-            return "Bento Stats \(release.version) is available"
+            return String(localized: "Bento Stats \(release.version) is available")
         }
         if updater.lastCheck != nil, updater.failure == nil {
-            return "Bento Stats \(updater.currentVersion) is up to date"
+            return String(localized: "Bento Stats \(updater.currentVersion) is up to date")
         }
-        return "Bento Stats \(updater.currentVersion)"
+        return String(localized: "Bento Stats \(updater.currentVersion)")
     }
 }

@@ -175,7 +175,7 @@ public final class SystemInfoCollector: MetricSource {
             ("MacBookPro", "MacBook Pro"), ("MacBookAir", "MacBook Air"),
             ("MacBook", "MacBook"), ("MacPro", "Mac Pro"), ("Macmini", "Mac mini"),
             ("MacStudio", "Mac Studio"), ("iMacPro", "iMac Pro"), ("iMac", "iMac"),
-            ("VirtualMac", "Virtual Machine"), ("ADP", "Developer Transition Kit"),
+            ("VirtualMac", String(localized: "Virtual Machine")), ("ADP", "Developer Transition Kit"),
         ]
         return families.first { identifier.hasPrefix($0.0) }?.1
     }

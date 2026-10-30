@@ -70,11 +70,11 @@ struct BentoDetail: View {
     /// The card's own name for the thing, where the card shows one.
     private var title: String {
         switch module {
-        case .disk: return "SSD"
+        case .disk: return String(localized: "SSD")
         case .network:
             guard let network = engine.network.value else { return module.label }
-            return network.wifi != nil ? "Wi-Fi" : network.connectionType.label
-        case .battery: return engine.power.value?.hasBattery == false ? "Power" : module.label
+            return network.wifi != nil ? String(localized: "Wi-Fi") : network.connectionType.label
+        case .battery: return engine.power.value?.hasBattery == false ? String(localized: "Power") : module.label
         default: return module.label
         }
     }
@@ -106,14 +106,14 @@ struct BentoDetail: View {
     @ViewBuilder
     private func cpu(_ cpu: CPUSnapshot) -> some View {
         stats(clusters(cpu))
-        stats([Stat(formatter.percent(cpu.total.user), "User"),
-               Stat(formatter.percent(cpu.total.system), "System"),
-               Stat(formatter.count(cpu.threadCount), "Threads")])
-        tile(caption: "Load average") {
+        stats([Stat(formatter.percent(cpu.total.user), String(localized: "User")),
+               Stat(formatter.percent(cpu.total.system), String(localized: "System")),
+               Stat(formatter.count(cpu.threadCount), String(localized: "Threads"))])
+        tile(caption: String(localized: "Load average")) {
             HStack(spacing: 0) {
-                loadAverage(cpu.loadAverage.one, "1 min")
-                loadAverage(cpu.loadAverage.five, "5 min")
-                loadAverage(cpu.loadAverage.fifteen, "15 min")
+                loadAverage(cpu.loadAverage.one, String(localized: "1 min"))
+                loadAverage(cpu.loadAverage.five, String(localized: "5 min"))
+                loadAverage(cpu.loadAverage.fifteen, String(localized: "15 min"))
             }
         }
         history()
@@ -122,13 +122,13 @@ struct BentoDetail: View {
     private func clusters(_ cpu: CPUSnapshot) -> [Stat] {
         let performance = cpu.coreKinds.filter { $0 == .performance }.count
         let efficiency = cpu.coreKinds.filter { $0 == .efficiency }.count
-        var clusters = [Stat(formatter.percent(cpu.total.busy), "Usage")]
+        var clusters = [Stat(formatter.percent(cpu.total.busy), String(localized: "Usage"))]
         if let busy = cpu.performanceBusy, performance > 0 {
-            clusters.append(Stat(formatter.percent(busy), "\(performance) P-cores"))
+            clusters.append(Stat(formatter.percent(busy), String(localized: "\(performance) P-cores")))
         }
         if let busy = cpu.efficiencyBusy, efficiency > 0 {
             // Green, as the chip draws its efficiency cores.
-            clusters.append(Stat(formatter.percent(busy), "\(efficiency) E-cores",
+            clusters.append(Stat(formatter.percent(busy), String(localized: "\(efficiency) E-cores"),
                                  colors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)]))
         }
         return clusters
@@ -151,13 +151,13 @@ struct BentoDetail: View {
     /// a problem, pressure and swap, and what the used part is made of.
     @ViewBuilder
     private func memory(_ memory: MemorySnapshot) -> some View {
-        let swap = memory.swapTotalBytes > 0 ? "Swap of \(formatter.memory(memory.swapTotalBytes))" : "Swap used"
+        let swap = memory.swapTotalBytes > 0 ? String(localized: "Swap of \(formatter.memory(memory.swapTotalBytes))") : String(localized: "Swap used")
         stats([Stat(memory.memoryPressure.label,
-                    "Pressure · \(formatter.percent(memory.pressureFraction))",
+                    String(localized: "Pressure · \(formatter.percent(memory.pressureFraction))"),
                     fraction: memory.pressureFraction,
                     colors: BentoGrid.pressureColors(memory.memoryPressure)),
                Stat(formatter.memory(memory.swapUsedBytes), swap)])
-        tile(caption: "What's in memory") { composition(memory) }
+        tile(caption: String(localized: "What's in memory")) { composition(memory) }
         history()
     }
 
@@ -171,9 +171,9 @@ struct BentoDetail: View {
 
     private func gpuTemperatures() -> [Stat] {
         guard let thermal = engine.thermal.value, let celsius = thermal.gpuCelsius else { return [] }
-        var items = [temperature(celsius, "Temperature")]
+        var items = [temperature(celsius, String(localized: "Temperature"))]
         if let hottest = Self.hottest(thermal, .gpu, ifMoreThanOne: true) {
-            items.append(temperature(hottest, "Hotspot"))
+            items.append(temperature(hottest, String(localized: "Hotspot")))
         }
         return items
     }
@@ -183,17 +183,17 @@ struct BentoDetail: View {
     @ViewBuilder
     private func disk(_ disk: DiskSnapshot) -> some View {
         stats(diskTotals(disk))
-        tile(caption: "Reading and writing now") {
+        tile(caption: String(localized: "Reading and writing now")) {
             let busiest = diskBusiest()
             if busiest.isEmpty {
-                placeholder("Nothing is using the disk")
+                placeholder(String(localized: "Nothing is using the disk"))
             } else {
                 processRows(busiest)
             }
         }
         let others = disk.volumes.filter { !$0.isRoot }
         if !others.isEmpty {
-            tile(caption: others.count == 1 ? "Other volume" : "Other volumes") {
+            tile(caption: others.count == 1 ? String(localized: "Other volume") : String(localized: "Other volumes")) {
                 VStack(spacing: Design.Space.m) {
                     ForEach(others) { volumeRow($0) }
                 }
@@ -203,10 +203,10 @@ struct BentoDetail: View {
     }
 
     private func diskTotals(_ disk: DiskSnapshot) -> [Stat] {
-        var totals = [Stat(formatter.storage(disk.totalReadBytes), "Read since boot"),
-                      Stat(formatter.storage(disk.totalWriteBytes), "Written since boot")]
+        var totals = [Stat(formatter.storage(disk.totalReadBytes), String(localized: "Read since boot")),
+                      Stat(formatter.storage(disk.totalWriteBytes), String(localized: "Written since boot"))]
         if let thermal = engine.thermal.value, let celsius = Self.hottest(thermal, .storage) {
-            totals.append(temperature(celsius, "Temperature"))
+            totals.append(temperature(celsius, String(localized: "Temperature")))
         }
         return totals
     }
@@ -227,7 +227,7 @@ struct BentoDetail: View {
     private func battery(_ power: PowerSnapshot) -> some View {
         stats(powerStats(power))
         if !power.accessories.isEmpty {
-            tile(caption: "Devices") {
+            tile(caption: String(localized: "Devices")) {
                 VStack(spacing: Design.Space.s) {
                     ForEach(power.accessories) { accessoryRow($0) }
                 }
@@ -240,32 +240,32 @@ struct BentoDetail: View {
         var items: [Stat] = []
         if power.hasBattery {
             if let health = power.healthPercent {
-                items.append(Stat(formatter.percentValue(health), "Health", fraction: health / 100))
+                items.append(Stat(formatter.percentValue(health), String(localized: "Health"), fraction: health / 100))
             }
             if let cycles = power.cycleCount {
-                items.append(Stat(formatter.count(cycles), "Cycles"))
+                items.append(Stat(formatter.count(cycles), String(localized: "Cycles")))
             }
             if let condition = power.condition {
-                items.append(Stat(condition, "Condition"))
+                items.append(Stat(condition, String(localized: "Condition")))
             }
             if let watts = power.batteryWatts, abs(watts) >= 0.1 {
-                items.append(Stat(formatter.watts(abs(watts)), power.isCharging ? "Charging at" : "Drawing"))
+                items.append(Stat(formatter.watts(abs(watts)), power.isCharging ? String(localized: "Charging at") : String(localized: "Drawing")))
             }
             if let celsius = power.temperatureCelsius
                 ?? engine.thermal.value.flatMap({ Self.hottest($0, .battery) }) {
-                items.append(temperature(celsius, "Temperature"))
+                items.append(temperature(celsius, String(localized: "Temperature")))
             }
         }
         if let watts = power.adapterWatts {
-            items.append(Stat("\(formatter.count(watts)) W", "Adapter"))
+            items.append(Stat("\(formatter.count(watts)) W", String(localized: "Adapter")))
         } else if power.isPluggedIn, let name = power.adapterName {
-            items.append(Stat(name, "Adapter", size: 15))
+            items.append(Stat(name, String(localized: "Adapter"), size: 15))
         }
         if power.isLowPowerMode {
-            items.append(Stat("On", "Low Power Mode"))
+            items.append(Stat(String(localized: "On"), String(localized: "Low Power Mode")))
         }
         if power.isOptimizedChargingPaused {
-            items.append(Stat("On hold", "Optimized charging"))
+            items.append(Stat(String(localized: "On hold"), String(localized: "Optimized charging")))
         }
         return items
     }
@@ -277,9 +277,9 @@ struct BentoDetail: View {
         stats(link(network.wifi))
         stats(addresses(network))
         // In the card's colours for the two directions: blue coming in, red going out.
-        stats([Stat(formatter.storage(network.totalDownloadBytes), "Downloaded since boot",
+        stats([Stat(formatter.storage(network.totalDownloadBytes), String(localized: "Downloaded since boot"),
                     colors: [Color(nsColor: .systemBlue), Color(nsColor: .systemCyan)]),
-               Stat(formatter.storage(network.totalUploadBytes), "Uploaded since boot",
+               Stat(formatter.storage(network.totalUploadBytes), String(localized: "Uploaded since boot"),
                     colors: [Color(nsColor: .systemRed), Color(nsColor: .systemOrange)])])
         history()
     }
@@ -288,13 +288,13 @@ struct BentoDetail: View {
         guard let wifi else { return [] }
         var link: [Stat] = []
         if let rssi = wifi.rssi {
-            link.append(Stat("\(rssi) dBm", "Signal", fraction: wifi.signalQuality))
+            link.append(Stat("\(rssi) dBm", String(localized: "Signal"), fraction: wifi.signalQuality))
         }
         if let rate = wifi.transmitRateMbps {
-            link.append(Stat("\(formatter.fixed(rate, decimals: 0)) Mbps", "Link rate"))
+            link.append(Stat("\(formatter.fixed(rate, decimals: 0)) Mbps", String(localized: "Link rate")))
         }
         if let channel = wifi.channel {
-            link.append(Stat("\(channel)", wifi.band.map { "Channel · \($0)" } ?? "Channel"))
+            link.append(Stat("\(channel)", wifi.band.map { String(localized: "Channel · \($0)") } ?? String(localized: "Channel")))
         }
         return link
     }
@@ -302,10 +302,10 @@ struct BentoDetail: View {
     private func addresses(_ network: NetworkSnapshot) -> [Stat] {
         var addresses: [Stat] = []
         if let local = network.localIPv4 {
-            addresses.append(Stat(local, "Local IP", size: 16))
+            addresses.append(Stat(local, String(localized: "Local IP"), size: 16))
         }
         if let publicIP = publicIP(network.publicIP) {
-            addresses.append(Stat(publicIP, "Public IP", size: 16))
+            addresses.append(Stat(publicIP, String(localized: "Public IP"), size: 16))
         }
         return addresses
     }
@@ -330,10 +330,10 @@ struct BentoDetail: View {
     private func sensors(_ thermal: ThermalSnapshot) -> [Stat] {
         var sensors: [Stat] = []
         if let hottest = Self.hottest(thermal, .cpu, ifMoreThanOne: true) {
-            sensors.append(temperature(hottest, "CPU hotspot"))
+            sensors.append(temperature(hottest, String(localized: "CPU hotspot")))
         }
         if let enclosure = Self.hottest(thermal, .ambient) {
-            sensors.append(temperature(enclosure, "Enclosure"))
+            sensors.append(temperature(enclosure, String(localized: "Enclosure")))
         }
         return sensors
     }
@@ -342,9 +342,9 @@ struct BentoDetail: View {
     /// the rest of what identifies it: its names and the build it runs.
     @ViewBuilder
     private func system(_ system: SystemInfoSnapshot) -> some View {
-        stats([Stat(system.computerName, "Computer name", size: 16)].filter { !$0.value.isEmpty })
-        stats([Stat(system.osBuild, "\(system.osName) build", size: 16),
-               Stat(system.hostName, "Host name", size: 16)])
+        stats([Stat(system.computerName, String(localized: "Computer name"), size: 16)].filter { !$0.value.isEmpty })
+        stats([Stat(system.osBuild, String(localized: "\(system.osName) build"), size: 16),
+               Stat(system.hostName, String(localized: "Host name"), size: 16)])
     }
 
     // MARK: Pieces
@@ -495,8 +495,8 @@ struct BentoDetail: View {
     private func composition(_ memory: MemorySnapshot) -> some View {
         let color = palette[0]
         let parts: [(name: String, bytes: UInt64, shade: Double)] = [
-            ("App", memory.appBytes, 1), ("Wired", memory.wiredBytes, 0.7),
-            ("Compressed", memory.compressedBytes, 0.45), ("Cached", memory.cachedBytes, 0.22),
+            (String(localized: "App"), memory.appBytes, 1), (String(localized: "Wired"), memory.wiredBytes, 0.7),
+            (String(localized: "Compressed"), memory.compressedBytes, 0.45), (String(localized: "Cached"), memory.cachedBytes, 0.22),
         ]
         let total = Double(max(memory.totalBytes, 1))
         return VStack(spacing: Design.Space.m) {
@@ -629,7 +629,7 @@ struct BentoDetail: View {
         switch state {
         case .value(let address): return address
         case .failure(.unsupported): return nil
-        case .failure(.pending): return "Looking up…"
+        case .failure(.pending): return String(localized: "Looking up…")
         case .failure: return MetricFormatter.unavailable
         }
     }

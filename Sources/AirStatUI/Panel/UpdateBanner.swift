@@ -18,7 +18,7 @@ struct UpdateBanner: View {
                     Text("Bento Stats \(release.version) is available")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Design.Palette.primaryText)
-                    Text(updater.failure ?? "Version \(updater.currentVersion) is installed.")
+                    Text(updater.failure ?? String(localized: "Version \(updater.currentVersion) is installed."))
                         .font(.system(size: 11))
                         .foregroundStyle(updater.failure == nil
                                          ? Design.Palette.secondaryText : Color(nsColor: .systemOrange))
@@ -48,9 +48,9 @@ struct UpdateBanner: View {
             }
         } else if updater.failure != nil {
             // Install has failed once; the release page always works.
-            pill("Download", action: updater.openReleasePage)
+            pill(String(localized: "Download"), action: updater.openReleasePage)
         } else {
-            pill("Install", action: updater.install)
+            pill(String(localized: "Install"), action: updater.install)
         }
     }
 

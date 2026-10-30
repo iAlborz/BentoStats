@@ -207,7 +207,7 @@ public final class ThermalCollector: MetricSource {
             // `minRPM` is the slowest speed the fan turns at *while spinning*, so a
             // stopped fan legitimately sits below it. `FanInfo.loadFraction` already
             // clamps to 0...1, so the dial reads empty rather than running backwards.
-            fanInfo.append(FanInfo(id: fan.id, name: "Fan \(fan.id + 1)", currentRPM: rpm,
+            fanInfo.append(FanInfo(id: fan.id, name: String(localized: "Fan \(fan.id + 1)"), currentRPM: rpm,
                                    minRPM: fan.minRPM, maxRPM: fan.maxRPM))
         }
 
@@ -330,14 +330,14 @@ public final class ThermalCollector: MetricSource {
     private static func label(for category: SensorCategory, index: Int, of total: Int) -> String {
         let base: String
         switch category {
-        case .cpu: base = "CPU die"
-        case .gpu: base = "GPU die"
-        case .memory: base = "Memory"
-        case .storage: base = "Storage"
-        case .battery: base = "Battery"
-        case .ambient: base = "Enclosure"
-        case .power: base = "Power"
-        case .other: base = "Sensor"
+        case .cpu: base = String(localized: "CPU die")
+        case .gpu: base = String(localized: "GPU die")
+        case .memory: base = String(localized: "Memory")
+        case .storage: base = String(localized: "Storage")
+        case .battery: base = String(localized: "Battery")
+        case .ambient: base = String(localized: "Enclosure")
+        case .power: base = String(localized: "Power")
+        case .other: base = String(localized: "Sensor")
         }
         return total > 1 ? "\(base) \(index + 1)" : base
     }

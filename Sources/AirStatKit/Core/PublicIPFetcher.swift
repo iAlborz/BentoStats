@@ -48,7 +48,7 @@ public final class PublicIPFetcher: @unchecked Sendable {
 
     /// Said in place of an address while the feature is off, so the panel can leave the
     /// row out entirely instead of drawing an empty field.
-    public static let disabledMessage = "Public IP lookup is off"
+    public static let disabledMessage = String(localized: "Public IP lookup is off")
 
     private let transport: PublicIPTransport
     private let lock = NSLock()

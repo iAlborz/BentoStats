@@ -46,8 +46,8 @@ struct AboutPane: View {
     private var versionText: String {
         guard let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String else {
             // Running the bare SwiftPM binary rather than the assembled .app.
-            return "Development build"
+            return String(localized: "Development build")
         }
-        return "Version \(short)"
+        return String(localized: "Version \(short)")
     }
 }

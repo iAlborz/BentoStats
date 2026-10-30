@@ -159,10 +159,10 @@ struct PanelFooterView: View {
 
     var body: some View {
         HStack(spacing: Design.Space.xs) {
-            PanelFooterButton(title: "Settings…", symbol: "gearshape", action: actions.openSettings)
+            PanelFooterButton(title: String(localized: "Settings…"), symbol: "gearshape", action: actions.openSettings)
                 .keyboardShortcut(",", modifiers: .command)
             Spacer(minLength: Design.Space.m)
-            PanelFooterButton(title: "Quit", symbol: "power", action: actions.quit)
+            PanelFooterButton(title: String(localized: "Quit"), symbol: "power", action: actions.quit)
                 .keyboardShortcut("q", modifiers: .command)
         }
         .padding(.horizontal, Design.Space.s)

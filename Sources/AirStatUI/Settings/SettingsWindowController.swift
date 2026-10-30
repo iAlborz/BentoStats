@@ -54,7 +54,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             window?.title = tab.label
         }
         window.delegate = self
-        window.title = "Bento Stats Settings"
+        window.title = String(localized: "Bento Stats Settings")
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
 

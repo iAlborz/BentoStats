@@ -67,7 +67,7 @@ public struct Sparkline: View {
             short = high
         } else {
             short = series.string(scale.peak, using: formatter)
-            long = "peak \(short)"
+            long = String(localized: "peak \(short)")
         }
         return ViewThatFits(in: .horizontal) {
             captionText(long, fixed: true)

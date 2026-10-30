@@ -79,7 +79,7 @@ public final class StatusItemController {
         switch desired {
         case .combined:
             if let entry = makeItem(autosaveName: StatusItemController.combinedAutosaveName,
-                                    label: "Bento Stats system statistics") {
+                                    label: String(localized: "Bento Stats system statistics")) {
                 hosted = [entry]
             }
 

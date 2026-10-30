@@ -6,15 +6,15 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
 
     public var label: String {
         switch self {
-        case .cpu: return "CPU"
-        case .memory: return "Memory"
-        case .gpu: return "GPU"
-        case .network: return "Network"
-        case .disk: return "SSD"
-        case .battery: return "Battery"
-        case .thermal: return Capabilities.readsSensors ? "Temperature" : "Thermal State"
-        case .system: return "System"
-        case .settings: return "Settings"
+        case .cpu: return String(localized: "CPU")
+        case .memory: return String(localized: "Memory")
+        case .gpu: return String(localized: "GPU")
+        case .network: return String(localized: "Network")
+        case .disk: return String(localized: "SSD")
+        case .battery: return String(localized: "Battery")
+        case .thermal: return Capabilities.readsSensors ? String(localized: "Temperature") : String(localized: "Thermal State")
+        case .system: return String(localized: "System")
+        case .settings: return String(localized: "Settings")
         }
     }
 
@@ -145,41 +145,41 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
 
     /// What it shows, for the card's menu in edit mode.
     public var label: String {
-        if kind == .thermal, !Capabilities.readsSensors { return "Thermal State" }
+        if kind == .thermal, !Capabilities.readsSensors { return String(localized: "Thermal State") }
         switch self {
-        case .cpuChip: return "Chip and Busiest"
-        case .cpuChipSmall: return "Chip"
-        case .cpuLoad: return "Load"
-        case .cpuChipHistory: return "Chip, Load and History"
-        case .memoryModule: return "Module and Top Users"
-        case .memoryStick: return "Module"
-        case .memoryPressure: return "Pressure"
-        case .memoryWide: return "Module, Pressure and Top Users"
-        case .gpuDie: return "Die and Meters"
-        case .gpuDieSmall: return "Die"
-        case .gpuLoad: return "Load"
-        case .gpuDieHistory: return "Die, Load and History"
-        case .networkSpeeds: return "Speeds"
-        case .networkSpeedsSmall: return "Speeds, Small"
-        case .networkHistory: return "Speeds and History"
-        case .diskDrive: return "Drive and Speeds"
-        case .diskSpace: return "Space"
-        case .diskHistory: return "Drive and History"
-        case .batteryCharge: return "Battery"
-        case .batteryInside: return "Charge Inside"
-        case .batteryHistory: return "Battery and History"
-        case .batteryChargeHistory: return "Charge and History"
-        case .thermalThermometer: return "Thermometer"
-        case .thermalSmall: return "Thermometer, Small"
-        case .thermalSensors: return "All Sensors"
-        case .thermalFans: return "Fans"
-        case .thermalCooling: return "Fans and Thermometer"
-        case .systemAbout: return "Uptime and Model"
-        case .systemUptime: return "Uptime"
-        case .systemDetails: return "About This Mac"
-        case .settings: return "Small"
-        case .settingsTall: return "Tall"
-        case .settingsWide: return "Wide"
+        case .cpuChip: return String(localized: "Chip and Busiest")
+        case .cpuChipSmall: return String(localized: "Chip")
+        case .cpuLoad: return String(localized: "Load")
+        case .cpuChipHistory: return String(localized: "Chip, Load and History")
+        case .memoryModule: return String(localized: "Module and Top Users")
+        case .memoryStick: return String(localized: "Module")
+        case .memoryPressure: return String(localized: "Pressure")
+        case .memoryWide: return String(localized: "Module, Pressure and Top Users")
+        case .gpuDie: return String(localized: "Die and Meters")
+        case .gpuDieSmall: return String(localized: "Die")
+        case .gpuLoad: return String(localized: "Load")
+        case .gpuDieHistory: return String(localized: "Die, Load and History")
+        case .networkSpeeds: return String(localized: "Speeds")
+        case .networkSpeedsSmall: return String(localized: "Speeds, Small")
+        case .networkHistory: return String(localized: "Speeds and History")
+        case .diskDrive: return String(localized: "Drive and Speeds")
+        case .diskSpace: return String(localized: "Space")
+        case .diskHistory: return String(localized: "Drive and History")
+        case .batteryCharge: return String(localized: "Battery")
+        case .batteryInside: return String(localized: "Charge Inside")
+        case .batteryHistory: return String(localized: "Battery and History")
+        case .batteryChargeHistory: return String(localized: "Charge and History")
+        case .thermalThermometer: return String(localized: "Thermometer")
+        case .thermalSmall: return String(localized: "Thermometer, Small")
+        case .thermalSensors: return String(localized: "All Sensors")
+        case .thermalFans: return String(localized: "Fans")
+        case .thermalCooling: return String(localized: "Fans and Thermometer")
+        case .systemAbout: return String(localized: "Uptime and Model")
+        case .systemUptime: return String(localized: "Uptime")
+        case .systemDetails: return String(localized: "About This Mac")
+        case .settings: return String(localized: "Small")
+        case .settingsTall: return String(localized: "Tall")
+        case .settingsWide: return String(localized: "Wide")
         }
     }
 }

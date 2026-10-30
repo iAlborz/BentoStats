@@ -56,11 +56,10 @@ struct NotificationsPane: View {
             case .granted, .undetermined:
                 EmptyView()
             case .requesting:
-                SettingsFootnote("Waiting for your answer to the macOS permission prompt.")
+                SettingsFootnote(String(localized: "Waiting for your answer to the macOS permission prompt."))
             case .unavailable:
                 VStack(alignment: .leading, spacing: Design.Space.s) {
-                    SettingsCaution("macOS is not allowing Bento Stats to send notifications, "
-                                    + "so these rules cannot alert you.")
+                    SettingsCaution(String(localized: "macOS is not allowing Bento Stats to send notifications, so these rules cannot alert you."))
                     Button("Open Notification Settings…") { openSystemNotificationSettings() }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -168,21 +167,21 @@ struct NotificationsPane: View {
             ? (ThermalPressure(rawValue: Int(rule.threshold))?.label ?? "\(Int(rule.threshold))")
             : "\(Int(rule.threshold))\(rule.metric.unitSuffix)"
         let sustained = rule.sustainedFor <= 0
-            ? "as soon as it happens"
-            : "after \(SettingsLabels.duration(rule.sustainedFor)) of it holding"
-        return "Notifies \(sustained), then not again for \(SettingsLabels.duration(rule.cooldown)). Threshold: \(value). Needs the \(rule.metric.requiredSource.label) collector, which this rule keeps running."
+            ? String(localized: "as soon as it happens")
+            : String(localized: "after \(SettingsLabels.duration(rule.sustainedFor)) of it holding")
+        return String(localized: "Notifies \(sustained), then not again for \(SettingsLabels.duration(rule.cooldown)). Threshold: \(value). Needs the \(rule.metric.requiredSource.label) collector, which this rule keeps running.")
     }
 
     private func accessibilityValue(_ rule: ThresholdRule) -> String {
-        rule.isEnabled ? "On, threshold \(Int(rule.threshold)) \(unitName(rule.metric))" : "Off"
+        rule.isEnabled ? String(localized: "On, threshold \(Int(rule.threshold)) \(unitName(rule.metric))") : String(localized: "Off")
     }
 
     private func unitName(_ metric: ThresholdMetric) -> String {
         switch metric {
-        case .cpuUsage, .memoryPressure, .batteryLow, .batteryFull: return "percent"
-        case .diskFree: return "gigabytes"
-        case .cpuTemperature: return "degrees"
-        case .thermalPressure: return "level"
+        case .cpuUsage, .memoryPressure, .batteryLow, .batteryFull: return String(localized: "percent")
+        case .diskFree: return String(localized: "gigabytes")
+        case .cpuTemperature: return String(localized: "degrees")
+        case .thermalPressure: return String(localized: "level")
         }
     }
 
