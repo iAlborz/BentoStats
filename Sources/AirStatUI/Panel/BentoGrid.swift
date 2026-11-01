@@ -1251,7 +1251,6 @@ struct BentoGrid: View {
                 ForEach(topProcesses(1), id: \.module) { ranking in
                     GridRow {
                         rankingLabel(ranking.module)
-                            .fixedSize()
                         if let (process, value) = ranking.rows.first {
                             ProcessIcon(process: process, size: 15)
                             Text(process.name)
@@ -1319,17 +1318,9 @@ struct BentoGrid: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// The resource's symbol in its card's colours, and its name.
+    /// The resource's name on the object its own card draws.
     private func rankingLabel(_ module: PanelModule) -> some View {
-        HStack(spacing: Design.Space.xs) {
-            Image(systemName: module.symbolName)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(gradient(module))
-            Text(module.label)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Design.Palette.primaryText)
-                .lineLimit(1)
-        }
+        ResourceBadge(module: module, colors: palette(module))
     }
 
     // MARK: Layout
@@ -2660,6 +2651,81 @@ struct MemoryGraphic: View {
             board.stroke(BoardFinish.edge, lineWidth: 1)
         }
         .animation(Design.Motion.respectingAccessibility(Design.Motion.value), value: fraction)
+    }
+}
+
+/// A resource's name set on the object its own card draws, over its list of processes:
+/// CPU on the chip's face, GPU on the die inside its gold legs, Memory on a module
+/// filled in its colour with the contacts along its foot. All three the same size, the
+/// legs and the contacts standing in the margin the others leave, so the bodies line up.
+private struct ResourceBadge: View {
+    let module: PanelModule
+    let colors: [Color]
+
+    private static let size = CGSize(width: 70, height: 22)
+    /// The margin the GPU's legs stand in, and the module's contacts below it.
+    private static let leg: CGFloat = 3
+
+    var body: some View {
+        let face = CGSize(width: Self.size.width - Self.leg * 2, height: Self.size.height - Self.leg * 2)
+        ZStack {
+            switch module {
+            case .memory:
+                memory
+                    .frame(width: face.width, height: face.height + Self.leg)
+                    .offset(y: Self.leg / 2)
+            case .gpu:
+                ChipLegs(leg: Self.leg).fill(ChipLegs.gold)
+                chip.frame(width: face.width, height: face.height)
+            default:
+                chip.frame(width: face.width, height: face.height)
+            }
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+    }
+
+    /// The name in the chips' silver.
+    private var chip: some View {
+        ZStack {
+            ChipFace()
+            Text(module.label)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(ChipGraphic.silver)
+        }
+    }
+
+    /// The memory module, drawn as the Memory card draws it when full.
+    private var memory: some View {
+        let contacts: CGFloat = 4
+        let board = NotchedBoard(edge: .bottom, cornerRadius: 2, notchFraction: 0.42,
+                                 notchOffset: -4, notchLength: 8, notchDepth: contacts)
+        let face = UnevenRoundedRectangle(cornerRadii: .init(topLeading: 2, topTrailing: 2), style: .continuous)
+        return ZStack {
+            board.fill(BoardFinish.gradient)
+            VStack(spacing: 0) {
+                ZStack {
+                    face.fill(LinearGradient(colors: [colors[0].opacity(0.6), colors[0].opacity(0.2)],
+                                             startPoint: .leading, endPoint: .trailing))
+                    Text(module.label)
+                        .font(.system(size: 11, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(LinearGradient(colors: [Color(white: 0.98), Color(white: 0.72)],
+                                                        startPoint: .top, endPoint: .bottom))
+                        .shadow(color: .black.opacity(0.55), radius: 1.5)
+                        .padding(.horizontal, 4)
+                }
+                MemoryContacts()
+                    .fill(ChipLegs.gold)
+                    .padding(.top, 0.5)
+                    .padding(.bottom, 1)
+                    .frame(height: contacts)
+            }
+            board.stroke(BoardFinish.edge, lineWidth: 1)
+        }
     }
 }
 
