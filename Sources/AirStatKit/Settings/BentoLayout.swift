@@ -2,7 +2,7 @@ import Foundation
 
 /// What a bento card shows: one module, or the panel's Settings, which holds Quit too.
 public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    case cpu, memory, gpu, network, disk, battery, thermal, system, settings
+    case cpu, memory, gpu, network, disk, battery, thermal, system, processes, settings
 
     public var label: String {
         switch self {
@@ -14,6 +14,7 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
         case .battery: return String(localized: "Battery")
         case .thermal: return Capabilities.readsSensors ? String(localized: "Temperature") : String(localized: "Thermal State")
         case .system: return String(localized: "System")
+        case .processes: return String(localized: "Top Processes")
         case .settings: return String(localized: "Settings")
         }
     }
@@ -29,6 +30,7 @@ public enum BentoTileKind: String, Sendable, Codable, CaseIterable, Equatable, H
         case .battery: return .battery
         case .thermal: return .thermal
         case .system: return .system
+        case .processes: return .processes
         case .settings: return nil
         }
     }
@@ -101,26 +103,28 @@ public enum BentoTileSize: String, Sendable, Codable, CaseIterable, Equatable, H
 /// than put together from parts at whatever size it is given. The first of each card's
 /// is the one it starts as, and the one the designed arrangement uses.
 public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    case cpuChip, cpuChipSmall, cpuLoad, cpuChipHistory
+    case cpuChip, cpuChipSmall, cpuLoad, cpuChipHistory, cpuChipProcesses
     case memoryModule, memoryStick, memoryPressure, memoryWide
-    case gpuDie, gpuDieSmall, gpuLoad, gpuDieHistory
+    case gpuDie, gpuDieSmall, gpuLoad, gpuDieHistory, gpuDieProcesses
     case networkSpeeds, networkSpeedsSmall, networkHistory
     case diskDrive, diskSpace, diskHistory
     case batteryCharge, batteryInside, batteryHistory, batteryChargeHistory
     case thermalThermometer, thermalSmall, thermalSensors, thermalFans, thermalCooling
     case systemAbout, systemUptime, systemDetails
+    case processesColumns, processesStacked, processesTop
     case settings, settingsTall, settingsWide
 
     public var kind: BentoTileKind {
         switch self {
-        case .cpuChip, .cpuChipSmall, .cpuLoad, .cpuChipHistory: return .cpu
+        case .cpuChip, .cpuChipSmall, .cpuLoad, .cpuChipHistory, .cpuChipProcesses: return .cpu
         case .memoryModule, .memoryStick, .memoryPressure, .memoryWide: return .memory
-        case .gpuDie, .gpuDieSmall, .gpuLoad, .gpuDieHistory: return .gpu
+        case .gpuDie, .gpuDieSmall, .gpuLoad, .gpuDieHistory, .gpuDieProcesses: return .gpu
         case .networkSpeeds, .networkSpeedsSmall, .networkHistory: return .network
         case .diskDrive, .diskSpace, .diskHistory: return .disk
         case .batteryCharge, .batteryInside, .batteryHistory, .batteryChargeHistory: return .battery
         case .thermalThermometer, .thermalSmall, .thermalSensors, .thermalFans, .thermalCooling: return .thermal
         case .systemAbout, .systemUptime, .systemDetails: return .system
+        case .processesColumns, .processesStacked, .processesTop: return .processes
         case .settings, .settingsTall, .settingsWide: return .settings
         }
     }
@@ -131,14 +135,16 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
              .batteryInside, .thermalSmall, .systemUptime, .settings:
             return .small
         case .cpuLoad, .gpuLoad, .memoryStick, .networkSpeeds, .diskDrive, .batteryCharge,
-             .batteryChargeHistory, .thermalFans, .systemAbout, .settingsWide:
+             .batteryChargeHistory, .thermalFans, .systemAbout, .processesTop, .settingsWide:
             return .wide
         case .thermalThermometer, .settingsTall:
             return .tall
         case .cpuChip, .memoryModule, .gpuDie, .networkHistory, .diskHistory, .batteryHistory,
              .thermalSensors, .thermalCooling, .systemDetails:
             return .large
-        case .cpuChipHistory, .memoryWide, .gpuDieHistory:
+        case .cpuChipProcesses, .gpuDieProcesses, .processesStacked:
+            return .tallLarge
+        case .cpuChipHistory, .memoryWide, .gpuDieHistory, .processesColumns:
             return .extraWide
         }
     }
@@ -151,6 +157,7 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
         case .cpuChipSmall: return String(localized: "Chip")
         case .cpuLoad: return String(localized: "Load")
         case .cpuChipHistory: return String(localized: "Chip, Load and History")
+        case .cpuChipProcesses: return String(localized: "Chip and Top Processes")
         case .memoryModule: return String(localized: "Module and Top Users")
         case .memoryStick: return String(localized: "Module")
         case .memoryPressure: return String(localized: "Pressure")
@@ -159,6 +166,7 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
         case .gpuDieSmall: return String(localized: "Die")
         case .gpuLoad: return String(localized: "Load")
         case .gpuDieHistory: return String(localized: "Die, Load and History")
+        case .gpuDieProcesses: return String(localized: "Die, Meters and Top Processes")
         case .networkSpeeds: return String(localized: "Speeds")
         case .networkSpeedsSmall: return String(localized: "Speeds, Small")
         case .networkHistory: return String(localized: "Speeds and History")
@@ -177,6 +185,9 @@ public enum BentoVariant: String, Sendable, Codable, CaseIterable, Equatable, Ha
         case .systemAbout: return String(localized: "Uptime and Model")
         case .systemUptime: return String(localized: "Uptime")
         case .systemDetails: return String(localized: "About This Mac")
+        case .processesColumns: return String(localized: "Side by Side")
+        case .processesStacked: return String(localized: "Stacked")
+        case .processesTop: return String(localized: "Busiest of Each")
         case .settings: return String(localized: "Small")
         case .settingsTall: return String(localized: "Tall")
         case .settingsWide: return String(localized: "Wide")

@@ -621,6 +621,8 @@ public struct ProcessRow: Sendable, Equatable, Hashable, Identifiable {
     /// same convention Activity Monitor uses.
     public var cpuPercent: Double
     public var memoryBytes: UInt64
+    /// Percent of the GPU's time, set on the rows of `ProcessSnapshot.gpuProcesses`.
+    public var gpuPercent: Double?
     public var threadCount: Int
     public var userName: String?
     public var startTime: Date?
@@ -631,7 +633,7 @@ public struct ProcessRow: Sendable, Equatable, Hashable, Identifiable {
 
     public init(pid: Int32, parentPID: Int32 = 0, name: String, executablePath: String? = nil,
                 bundleIdentifier: String? = nil, cpuPercent: Double = 0, memoryBytes: UInt64 = 0,
-                threadCount: Int = 0, userName: String? = nil, startTime: Date? = nil,
+                gpuPercent: Double? = nil, threadCount: Int = 0, userName: String? = nil, startTime: Date? = nil,
                 energyImpact: Double? = nil, diskReadBytesPerSecond: Double? = nil,
                 diskWriteBytesPerSecond: Double? = nil, isAppleSignedSystem: Bool = false) {
         self.pid = pid
@@ -641,6 +643,7 @@ public struct ProcessRow: Sendable, Equatable, Hashable, Identifiable {
         self.bundleIdentifier = bundleIdentifier
         self.cpuPercent = cpuPercent
         self.memoryBytes = memoryBytes
+        self.gpuPercent = gpuPercent
         self.threadCount = threadCount
         self.userName = userName
         self.startTime = startTime
@@ -653,11 +656,17 @@ public struct ProcessRow: Sendable, Equatable, Hashable, Identifiable {
 
 public struct ProcessSnapshot: Sendable, Equatable {
     public var processes: [ProcessRow]
+    /// The GPU's heaviest users, heaviest first, each with `gpuPercent` set. Its own list:
+    /// the GPU's accounting covers every process, WindowServer and other users' among
+    /// them, whose CPU and memory this app cannot read and whose rows say so with zeros.
+    public var gpuProcesses: [ProcessRow]
     public var totalProcessCount: Int
     public var totalThreadCount: Int
 
-    public init(processes: [ProcessRow] = [], totalProcessCount: Int = 0, totalThreadCount: Int = 0) {
+    public init(processes: [ProcessRow] = [], gpuProcesses: [ProcessRow] = [],
+                totalProcessCount: Int = 0, totalThreadCount: Int = 0) {
         self.processes = processes
+        self.gpuProcesses = gpuProcesses
         self.totalProcessCount = totalProcessCount
         self.totalThreadCount = totalThreadCount
     }

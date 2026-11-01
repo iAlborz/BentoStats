@@ -97,7 +97,23 @@ struct BentoDetail: View {
         case .network: section(engine.network) { network($0) }
         case .thermal: section(engine.thermal) { thermal($0) }
         case .system: section(engine.system) { system($0) }
-        case .processes: EmptyView()
+        case .processes: section(engine.processes) { processes($0) }
+        }
+    }
+
+    /// The card lists what is using the CPU, the GPU and memory. This is how many
+    /// processes and threads are running, and which are using the disk.
+    @ViewBuilder
+    private func processes(_ processes: ProcessSnapshot) -> some View {
+        stats([Stat(formatter.count(processes.totalProcessCount), String(localized: "Processes")),
+               Stat(formatter.count(processes.totalThreadCount), String(localized: "Threads"))])
+        tile(caption: String(localized: "Reading and writing now")) {
+            let busiest = diskBusiest()
+            if busiest.isEmpty {
+                placeholder(String(localized: "Nothing is using the disk"))
+            } else {
+                processRows(busiest)
+            }
         }
     }
 

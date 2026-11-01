@@ -301,13 +301,21 @@ public enum SnapshotFixtures {
             ("Music", topCPU * 0.08, 412_663_808, 17),
             ("mds_stores", topCPU * 0.05, 186_646_528, 11),
         ]
+        let rows = names.enumerated().map { index, entry in
+            ProcessRow(pid: Int32(420 + index * 137), parentPID: 1, name: entry.0,
+                       executablePath: "/Applications/\(entry.0).app",
+                       cpuPercent: entry.1, memoryBytes: entry.2,
+                       threadCount: entry.3, userName: "byren",
+                       startTime: referenceDate.addingTimeInterval(-3_600))
+        }
+        // WindowServer, the Chrome helper, Xcode and Music, by their share of the GPU.
+        let gpu: [(Int, Double)] = [(2, 0.46), (3, 0.21), (0, 0.09), (5, 0.03)]
         return ProcessSnapshot(
-            processes: names.enumerated().map { index, entry in
-                ProcessRow(pid: Int32(420 + index * 137), parentPID: 1, name: entry.0,
-                           executablePath: "/Applications/\(entry.0).app",
-                           cpuPercent: entry.1, memoryBytes: entry.2,
-                           threadCount: entry.3, userName: "byren",
-                           startTime: referenceDate.addingTimeInterval(-3_600))
+            processes: rows,
+            gpuProcesses: gpu.map { index, share in
+                var row = rows[index]
+                row.gpuPercent = min(topCPU * share, 100)
+                return row
             },
             totalProcessCount: 648,
             totalThreadCount: 2_314

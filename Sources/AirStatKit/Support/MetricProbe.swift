@@ -278,6 +278,10 @@ public enum MetricProbe {
                                        process.threadCount,
                                        process.name))
         }
+        lines.append("  PID     GPU%    NAME")
+        for process in s.gpuProcesses.prefix(5) {
+            lines.append("  " + String(format: "%-7d %6.1f  %@", process.pid, process.gpuPercent ?? 0, process.name))
+        }
         return lines
     }
 }

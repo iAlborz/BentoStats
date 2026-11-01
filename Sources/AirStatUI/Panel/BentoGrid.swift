@@ -421,6 +421,7 @@ struct BentoGrid: View {
         case .cpuChipSmall: cpuChipSmall
         case .cpuLoad: cpuLoad
         case .cpuChipHistory: cpuChipHistory
+        case .cpuChipProcesses: cpuChipProcesses
         case .memoryModule: memory
         case .memoryStick: memoryModuleCard
         case .memoryPressure: memoryPressure
@@ -429,6 +430,7 @@ struct BentoGrid: View {
         case .gpuDieSmall: gpuDieSmall
         case .gpuLoad: gpuLoad
         case .gpuDieHistory: gpuDieHistory
+        case .gpuDieProcesses: gpuDieProcesses
         case .networkSpeeds: network
         case .networkSpeedsSmall: networkSpeedsSmall
         case .networkHistory: networkHistory
@@ -444,6 +446,9 @@ struct BentoGrid: View {
         case .systemAbout: system
         case .systemUptime: systemUptime
         case .systemDetails: systemDetails
+        case .processesColumns: processesColumns
+        case .processesStacked: processesStacked
+        case .processesTop: processesTop
         }
     }
 
@@ -591,6 +596,16 @@ struct BentoGrid: View {
         }
     }
 
+    /// The chip, with the busiest processes by name under it rather than as icons.
+    private var cpuChipProcesses: some View {
+        card(.cpuChipProcesses, header: cpuHeader) {
+            VStack(spacing: Design.Space.l) {
+                fit(AnyView(chip), native: CGSize(width: 140, height: 140), in: CGSize(width: 160, height: 160))
+                busiestList
+            }
+        }
+    }
+
     // MARK: Memory designs
 
     /// The module alone, with what is free printed on it.
@@ -715,6 +730,17 @@ struct BentoGrid: View {
                     }
                     gpuMeters
                 }
+            }
+        }
+    }
+
+    /// The die and its meters, over the processes using the GPU the most.
+    private var gpuDieProcesses: some View {
+        card(.gpuDieProcesses, header: nil) {
+            VStack(spacing: Design.Space.l) {
+                gpuDie(CGSize(width: 200, height: 106))
+                gpuMeters
+                rankingList(.gpu, topProcesses(5)[1].rows, count: 5, isLabelled: false)
             }
         }
     }
@@ -1193,6 +1219,119 @@ struct BentoGrid: View {
         }
     }
 
+    // MARK: Top Processes designs
+
+    /// The CPU's, the GPU's and memory's heaviest users, side by side.
+    private var processesColumns: some View {
+        card(.processesColumns, header: nil) {
+            HStack(alignment: .top, spacing: Design.Space.l) {
+                ForEach(topProcesses(6), id: \.module) { ranking in
+                    rankingList(ranking.module, ranking.rows, count: 6, spacing: 6)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    /// The same three lists, one over the other.
+    private var processesStacked: some View {
+        card(.processesStacked, header: nil) {
+            VStack(spacing: Design.Space.l) {
+                ForEach(topProcesses(4), id: \.module) { ranking in
+                    rankingList(ranking.module, ranking.rows, count: 4)
+                }
+            }
+        }
+    }
+
+    /// Only the heaviest user of each, a line apiece.
+    private var processesTop: some View {
+        card(.processesTop, header: nil) {
+            Grid(alignment: .leading, horizontalSpacing: Design.Space.s, verticalSpacing: Design.Space.m) {
+                ForEach(topProcesses(1), id: \.module) { ranking in
+                    GridRow {
+                        rankingLabel(ranking.module)
+                            .fixedSize()
+                        if let (process, value) = ranking.rows.first {
+                            ProcessIcon(process: process, size: 15)
+                            Text(process.name)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Design.Palette.primaryText)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(value)
+                                .font(.system(size: 12, weight: .bold).monospacedDigit())
+                                .foregroundStyle(gradient(ranking.module))
+                                .gridColumnAlignment(.trailing)
+                        } else if ranking.module == .gpu, processList != nil {
+                            Color.clear.frame(width: 15, height: 15)
+                            Text("Idle")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Design.Palette.tertiaryText)
+                                .lineLimit(1)
+                                .gridCellColumns(2)
+                        } else {
+                            Circle().fill(Design.Palette.track).frame(width: 15, height: 15)
+                            Capsule().fill(Design.Palette.track).frame(width: 90, height: 7)
+                            Capsule().fill(Design.Palette.track).frame(width: 30, height: 7)
+                        }
+                    }
+                }
+            }
+            .lastKnown(processList?.isLastKnown == true)
+            .padding(.horizontal, Design.Space.xs)
+        }
+    }
+
+    /// The heaviest users of the CPU, the GPU and memory, `count` of each, each with the
+    /// figure it is ranked by. The GPU's leaves out what rounds to nothing, so a quiet
+    /// GPU lists fewer, or none.
+    private func topProcesses(_ count: Int) -> [(module: PanelModule, rows: [(ProcessRow, String)])] {
+        let list = processList?.list
+        let cpu = (list?.processes ?? []).sorted { $0.cpuPercent > $1.cpuPercent }.prefix(count)
+        let gpu = (list?.gpuProcesses ?? []).filter { ($0.gpuPercent ?? 0) >= 0.5 }.prefix(count)
+        let memory = (list?.processes ?? []).sorted { $0.memoryBytes > $1.memoryBytes }.prefix(count)
+        return [(.cpu, cpu.map { ($0, formatter.unclampedPercent($0.cpuPercent, decimals: 0)) }),
+                (.gpu, gpu.map { ($0, formatter.percentValue($0.gpuPercent ?? 0)) }),
+                (.memory, memory.map { ($0, formatter.memory($0.memoryBytes)) })]
+    }
+
+    /// One resource's list under its name, or without it on the resource's own card.
+    private func rankingList(_ module: PanelModule, _ rows: [(ProcessRow, String)], count: Int,
+                             spacing: CGFloat = 2, isLabelled: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: Design.Space.s) {
+            if isLabelled {
+                rankingLabel(module)
+                    .padding(.horizontal, Design.Space.xs)
+            }
+            if rows.isEmpty, module == .gpu, processList != nil {
+                Text("Nothing is using the GPU")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Design.Palette.tertiaryText)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, minHeight: CGFloat(count) * (15 + spacing) - spacing)
+            } else {
+                processRows(rows, isLastKnown: processList?.isLastKnown == true, count: count, spacing: spacing)
+                    .frame(maxHeight: .infinity, alignment: .top)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The resource's symbol in its card's colours, and its name.
+    private func rankingLabel(_ module: PanelModule) -> some View {
+        HStack(spacing: Design.Space.xs) {
+            Image(systemName: module.symbolName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(gradient(module))
+            Text(module.label)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Design.Palette.primaryText)
+                .lineLimit(1)
+        }
+    }
+
     // MARK: Layout
 
     /// The room inside a design's card: under its header if it has one, inside its padding.
@@ -1431,16 +1570,17 @@ struct BentoGrid: View {
                            isLastKnown: processes?.isLastKnown == true)
     }
 
-    /// Up to five processes, each icon, name and figure on a row, or the rows' shape
+    /// Up to `count` processes, each icon, name and figure on a row, or the rows' shape
     /// before there is a list to show.
     @ViewBuilder
-    private func processRows(_ rows: [(ProcessRow, String)], isLastKnown: Bool) -> some View {
+    private func processRows(_ rows: [(ProcessRow, String)], isLastKnown: Bool, count: Int = 5,
+                             spacing: CGFloat = 2) -> some View {
         if rows.isEmpty {
-            VStack(spacing: 2) {
-                ForEach(0..<5, id: \.self) { _ in
+            VStack(spacing: spacing) {
+                ForEach(0..<count, id: \.self) { _ in
                     HStack(spacing: Design.Space.xs) {
                         Circle().fill(Design.Palette.track).frame(width: 13, height: 13)
-                        Capsule().fill(Design.Palette.track).frame(width: 90, height: 7)
+                        Capsule().fill(Design.Palette.track).frame(maxWidth: 90).frame(height: 7)
                         Spacer(minLength: Design.Space.s)
                         Capsule().fill(Design.Palette.track).frame(width: 34, height: 7)
                     }
@@ -1450,7 +1590,7 @@ struct BentoGrid: View {
             .padding(.horizontal, Design.Space.xs)
             .accessibilityHidden(true)
         } else {
-            VStack(spacing: 2) {
+            VStack(spacing: spacing) {
                 ForEach(rows, id: \.0.pid) { process, value in
                     HStack(spacing: Design.Space.xs) {
                         ProcessIcon(process: process, size: 13)

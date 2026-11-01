@@ -211,6 +211,20 @@ struct CollectorContractTests {
         // Sorted descending by CPU, so the panel can take a prefix.
         let cpuValues = processes.processes.map(\.cpuPercent)
         #expect(cpuValues == cpuValues.sorted(by: >), "processes must be sorted by CPU descending")
+        // The GPU's list is its own ranking: heaviest first, each a share of the one GPU.
+        let gpuValues = processes.gpuProcesses.map { $0.gpuPercent ?? -1 }
+        #expect(gpuValues.allSatisfy { $0 > 0 && $0 <= 100 }, "gpu shares: \(gpuValues)")
+        #expect(gpuValues == gpuValues.sorted(by: >), "GPU processes must be sorted by GPU descending")
+    }
+
+    @Test("a GPU client's creator string names its process")
+    func gpuClientCreator() {
+        let parsed = ProcessGPUTime.parseCreator("pid 423, WindowServer")
+        #expect(parsed?.0 == 423)
+        #expect(parsed?.1 == "WindowServer")
+        #expect(ProcessGPUTime.parseCreator("pid 1211, Brave Browser")?.1 == "Brave Browser")
+        #expect(ProcessGPUTime.parseCreator("kernel") == nil)
+        #expect(ProcessGPUTime.parseCreator("pid 0, kernel_task") == nil)
     }
 
     /// The biggest resident set on the machine is usually idle, so a CPU-ranked cut

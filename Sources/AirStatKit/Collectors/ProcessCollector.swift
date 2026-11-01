@@ -1,6 +1,6 @@
 import Foundation
 
-/// Per-process CPU, memory, threads and I/O.
+/// Per-process CPU, memory, GPU, threads and I/O.
 ///
 /// Concurrency: every method runs on `SamplingCore`'s serial queue. See
 /// `MetricSource` for the full contract, including the rule that a failed syscall
@@ -24,6 +24,9 @@ public final class ProcessCollector: MetricSource {
     /// on the other. Reading rusage for every process would double the collector's
     /// cost, so instead twice the tail is fetched and trimmed on the displayed figure.
     private static let memoryCandidateLimit = 20
+    /// The GPU's heaviest users, ranked on their own: the GPU's accounting covers other
+    /// users' processes too, so its list is not a re-sort of the rows above.
+    private static let gpuRowLimit = 10
 
     /// Cumulative per-process counters carried between samples, keyed by pid.
     private struct Baseline {
@@ -56,6 +59,7 @@ public final class ProcessCollector: MetricSource {
     /// Cleared for good the first time the kernel refuses the zone query.
     private var threadZoneReadable = true
     private var pathBuffer = [CChar]()
+    private let gpuTime = ProcessGPUTime()
 
     public init() {}
 
@@ -70,6 +74,7 @@ public final class ProcessCollector: MetricSource {
         baselines.removeAll(keepingCapacity: true)
         generation = 0
         threadZoneReadable = true
+        gpuTime.reset()
     }
 
     public func stop() {
@@ -83,6 +88,7 @@ public final class ProcessCollector: MetricSource {
         ownPIDBuffer = []
         candidates = []
         pathBuffer = []
+        gpuTime.reset()
     }
 
     public func collect(context: SampleContext) -> MetricState<ProcessSnapshot> {
@@ -109,6 +115,8 @@ public final class ProcessCollector: MetricSource {
         // daemons at thousands of percent.
         let rebaselining = context.isFirstSample || context.didWakeFromSleep || context.elapsed <= 0.001
         if context.didWakeFromSleep { baselines.removeAll(keepingCapacity: true) }
+        if rebaselining { gpuTime.reset() }
+        let gpuShares = gpuTime.sample()
 
         generation &+= 1
         candidates.removeAll(keepingCapacity: true)
@@ -190,7 +198,20 @@ public final class ProcessCollector: MetricSource {
         // is what CPUSnapshot.threadCount reports — the two are shown side by side in
         // the UI, so they must not disagree by 40%. See CPUCollector for the caveats
         // on mach_zone_info; the summed figure is the fallback.
+        let gpuRows = gpuShares
+            .filter { $0.value.percent > 0 }
+            .sorted { $0.value.percent > $1.value.percent }
+            .prefix(Self.gpuRowLimit)
+            .map { pid, share -> ProcessRow in
+                var row = rows.first { $0.pid == pid }
+                    ?? candidates.first { $0.pid == pid }.flatMap { buildRow($0, elapsed: context.elapsed) }
+                    ?? gpuOnlyRow(pid: pid, name: share.name)
+                row.gpuPercent = share.percent
+                return row
+            }
+
         return .value(ProcessSnapshot(processes: rows,
+                                      gpuProcesses: gpuRows,
                                       totalProcessCount: pidCount,
                                       totalThreadCount: liveThreadCount() ?? totalThreads))
     }
@@ -294,6 +315,22 @@ public final class ProcessCollector: MetricSource {
                           startTime: start,
                           diskReadBytesPerSecond: readRate,
                           diskWriteBytesPerSecond: writeRate,
+                          isAppleSignedSystem: path.map(Self.isSystemPath) ?? false)
+    }
+
+    /// A GPU user this uid cannot read the task of, such as WindowServer: its name and
+    /// path, which are open to anyone, and no CPU or memory figures.
+    private func gpuOnlyRow(pid: pid_t, name: String) -> ProcessRow {
+        let pathLength = pathBuffer.withUnsafeMutableBufferPointer {
+            proc_pidpath(pid, $0.baseAddress, UInt32($0.count))
+        }
+        let path: String? = pathLength > 0
+            ? pathBuffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+            : nil
+        // The registry's name is cut to 16 characters; the executable's is whole.
+        let executable = path.map { ($0 as NSString).lastPathComponent } ?? ""
+        return ProcessRow(pid: pid, name: executable.isEmpty ? name : executable,
+                          executablePath: path,
                           isAppleSignedSystem: path.map(Self.isSystemPath) ?? false)
     }
 

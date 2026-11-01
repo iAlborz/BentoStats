@@ -48,6 +48,10 @@ struct BentoGallery: View {
     }
 
     private static func shortLabel(_ kind: BentoTileKind) -> String {
-        kind == .thermal ? String(localized: "Temp") : kind.label
+        switch kind {
+        case .thermal: return String(localized: "Temp")
+        case .processes: return String(localized: "Processes")
+        default: return kind.label
+        }
     }
 }
