@@ -133,18 +133,21 @@ struct CollectorContractTests {
         }
     }
 
+    /// Stopping the collector used to drop its cached purgeable figures, so after a
+    /// restart the startup disk could show nothing purgeable until the round-robin came
+    /// back to it. The live figure itself moves, by gigabytes in seconds on a busy disk,
+    /// so this asserts that it is still there, not that it is still the same.
     @Test("the startup disk's purgeable figure does not vanish across restarts")
-    func rootPurgeableSurvivesRestart() {
+    func rootPurgeableSurvivesRestart() throws {
         let collector = DiskCollector()
-        var figures: [UInt64] = []
-        for _ in 0..<4 {
-            guard let root = sample(collector, times: 2).last?.value?.rootVolume else { return }
-            figures.append(root.purgeableBytes)
-        }
-        guard let first = figures.first else { return }
-        for figure in figures.dropFirst() {
-            #expect(abs(Int64(figure) - Int64(first)) < 1_000_000_000,
-                    "purgeable figure drifted across restarts: \(figures)")
+        // Nothing purgeable on this disk means nothing that could vanish.
+        guard let first = sample(collector, times: 2).last?.value?.rootVolume?.purgeableBytes,
+              first > 0 else { return }
+        for restart in 1...3 {
+            let root = try #require(sample(collector, times: 2).last?.value?.rootVolume,
+                                    "the startup disk vanished on restart \(restart)")
+            #expect(root.purgeableBytes > 0,
+                    "purgeable figure vanished on restart \(restart), was \(first) before")
         }
     }
 
@@ -240,12 +243,16 @@ struct CollectorContractTests {
         defer { hog.terminate() }
 
         let size = Int32(MemoryLayout<proc_taskinfo>.size)
-        func resident(_ pid: pid_t) -> UInt64 {
+        func taskInfo(_ pid: pid_t) -> proc_taskinfo? {
             var info = proc_taskinfo()
             let read = withUnsafeMutablePointer(to: &info) {
                 proc_pidinfo(pid, PROC_PIDTASKINFO, 0, $0, size)
             }
-            return read == size ? info.pti_resident_size : 0
+            return read == size ? info : nil
+        }
+        func resident(_ pid: pid_t) -> UInt64 { taskInfo(pid)?.pti_resident_size ?? 0 }
+        func cpuTime(_ pid: pid_t) -> UInt64? {
+            taskInfo(pid).map { $0.pti_total_user &+ $0.pti_total_system }
         }
         let deadline = Date().addingTimeInterval(10)
         while resident(hog.processIdentifier) < 700 * 1024 * 1024, Date() < deadline {
@@ -253,8 +260,20 @@ struct CollectorContractTests {
         }
         try #require(resident(hog.processIdentifier) >= 700 * 1024 * 1024,
                      "the hog never became resident, so the test cannot say anything")
-        // perl assigns by copy, so the pages are resident before the CPU goes quiet.
-        Thread.sleep(forTimeInterval: 0.5)
+        // perl assigns by copy, so the pages are resident before the CPU goes quiet, and
+        // on a loaded machine the copy can still be running seconds later. Only a full
+        // second without CPU time says it has reached `sleep`: a shorter gap can be the
+        // scheduler not getting round to it.
+        var quietReads = 0
+        var lastCPUTime = cpuTime(hog.processIdentifier)
+        let quietDeadline = Date().addingTimeInterval(30)
+        while quietReads < 10, Date() < quietDeadline {
+            Thread.sleep(forTimeInterval: 0.1)
+            let now = cpuTime(hog.processIdentifier)
+            quietReads = now != nil && now == lastCPUTime ? quietReads + 1 : 0
+            lastCPUTime = now
+        }
+        try #require(quietReads >= 10, "the hog never went idle, so the test cannot say anything")
 
         let states = sample(ProcessCollector(), times: 2, interval: 0.3)
         let processes = try #require(states.last?.value)
