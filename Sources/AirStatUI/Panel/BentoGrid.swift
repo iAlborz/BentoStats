@@ -2684,16 +2684,25 @@ private struct ResourceBadge: View {
         .frame(width: Self.size.width, height: Self.size.height)
     }
 
-    /// The name in the chips' silver.
+    /// The name in the chips' silver. The GPU's die is lit across in its orange, as its
+    /// cores light on its card, and the name keeps the die's dark halo over it.
     private var chip: some View {
         ZStack {
             ChipFace()
+            if module == .gpu {
+                RoundedRectangle(cornerRadius: 0.5, style: .continuous)
+                    .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .shadow(color: colors[0].opacity(0.6), radius: 2)
+                    .padding(1.5)
+            }
             Text(module.label)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 11, weight: .bold))
                 .tracking(1)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .foregroundStyle(ChipGraphic.silver)
+                .foregroundStyle(LinearGradient(colors: [Color(white: 1), Color(white: 0.84)],
+                                                startPoint: .top, endPoint: .bottom))
+                .shadow(color: .black.opacity(0.5), radius: 1)
         }
     }
 
@@ -2707,7 +2716,7 @@ private struct ResourceBadge: View {
             board.fill(BoardFinish.gradient)
             VStack(spacing: 0) {
                 ZStack {
-                    face.fill(LinearGradient(colors: [colors[0].opacity(0.6), colors[0].opacity(0.2)],
+                    face.fill(LinearGradient(colors: [colors[0], colors[0].opacity(0.75)],
                                              startPoint: .leading, endPoint: .trailing))
                     Text(module.label)
                         .font(.system(size: 11, weight: .bold))
