@@ -26,8 +26,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     public func show() {
         let window = self.window ?? makeWindow()
         self.window = window
-        // Two preferences are process state rather than stored values, so they take
-        // effect only when something applies them. Doing it here means opening
+        // The Dock icon is process state rather than a stored value, so it takes
+        // effect only when something applies it. Doing it here means opening
         // settings always reconciles the app with what the user asked for, whatever
         // happened at launch.
         applyProcessPreferences()
@@ -95,11 +95,6 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func applyProcessPreferences() {
-        switch settings.settings.general.appearance {
-        case .system: NSApp.appearance = nil
-        case .light: NSApp.appearance = NSAppearance(named: .aqua)
-        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
-        }
         NSApp.setActivationPolicy(settings.settings.general.showsDockIcon ? .regular : .accessory)
     }
 }

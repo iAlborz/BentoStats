@@ -1,9 +1,8 @@
 import SwiftUI
-import AppKit
 import AirStatKit
 
-/// How Bento Stats looks: light or dark, which layout the panel draws, and how its
-/// charts are drawn.
+/// How Bento Stats looks: which layout the panel draws, and how its charts are drawn.
+/// It is always dark.
 ///
 /// The colours are the design's own: each card has its pair, chosen together, so there
 /// is no longer a colour per metric to set here.
@@ -12,15 +11,6 @@ struct AppearancePane: View {
 
     var body: some View {
         Form {
-            Section {
-                Picker("Theme", selection: settings.binding(\.general.appearance,
-                                                            onChange: applyAppearance)) {
-                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-            }
-
             Section {
                 Picker("Layout", selection: settings.binding(\.panel.style)) {
                     ForEach(PanelStyle.allCases, id: \.self) { style in
@@ -31,7 +21,7 @@ struct AppearancePane: View {
             } header: {
                 Text("Panel")
             } footer: {
-                SettingsFootnote(String(localized: "Bento and Bento Small each keep their own arrangement. To arrange the cards, press and hold one, or Control-click it and choose Edit Layout. Point at a card to see its detail. MacBook is always dark."))
+                SettingsFootnote(String(localized: "Bento and Bento Small each keep their own arrangement. To arrange the cards, press and hold one, or Control-click it and choose Edit Layout. Point at a card to see its detail."))
             }
 
             Section {
@@ -52,13 +42,5 @@ struct AppearancePane: View {
             }
         }
         .settingsFormStyle()
-    }
-
-    private func applyAppearance(_ mode: AppearanceMode) {
-        switch mode {
-        case .system: NSApp.appearance = nil
-        case .light: NSApp.appearance = NSAppearance(named: .aqua)
-        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
-        }
     }
 }

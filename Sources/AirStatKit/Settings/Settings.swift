@@ -64,18 +64,6 @@ public enum ByteUnitStyle: String, Sendable, Codable, CaseIterable, Equatable, H
     public var base: Double { self == .binary ? 1024 : 1000 }
 }
 
-public enum AppearanceMode: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    case system, light, dark
-
-    public var label: String {
-        switch self {
-        case .system: return String(localized: "Match System")
-        case .light: return String(localized: "Light")
-        case .dark: return String(localized: "Dark")
-        }
-    }
-}
-
 // MARK: - Menu bar
 
 /// A single readout the user can place in the menu bar.
@@ -659,7 +647,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     /// Off until the user turns it on: the Mac App Store does not let an app start
     /// itself at login without being asked to.
     public var launchAtLogin: Bool
-    public var appearance: AppearanceMode
     public var temperatureUnit: TemperatureUnit
     public var networkRateUnit: NetworkRateUnit
     public var byteUnitStyle: ByteUnitStyle
@@ -677,7 +664,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
 
     public init(updateInterval: TimeInterval = 2,
                 launchAtLogin: Bool = false,
-                appearance: AppearanceMode = .system,
                 temperatureUnit: TemperatureUnit = .celsius,
                 networkRateUnit: NetworkRateUnit = .bytes,
                 byteUnitStyle: ByteUnitStyle = .decimal,
@@ -689,7 +675,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
                 checksForUpdates: Bool = true) {
         self.updateInterval = updateInterval
         self.launchAtLogin = launchAtLogin
-        self.appearance = appearance
         self.temperatureUnit = temperatureUnit
         self.networkRateUnit = networkRateUnit
         self.byteUnitStyle = byteUnitStyle
@@ -704,7 +689,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     public static let allowedIntervals: [TimeInterval] = [0.5, 1, 2, 3, 5, 10, 30]
 
     private enum CodingKeys: String, CodingKey {
-        case updateInterval, launchAtLogin, appearance, temperatureUnit, networkRateUnit
+        case updateInterval, launchAtLogin, temperatureUnit, networkRateUnit
         case byteUnitStyle, showsPercentSign, throttlesWhenOccluded, pausesOnLowPower
         case fetchesPublicIP, showsDockIcon, checksForUpdates
     }
@@ -713,7 +698,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         updateInterval = min(max(c.value(.updateInterval, or: 2.0), 0.5), 60)
         launchAtLogin = c.value(.launchAtLogin, or: false)
-        appearance = c.value(.appearance, or: AppearanceMode.system)
         temperatureUnit = c.value(.temperatureUnit, or: TemperatureUnit.celsius)
         networkRateUnit = c.value(.networkRateUnit, or: NetworkRateUnit.bytes)
         byteUnitStyle = c.value(.byteUnitStyle, or: ByteUnitStyle.decimal)

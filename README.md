@@ -36,7 +36,7 @@ Point at any card for history charts and the details the card leaves out.
 - **Bento** for the full picture, **Bento Small** for a compact one, or **MacBook mode**
 - Choose what the menu bar itself shows
 - Get a notification when a reading crosses a limit you set
-- Global keyboard shortcuts, and light and dark appearance
+- Global keyboard shortcuts
 
 <img src="docs/screenshots/bento-small.png" alt="Bento Small" width="49%"> <img src="docs/screenshots/arrange.png" alt="Arranging the grid" width="49%">
 

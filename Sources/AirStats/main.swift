@@ -10,6 +10,10 @@ if DiagnosticsCLI.runIfRequested() {
 // never flashes a Dock tile on launch.
 let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
+// Dark only, whatever the system's appearance: the panel, its cards and Settings are
+// designed for dark. The menu bar item still follows the menu bar, which the system
+// draws in its own appearance.
+application.appearance = NSAppearance(named: .darkAqua)
 
 let delegate = AppDelegate()
 application.delegate = delegate
