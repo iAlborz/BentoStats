@@ -268,8 +268,7 @@ struct SettingsRootView: View {
     @ViewBuilder
     private var pane: some View {
         switch tab {
-        case .general: GeneralPane(settings: settings, updater: updater)
-        case .menuBar: MenuBarPane(settings: settings, engine: engine)
+        case .general: GeneralPane(settings: settings, engine: engine, updater: updater)
         case .appearance: AppearancePane(settings: settings)
         case .notifications: NotificationsPane(settings: settings, engine: engine,
                                                authority: authority)

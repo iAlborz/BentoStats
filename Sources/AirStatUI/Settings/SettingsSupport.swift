@@ -12,12 +12,14 @@ import AirStatKit
 /// Sampling and Units in a scroll nobody reached, which is a poor place for the one
 /// setting a user arrives already looking for. Three rows is a thin pane, but a pane
 /// is findable and the bottom of another pane's scroll is not.
+///
+/// Menu Bar went into General: once its preview was where the readouts are edited, the
+/// preview was all the pane had.
 public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    // Order is the source list's order, and it is grouped: what the app is, then the
-    // two things it does besides the panel, then how it looks and how you reach it,
-    // then about.
+    // Order is the source list's order, and it is grouped: what the app is, then what
+    // it does besides the panel, then how it looks and how you reach it, then about.
     case general
-    case menuBar, notifications
+    case notifications
     case appearance, shortcuts
     case about
 
@@ -26,7 +28,6 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
     public var label: String {
         switch self {
         case .general: return String(localized: "General")
-        case .menuBar: return String(localized: "Menu Bar")
         case .appearance: return String(localized: "Appearance")
         case .notifications: return String(localized: "Notifications")
         case .shortcuts: return String(localized: "Shortcuts")
@@ -36,11 +37,11 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
 
     /// Whether a rule is drawn above this row in the source list. The groups are the
     /// hierarchy: without them the panes read as one undifferentiated list, and
-    /// nothing says that Menu Bar and Notifications are the same kind of thing while
+    /// nothing says that Appearance and Shortcuts are the same kind of thing while
     /// General and About are not.
     var startsGroup: Bool {
         switch self {
-        case .menuBar, .appearance, .about: return true
+        case .notifications, .appearance, .about: return true
         default: return false
         }
     }
@@ -48,7 +49,6 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
     public var symbolName: String {
         switch self {
         case .general: return "gearshape"
-        case .menuBar: return "menubar.rectangle"
         case .appearance: return "paintpalette"
         case .notifications: return "bell.badge"
         case .shortcuts: return "keyboard"
@@ -60,8 +60,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
     /// restore-defaults without hardcoding the mapping. About edits nothing of its own.
     public var sections: [SettingsStore.SettingsSection] {
         switch self {
-        case .general: return [.general]
-        case .menuBar: return [.menuBar]
+        case .general: return [.general, .menuBar]
         case .appearance: return [.charts]
         case .notifications: return [.notifications]
         case .shortcuts: return [.shortcuts]
@@ -399,52 +398,6 @@ struct SettingsCaution: View {
 
 // MARK: - Row lists
 
-/// A bordered box of rows, standing in for `List`.
-///
-/// `List` is an `NSTableView`, and an `NSTableView` draws nothing when a windowless
-/// process asks a view tree to cache its display — which would leave every
-/// reorderable list in this window blank in the only review tool the project has.
-/// A stack of rows draws the same thing, renders offscreen, and keeps drag
-/// reordering through `draggable`/`dropDestination`.
-struct SettingsListBox<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(spacing: 0) { content }
-            .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-            .clipShape(RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
-                    .strokeBorder(Design.Palette.separator)
-            }
-    }
-}
-
-/// One row of a `SettingsListBox`, with its separator, selection fill and the
-/// insertion line shown while something is dragged over it.
-struct SettingsListRow<Content: View>: View {
-    var isFirst: Bool = false
-    var isDropTarget: Bool = false
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if isDropTarget {
-                Rectangle()
-                    .fill(Design.Palette.accent)
-                    .frame(height: 2)
-            } else if !isFirst {
-                Divider()
-            }
-            content
-                .padding(.horizontal, Design.Space.m)
-                .padding(.vertical, Design.Space.s)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-    }
-}
-
 /// A module's glyph and name, with the glyph in a fixed box.
 ///
 /// SF Symbols differ in width, and `Label` leaves that difference in the layout —
@@ -462,138 +415,6 @@ struct ModuleLabel: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(module.label)
-    }
-}
-
-/// Move-up / move-down buttons for a reorderable list.
-///
-/// Drag reordering is the fast path but it is not reachable from the keyboard and
-/// invisible to VoiceOver, so every reorderable list also carries these.
-struct ReorderControls: View {
-    let canMoveUp: Bool
-    let canMoveDown: Bool
-    let itemLabel: String
-    let move: (Int) -> Void
-
-    var body: some View {
-        HStack(spacing: Design.Space.xxs) {
-            RowIconButton(systemName: "chevron.up",
-                          help: String(localized: "Move \(itemLabel) up"),
-                          label: String(localized: "Move \(itemLabel) up")) { move(-1) }
-                .disabled(!canMoveUp)
-            RowIconButton(systemName: "chevron.down",
-                          help: String(localized: "Move \(itemLabel) down"),
-                          label: String(localized: "Move \(itemLabel) down")) { move(1) }
-                .disabled(!canMoveDown)
-        }
-    }
-}
-
-/// A pull-down in a list row.
-///
-/// The highlight is drawn around the value the menu changes, not around its chevron.
-/// AppKit's own menu button rings the indicator, which in a row that also carries
-/// reorder and delete buttons made the one control that opens a menu look like the
-/// two that do something immediately.
-///
-/// A caller that passes a `width` gets a column: every chevron lands at the same x,
-/// and the box does not resize as the value changes, so the control stays under the
-/// pointer that just used it. Passing none sizes the menu to its own title, for a
-/// control that sits alone against the row's trailing edge and has no column to line
-/// up with.
-struct RowMenu<Content: View>: View {
-    let title: String
-    var width: CGFloat?
-    let label: String
-    @ViewBuilder var content: Content
-
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovering = false
-
-    var body: some View {
-        Menu { content } label: {
-            HStack(spacing: Design.Space.xs) {
-                Text(title)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: Design.Space.xs)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(isEnabled ? Design.Palette.tertiaryText
-                                               : Design.Palette.quaternaryText)
-            }
-            .padding(.horizontal, Design.Space.xs)
-            .padding(.vertical, 3)
-            .frame(width: width, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
-                    .fill(isHovering && isEnabled
-                          ? Design.Palette.primaryText.opacity(0.08)
-                          : Color.clear)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: Design.Radius.control,
-                                           style: .continuous))
-        }
-        // `.button` with a plain button style is the one combination that draws the
-        // label exactly as written. `.borderlessButton` substitutes AppKit's own
-        // pop-up chrome, which puts its indicator on the leading edge and ignores the
-        // width, and `.fixedSize()` on top of that collapses the frame to the title.
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        // Only where there is no column to hold: `fixedSize` collapses to the title
-        // and would throw away an explicit width.
-        .fixedSize(horizontal: width == nil, vertical: false)
-        .onHover { hovering in
-            withAnimation(Design.Motion.hover) { isHovering = hovering }
-        }
-        .accessibilityLabel(label)
-    }
-}
-
-/// A glyph button in a list row, sized for the pointer rather than for the glyph.
-///
-/// A bare `Image` in a borderless `Button` is only as clickable as the strokes it
-/// draws — a chevron at caption size is about 10pt across, well under the 24pt the
-/// HIG asks for, and it gave no sign it was a button until it had already been hit.
-/// The frame is the hit target, the fill is the sign, and neither is visible until
-/// the pointer is over the row.
-struct RowIconButton: View {
-    let systemName: String
-    let help: String
-    let label: String
-    let action: () -> Void
-
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovering = false
-
-    private static let side: CGFloat = 22
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 11, weight: .semibold))
-                .frame(width: Self.side, height: Self.side)
-                .background {
-                    RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
-                        .fill(isHovering && isEnabled
-                              ? Design.Palette.primaryText.opacity(0.10)
-                              : Color.clear)
-                }
-                // The frame alone is not a hit target: a Button's shape is its label's
-                // drawn content, and an empty background draws nothing.
-                .contentShape(RoundedRectangle(cornerRadius: Design.Radius.control,
-                                               style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(isEnabled
-                         ? (isHovering ? Design.Palette.primaryText : Design.Palette.secondaryText)
-                         : Design.Palette.quaternaryText)
-        .onHover { hovering in
-            withAnimation(Design.Motion.hover) { isHovering = hovering }
-        }
-        .help(help)
-        .accessibilityLabel(label)
     }
 }
 

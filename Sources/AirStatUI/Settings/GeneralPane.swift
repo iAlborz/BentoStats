@@ -4,6 +4,8 @@ import AirStatKit
 
 struct GeneralPane: View {
     let settings: SettingsStore
+    /// Live numbers for the menu bar preview, which falls back to fixtures without it.
+    let engine: MetricsEngine?
     /// Absent unless this copy updates itself.
     var updater: Updater? = nil
 
@@ -13,6 +15,8 @@ struct GeneralPane: View {
 
     var body: some View {
         Form {
+            MenuBarPreviewSection(settings: settings, engine: engine)
+
             Section {
                 Toggle("Open Bento Stats at login",
                        isOn: settings.binding(\.general.launchAtLogin, onChange: applyLoginItem))

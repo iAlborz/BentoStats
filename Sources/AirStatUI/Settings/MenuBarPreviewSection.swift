@@ -2,13 +2,14 @@ import SwiftUI
 import AppKit
 import AirStatKit
 
-struct MenuBarPane: View {
+/// The menu bar, edited where it is drawn: click a readout for its styles, drag it to
+/// move it, and add one with the plus. A section of General, since this is all the menu
+/// bar has to set.
+struct MenuBarPreviewSection: View {
     let settings: SettingsStore
     let engine: MetricsEngine?
 
     @State private var dropTarget: MenuBarItemConfig.ID?
-    /// The preview's own, so dragging over the bar does not also light up the list.
-    @State private var previewDropTarget: MenuBarItemConfig.ID?
 
     private var items: [MenuBarItemConfig] { settings.settings.menuBar.items }
 
@@ -17,163 +18,21 @@ struct MenuBarPane: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                MenuBarPreviewStrip(model: previewModel, isEmpty: previewModel.items.isEmpty) { slot in
-                    previewReadout(slot)
-                } accessory: {
-                    AddReadoutButton { addMenuItems }
-                }
-                .listRowInsets(EdgeInsets())
-            } header: {
-                Text("Preview")
-            } footer: {
-                SettingsFootnote(String(localized: "Click a readout to choose its style or remove it. Drag one to move it."))
+        Section {
+            MenuBarPreviewStrip(model: previewModel, isEmpty: previewModel.items.isEmpty) { slot in
+                previewReadout(slot)
+            } accessory: {
+                AddReadoutButton { addMenuItems }
             }
-
-            Section {
-                readoutList
-                readoutListControls
-            } header: {
-                Text("Readouts")
-            }
-        }
-        .settingsFormStyle()
-    }
-
-    // MARK: Readout list
-
-    private var readoutList: some View {
-        SettingsListBox {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                SettingsListRow(isFirst: index == 0,
-                                isDropTarget: item.id == dropTarget) {
-                    readoutRow(item, index: index)
-                }
-                .draggable(item.id.uuidString) {
-                    Text(item.metric.label).padding(Design.Space.xs)
-                }
-                .dropDestination(for: String.self) { payload, _ in
-                    dropTarget = nil
-                    guard let dragged = payload.first else { return false }
-                    return move(idString: dragged, to: index)
-                } isTargeted: { targeted in
-                    dropTarget = targeted ? item.id : (dropTarget == item.id ? nil : dropTarget)
-                }
-            }
-        }
-        .accessibilityLabel("Menu bar readouts")
-    }
-
-    /// Everything a readout has, on the readout's own row.
-    ///
-    /// The metric and style used to live in an "Editing …" section below the list,
-    /// reached by selecting a row. That put the control you wanted somewhere other
-    /// than the thing you wanted to change — and once the list ran past four readouts
-    /// the section fell below the fold, so clicking a row appeared to do nothing at
-    /// all. The style also sat in the row already, right-aligned exactly where a popup
-    /// menu's value sits, as text that did not respond to a click.
-    private func readoutRow(_ item: MenuBarItemConfig, index: Int) -> some View {
-        HStack(spacing: Design.Space.m) {
-            Toggle("", isOn: enabledBinding(for: item))
-                .toggleStyle(.checkbox)
-                .labelsHidden()
-                .disabled(isLastEnabled(item))
-                .help(isLastEnabled(item)
-                      ? "At least one readout must stay visible so the menu bar item remains clickable."
-                      : "Show \(item.metric.label) in the menu bar")
-                .accessibilityLabel("Show \(item.metric.label)")
-
-            RowMenu(title: item.metric.label,
-                    width: Self.metricColumn,
-                    label: String(localized: "\(item.metric.label) metric")) {
-                Picker("Metric", selection: metricBinding(for: item)) {
-                    ForEach(MenuBarMetric.allCases, id: \.self) { metric in
-                        Text(metric.label).tag(metric)
-                    }
-                }
-                .pickerStyle(.inline)
-            }
-
-            Spacer(minLength: Design.Space.s)
-
-            // The badge stands in for the style control rather than joining it: a
-            // readout this Mac cannot serve has no style worth choosing, and the two
-            // together do not fit the row.
-            if let reason = availability.note(for: item.metric) {
-                UnavailableBadge(reason: reason)
-            } else {
-                styleMenu(item)
-            }
-
-            ReorderControls(canMoveUp: index > 0,
-                            canMoveDown: index < items.count - 1,
-                            itemLabel: item.metric.label) { offset in
-                move(item, by: offset)
-            }
-
-            // Deleting belongs on the row it deletes. As a button under the list it
-            // acted on "the selected readout", and the only thing naming that readout
-            // was a tint on one row — a destructive control whose target you had to
-            // infer. It also matches the desktop widget's module list, which is the same
-            // list of the same metrics doing the same job.
-            RowIconButton(systemName: "trash",
-                          help: items.count <= 1
-                              ? String(localized: "The last readout cannot be removed.")
-                              : String(localized: "Remove \(item.metric.label) from the menu bar"),
-                          label: String(localized: "Remove \(item.metric.label)")) {
-                remove(item)
-            }
-            .disabled(items.count <= 1)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(item.metric.label)
-        .accessibilityValue("\(item.isEnabled ? String(localized: "Shown") : String(localized: "Hidden")), \(item.style.label) style")
-    }
-
-    /// The style popup, carrying the caption toggle with it.
-    ///
-    /// The caption is a property of the style — only three of the five can show one —
-    /// so it belongs behind the same control rather than as a second checkbox
-    /// competing with the one that means "shown".
-    private func styleMenu(_ item: MenuBarItemConfig) -> some View {
-        RowMenu(title: item.style.label,
-                label: String(localized: "\(item.metric.label) display style")) {
-            Picker("Display as", selection: styleBinding(for: item)) {
-                ForEach(item.metric.supportedStyles, id: \.self) { style in
-                    Text(style.label).tag(style)
-                }
-            }
-            .pickerStyle(.inline)
-
-            if item.style.supportsCaption {
-                Divider()
-                Toggle(captionToggleTitle(for: item), isOn: captionBinding(for: item))
-            }
+            .listRowInsets(EdgeInsets())
+        } header: {
+            Text("Menu Bar")
+        } footer: {
+            SettingsFootnote(String(localized: "Click a readout to choose its style or remove it. Drag one to move it."))
         }
     }
 
-    /// Wide enough for "Battery Time Remaining", the longest metric name. The style
-    /// beside it needs no column: it is the last thing in the row and sits against the
-    /// trailing edge, where a fixed box would only add a gap.
-    private static let metricColumn: CGFloat = 175
-
-    private var readoutListControls: some View {
-        HStack(spacing: Design.Space.m) {
-            Menu {
-                addMenuItems
-            } label: {
-                Label("Add Readout", systemImage: "plus")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .accessibilityLabel("Add a readout")
-
-            Spacer()
-        }
-    }
-
-    /// Every metric, shared by the list's Add Readout and the preview's plus.
+    /// Every metric, for the plus.
     private var addMenuItems: some View {
         ForEach(MenuBarMetric.allCases, id: \.self) { metric in
             Button {
@@ -195,18 +54,18 @@ struct MenuBarPane: View {
     private func previewReadout(_ slot: MenuBarPreviewSlot) -> some View {
         if let index = items.firstIndex(where: { $0.id == slot.id }) {
             let item = items[index]
-            PreviewReadout(item: item, isDropTarget: previewDropTarget == item.id) {
+            PreviewReadout(item: item, isDropTarget: dropTarget == item.id) {
                 readoutMenu(item)
             }
             .draggable(item.id.uuidString) {
                 Text(item.metric.label).padding(Design.Space.xs)
             }
             .dropDestination(for: String.self) { payload, _ in
-                previewDropTarget = nil
+                dropTarget = nil
                 guard let dragged = payload.first else { return false }
                 return move(idString: dragged, to: index)
             } isTargeted: { targeted in
-                previewDropTarget = targeted ? item.id : (previewDropTarget == item.id ? nil : previewDropTarget)
+                dropTarget = targeted ? item.id : (dropTarget == item.id ? nil : dropTarget)
             }
         }
     }
@@ -255,34 +114,15 @@ struct MenuBarPane: View {
         }
     }
 
-    /// The label the menu bar would draw for this readout, quoted back so the toggle
-    /// says what it will actually put on screen, and where: a bar stacks its caption
-    /// beside it, the rest put it above the number.
-    private func captionToggleTitle(for item: MenuBarItemConfig) -> String {
-        if item.style == .bar {
-            let label = MenuBarRenderModel.sideCaptionText(for: item.metric) ?? item.metric.label
-            return String(localized: "Show \"\(label)\" beside the bar")
-        }
-        if item.style == .tile {
-            let label = MenuBarRenderModel.sideCaptionText(for: item.metric) ?? item.metric.label
-            return String(localized: "Show \"\(label)\" inside the tile")
-        }
-        let label = MenuBarRenderModel.captionText(for: item.metric) ?? item.metric.label
-        return String(localized: "Show \"\(label)\" above the value")
-    }
-
     // MARK: Model access
 
-    /// Bindings carry the item's id rather than its position, so a rename or reorder
-    /// cannot silently write to whichever readout now sits at that index.
+    /// Writes find the item by its id rather than its position, so a reorder cannot
+    /// silently write to whichever readout now sits at that index.
     ///
-    /// The getters answer from the captured item instead of going back to the array.
-    /// SwiftUI reads a `Picker`'s selection during the same update pass that replaces
-    /// the list, before the pane's body has had a chance to drop the editing section,
-    /// so a getter that subscripted by index would trap on anything that shortens
-    /// `menuBar.items` under the editor: Restore Defaults, or an import. The metric,
-    /// style and caption factories are internal rather than private so the regression
-    /// test can hold a binding across exactly that reset.
+    /// The style binding's getter answers from the captured item instead of going back
+    /// to the array, so a binding read after something shortened `menuBar.items` —
+    /// Restore Defaults, or an import — cannot trap. It is internal rather than private
+    /// so the regression test can hold one across exactly that reset.
     private func mutate(_ item: MenuBarItemConfig,
                         _ body: @escaping (inout MenuBarItemConfig) -> Void) {
         settings.update { s in
@@ -291,34 +131,9 @@ struct MenuBarPane: View {
         }
     }
 
-    private func enabledBinding(for item: MenuBarItemConfig) -> Binding<Bool> {
-        Binding(get: { item.isEnabled },
-                set: { isOn in mutate(item) { $0.isEnabled = isOn } })
-    }
-
-    func metricBinding(for item: MenuBarItemConfig) -> Binding<MenuBarMetric> {
-        Binding(get: { item.metric },
-                set: { metric in
-                    mutate(item) { config in
-                        config.metric = metric
-                        // `sanitized()` in the store will clamp an unsupported style,
-                        // but doing it here keeps the picker from flashing a value it
-                        // is about to lose.
-                        if !metric.supportedStyles.contains(config.style) {
-                            config.style = metric.supportedStyles.first ?? .text
-                        }
-                    }
-                })
-    }
-
     func styleBinding(for item: MenuBarItemConfig) -> Binding<MenuBarDisplayStyle> {
         Binding(get: { item.style },
                 set: { style in mutate(item) { $0.style = style } })
-    }
-
-    func captionBinding(for item: MenuBarItemConfig) -> Binding<Bool> {
-        Binding(get: { item.showsCaption },
-                set: { shows in mutate(item) { $0.showsCaption = shows } })
     }
 
     /// The item the store would refuse to disable, or nil when more than one is on.
@@ -331,7 +146,7 @@ struct MenuBarPane: View {
         lastEnabledItem?.id == item.id
     }
 
-    /// Drop handler. Returns false for a payload that is not one of our rows, so a
+    /// Drop handler. Returns false for a payload that is not one of our readouts, so a
     /// stray drag from another app is refused rather than silently ignored.
     private func move(idString: String, to destination: Int) -> Bool {
         guard let id = UUID(uuidString: idString),
@@ -346,24 +161,26 @@ struct MenuBarPane: View {
         return true
     }
 
-    private func move(_ item: MenuBarItemConfig, by offset: Int) {
+    /// Appended after the last readout, where the plus is. A readout hidden from the
+    /// list this used to have is not drawn anywhere now, so adding its metric brings
+    /// that one back, in its own style, rather than a second copy beside it. Internal
+    /// for the test.
+    func add(_ metric: MenuBarMetric) {
         settings.update { s in
-            guard let index = s.menuBar.items.firstIndex(where: { $0.id == item.id }) else { return }
-            let target = index + offset
-            guard s.menuBar.items.indices.contains(target) else { return }
-            s.menuBar.items.swapAt(index, target)
+            if let hidden = s.menuBar.items.firstIndex(where: { $0.metric == metric && !$0.isEnabled }) {
+                var item = s.menuBar.items.remove(at: hidden)
+                item.isEnabled = true
+                s.menuBar.items.append(item)
+            } else {
+                s.menuBar.items.append(MenuBarItemConfig(metric: metric,
+                                                         style: metric.supportedStyles.first ?? .text))
+            }
         }
     }
 
-    private func add(_ metric: MenuBarMetric) {
-        let config = MenuBarItemConfig(metric: metric,
-                                       style: metric.supportedStyles.first ?? .text)
-        settings.update { $0.menuBar.items.append(config) }
-    }
-
-    /// Removed by identity rather than by position, for the same reason the row's
-    /// bindings are: the row a user pressed is the row that goes, whatever the array
-    /// has done since.
+    /// Removed by identity rather than by position, for the same reason the bindings
+    /// are: the readout a user clicked is the one that goes, whatever the array has
+    /// done since.
     private func remove(_ item: MenuBarItemConfig) {
         settings.update { s in
             guard s.menuBar.items.count > 1 else { return }
