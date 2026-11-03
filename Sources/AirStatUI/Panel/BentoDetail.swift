@@ -472,10 +472,10 @@ struct BentoDetail: View {
         RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous).fill(BentoGrid.surface)
     }
 
-    /// The module's history in its own colour, where it has one and charts are on.
+    /// The module's history in its own colour, where it has one.
     @ViewBuilder
     private func history(available: Bool = true) -> some View {
-        if available, settings.settings.panel.showsHistoryChart, let series = module.historySeries {
+        if available, let series = module.historySeries {
             tile {
                 HistoryChart(series,
                              history: engine.history,

@@ -3,9 +3,8 @@ import AirStatKit
 
 /// Which of the two windows a history chart is showing.
 ///
-/// Two fixed ranges and no picker. The first is whatever "Keep history for" already
-/// is, so the chart footer never grows a second retention control next to the one in
-/// Settings; the second is the day the minute tier keeps.
+/// Two fixed ranges and no picker. The first is the live hour the raw ring keeps; the
+/// second is the day the minute tier keeps.
 public enum HistoryRange: Equatable, Sendable, CaseIterable {
     case recent
     case day

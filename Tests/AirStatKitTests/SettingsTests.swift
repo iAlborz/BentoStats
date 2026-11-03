@@ -59,11 +59,9 @@ struct SettingsDecodingTests {
     @Test("out-of-range values are clamped, not accepted")
     func clamping() throws {
         let settings = try decode("""
-        {"general":{"updateInterval":9999},
-         "charts":{"historyDuration":999999}}
+        {"general":{"updateInterval":9999}}
         """)
         #expect(settings.general.updateInterval == 60)
-        #expect(settings.charts.historyDuration == 3600)
     }
 
     @Test("an empty menu bar is repaired so the app stays reachable")
@@ -131,17 +129,6 @@ struct SettingsDecodingTests {
 @Suite("Required sources track what is actually on screen")
 struct RequiredSourceTests {
 
-    @Test("only menu bar sources are needed when the panel is closed and draws no charts")
-    func menuBarOnly() {
-        var settings = Settings()
-        settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
-        settings.panel.showsHistoryChart = false
-        let sources = settings.requiredSources(panelVisible: false)
-        #expect(sources.contains(.cpu))
-        #expect(!sources.contains(.power))     // nothing on screen needs the battery
-        #expect(!sources.contains(.processes)) // the expensive one stays off
-    }
-
     @Test("charted modules keep sampling while the panel is closed, so the day has no holes")
     func chartedModulesKeepSampling() {
         var settings = Settings()
@@ -174,23 +161,21 @@ struct RequiredSourceTests {
     }
 }
 
-@Suite("History capacity follows interval and retention")
+@Suite("History capacity follows the interval")
 struct HistoryCapacityTests {
 
-    @Test("capacity covers the requested duration at the chosen interval")
+    @Test("capacity covers the live hour at the chosen interval")
     func capacity() {
         var settings = Settings()
         settings.general.updateInterval = 2
-        settings.charts.historyDuration = 300
-        #expect(settings.historyCapacity >= 150)
-        #expect(settings.historyCapacity <= 160)
+        #expect(settings.historyCapacity >= 1800)
+        #expect(settings.historyCapacity <= 1810)
     }
 
-    @Test("capacity stays bounded at the fastest interval and longest retention")
+    @Test("capacity stays bounded at the fastest interval")
     func bounded() {
         var settings = Settings()
         settings.general.updateInterval = 0.5
-        settings.charts.historyDuration = 3600
         // 7200 samples would be honest but wasteful; the cap keeps memory predictable.
         #expect(settings.historyCapacity == 4096)
     }

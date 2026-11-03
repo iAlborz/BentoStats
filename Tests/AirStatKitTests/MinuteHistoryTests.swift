@@ -175,24 +175,6 @@ struct HistorySleepTests {
     }
 }
 
-@Suite("History chart settings")
-struct HistoryChartSettingsTests {
-
-    @Test("files written before the toggle existed decode with the shipped default")
-    func decodesDefaults() throws {
-        let panel = try JSONDecoder().decode(PanelSettings.self, from: Data("{}".utf8))
-        #expect(panel.showsHistoryChart == true)
-    }
-
-    @Test("the toggle round trips")
-    func roundTrip() throws {
-        var panel = PanelSettings()
-        panel.showsHistoryChart = false
-        let decodedPanel = try JSONDecoder().decode(PanelSettings.self, from: JSONEncoder().encode(panel))
-        #expect(decodedPanel.showsHistoryChart == false)
-    }
-}
-
 @Suite("Minute history file")
 struct MinuteHistoryFileTests {
 

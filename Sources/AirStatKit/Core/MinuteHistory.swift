@@ -2,8 +2,8 @@ import Foundation
 
 /// A day of every series, one minute at a time.
 ///
-/// The raw ring keeps every sample for the "Keep history for" span and is cleared on
-/// wake, because a rate that spans a sleep is meaningless. This tier keeps the last
+/// The raw ring keeps every sample for the live hour and is cleared on wake, because
+/// a rate that spans a sleep is meaningless. This tier keeps the last
 /// 24 hours as one bucket per minute, each holding the minimum, the sum and the
 /// maximum of the samples that fell in it, and it is never cleared: a minute with no
 /// samples is a gap, and a gap is a fact about the day worth drawing.

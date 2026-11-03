@@ -33,12 +33,12 @@ public struct ModuleHistory: Equatable, Sendable {
     }
 }
 
-/// A module's history, at the span the user keeps and over the last day.
+/// A module's history, over the last hour and over the last day.
 ///
 /// The chart under an expanded module's rows. Two fixed ranges in the footer, where
-/// the time span caption already sits: the "Keep history for" span, drawn from the
-/// raw ring, and 24 hours, drawn from the minute tier as a band between each
-/// column's low and high with the mean through it. Hovering scrubs; the time and the
+/// the time span caption already sits: the live hour, drawn from the raw ring, and
+/// 24 hours, drawn from the minute tier as a band between each column's low and high
+/// with the mean through it. Hovering scrubs; the time and the
 /// value go into the footer beside the window statistics, and only a hairline and a
 /// point marker stay on the plot, so nothing covers the data it is describing.
 ///
@@ -226,7 +226,7 @@ public struct HistoryChart: View {
             // An empty series has no span, and a frame with no span labels every
             // mark "now". The window it will fill is the configured one, so the
             // axis says so from the first frame.
-            return Window(range: .recent, span: recent.stats.isEmpty ? settings.historyDuration : recent.span,
+            return Window(range: .recent, span: recent.stats.isEmpty ? ChartSettings.historyDuration : recent.span,
                           end: history.lastSampleDate ?? Date(), format: recent.format,
                           primary: Track(recent: recent),
                           secondary: secondary.map { Track(recent: $0) },
@@ -393,7 +393,7 @@ public struct HistoryChart: View {
     private func footer(_ window: Window) -> some View {
         HStack(spacing: Design.Space.m) {
             HistoryRangePicker(range: Binding(get: { resolvedRange }, set: { range = $0 }),
-                               recentLabel: HistoryRange.label(forSpan: settings.historyDuration))
+                               recentLabel: HistoryRange.label(forSpan: ChartSettings.historyDuration))
             Spacer(minLength: Design.Space.xs)
             ViewThatFits(in: .horizontal) {
                 ForEach(Array(statisticsTiers(window).enumerated()), id: \.offset) { _, tier in

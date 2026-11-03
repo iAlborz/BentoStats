@@ -386,7 +386,7 @@ struct MainActorPerformanceTests {
             var value = 0.5
             let result = Benchmark.measure("SettingsStore.update", iterations: 300) {
                 value = value > 0.9 ? 0.5 : value + 0.01
-                store.update { $0.charts.historyDuration = 300 + value * 100 }
+                store.update { $0.notifications.rules[0].threshold = value }
             }
             // Copies the tree, mutates, sanitises, compares for equality and schedules
             // a save. A slider drag runs this at display rate.

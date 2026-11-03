@@ -58,14 +58,12 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
 
-        // The same glass the click-down panel is made of, so the two surfaces read as
-        // one app rather than as a floating panel and a stock preferences window.
+        // The click-down panel's black, so the two surfaces read as one app rather than
+        // as a floating panel and a stock preferences window. The content paints it.
         //
-        // A translucent window has to be non-opaque with no fill of its own, or the
-        // window's own background sits in front of the material and the translucency
-        // stops at the content edge. That is also what squares the corners off: the
-        // frame view only rounds and masks the content while the window draws itself
-        // normally. So the rounding comes back here, from the backdrop's own layer —
+        // The window is non-opaque with no fill of its own, so nothing squares the
+        // corners off: the frame view only rounds and masks the content while the window
+        // draws itself normally. So the rounding comes from the backdrop's own layer —
         // which is exactly how `PanelWindow` gets its corners.
         window.titlebarAppearsTransparent = true
         // The pane's name is in the source list next to it, selected. Repeating it in
@@ -75,9 +73,11 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isOpaque = false
         window.backgroundColor = .clear
 
-        let backdrop = GlassBackdropView(material: .hudWindow,
-                                         cornerRadius: Design.Radius.window,
-                                         state: .active)
+        let backdrop = NSView()
+        backdrop.wantsLayer = true
+        backdrop.layer?.cornerRadius = Design.Radius.window
+        backdrop.layer?.cornerCurve = .continuous
+        backdrop.layer?.masksToBounds = true
         let hosting = NSHostingView(rootView: root)
         hosting.translatesAutoresizingMaskIntoConstraints = false
         backdrop.addSubview(hosting)
@@ -138,18 +138,11 @@ struct SettingsRootView: View {
     }
 
     var body: some View {
+        // No rule between the columns: the cards are what sets the list apart, on the
+        // panel's black, as they are in the panel.
         HStack(spacing: 0) {
             sidebar
                 .frame(width: SettingsRootView.sidebarWidth)
-            // Neither column carries a material of its own any more: the window is a
-            // single sheet of glass and two materials laid over it would be two
-            // different glasses. What separated the columns was the difference between
-            // those materials, so a rule takes over the job — the same inset hairline
-            // the panel divides its modules with.
-            Rectangle()
-                .fill(Design.Palette.separator)
-                .frame(width: Design.Space.hairline)
-                .accessibilityHidden(true)
             VStack(spacing: 0) {
                 pane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -158,6 +151,8 @@ struct SettingsRootView: View {
         }
         .padding(.top, SettingsRootView.titlebarInset)
         .frame(width: windowWidth, height: windowHeight)
+        // Painted here rather than by the window, so the offscreen render shows it too.
+        .background(Color(nsColor: PanelWindow.backdropColor))
         .onAppear { onPaneChange?(tab) }
         .onChange(of: tab) { _, newValue in
             onPaneChange?(newValue)
@@ -166,94 +161,34 @@ struct SettingsRootView: View {
 
     /// Laid out by hand rather than with `NavigationSplitView`, which drew an opaque
     /// black 0.5pt rule between the columns — measured `#000000` at the seam in both
-    /// appearances, in the real window as well as the render. The sidebar's own
-    /// material is what separates the columns on macOS; there is no rule to draw.
+    /// appearances, in the real window as well as the render.
     ///
-    /// Buttons rather than a `List`: every row stays keyboard-focusable, and the
-    /// source list survives offscreen rendering, which an `NSTableView` does not.
+    /// The panes are cards, the panel's own: its surface on its black, at its radius, the
+    /// selected one ringed the way an open card is. Buttons rather than a `List`: every
+    /// card stays keyboard-focusable, and the source list survives offscreen rendering,
+    /// which an `NSTableView` does not.
     private var sidebar: some View {
         ScrollView {
-            VStack(spacing: Design.Space.xxs) {
+            VStack(spacing: Design.Space.m) {
                 // The window's title bar is transparent and carries no title, so the
                 // mark is what says whose settings these are.
                 //
-                // Set as a masthead rather than as a row. At the rows' own type size,
-                // with their glyph column and their inset, it was a row — one that did
-                // nothing when clicked, sitting directly above six that do. Smaller
-                // caps, the metrics tint, and a rule under it put it in a different
-                // register: this labels the list, it is not the top of it.
-                VStack(alignment: .leading, spacing: Design.Space.s) {
-                    HStack(spacing: Design.Space.xs) {
-                        LogoMark(size: 13)
-                        Text("BENTO STATS")
-                            .font(.system(size: 10, weight: .semibold))
-                            .kerning(0.6)
-                    }
-                    .foregroundStyle(Design.Palette.tertiaryText)
-                    Rectangle()
-                        .fill(Design.Palette.separator)
-                        .frame(height: Design.Space.hairline)
+                // Set as a masthead rather than as a card: smaller caps and the metrics
+                // tint put it in a different register. This labels the list, it is not
+                // the top of it.
+                HStack(spacing: Design.Space.xs) {
+                    LogoMark(size: 13)
+                    Text("BENTO STATS")
+                        .font(.system(size: 10, weight: .semibold))
+                        .kerning(0.6)
                 }
-                .padding(.horizontal, Design.Space.m)
-                .padding(.bottom, Design.Space.xs)
+                .foregroundStyle(Design.Palette.tertiaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Design.Space.xs)
                 .accessibilityHidden(true)
 
                 ForEach(SettingsTab.allCases) { item in
-                    if item.startsGroup {
-                        Rectangle()
-                            .fill(Design.Palette.separator)
-                            .frame(height: Design.Space.hairline)
-                            .padding(.horizontal, Design.Space.m)
-                            .padding(.vertical, Design.Space.xs)
-                            .accessibilityHidden(true)
-                    }
-                    Button {
-                        tab = item
-                    } label: {
-                        HStack(spacing: Design.Space.s) {
-                            Image(systemName: item.symbolName)
-                                // SF Symbols differ in width, and a Label leaves that
-                                // difference in the layout: the eight titles started
-                                // at x positions spanning 6pt. A fixed box centres
-                                // them, and the explicit size keeps the widest glyph
-                                // (keyboard, menubar.rectangle) from spilling out of
-                                // it and dragging its title along.
-                                .font(.system(size: 13))
-                                .frame(width: 22, alignment: .center)
-                            Text(item.label)
-                        }
-                            // The source-list selection pair, not the accent colour:
-                            // these two track each other through graphite, increased
-                            // contrast and an inactive window, which accent plus a
-                            // hardcoded white does not.
-                            .foregroundStyle(item == tab
-                                             ? Color(nsColor: .alternateSelectedControlTextColor)
-                                             : Design.Palette.primaryText)
-                            .padding(.horizontal, Design.Space.m)
-                            .padding(.vertical, Design.Space.s)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background {
-                                RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
-                                    .fill(item == tab
-                                          ? Color(nsColor: .selectedContentBackgroundColor)
-                                          : Color.clear)
-                            }
-                            .contentShape(RoundedRectangle(cornerRadius: Design.Radius.control,
-                                                           style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    // A Button already publishes its label subtree as one element, so
-                    // naming it here is all it takes to announce "General, selected,
-                    // button" instead of walking into the row's decoration.
-                    //
-                    // Not `.accessibilityElement(children: .ignore)`, which reads the
-                    // same but builds a replacement element in place of the button and
-                    // so carries no press action. The rows still announced themselves
-                    // as buttons, because a trait is a description and not an action,
-                    // and nothing happened when VoiceOver activated them.
-                    .accessibilityLabel(item.label)
-                    .accessibilityAddTraits(item == tab ? [.isSelected, .isButton] : .isButton)
-                    .accessibilityHint("Show \(item.label) settings")
+                    paneCard(item)
                 }
             }
             .padding(Design.Space.m)
@@ -261,15 +196,56 @@ struct SettingsRootView: View {
         .accessibilityLabel("Settings sections")
     }
 
+    private func paneCard(_ item: SettingsTab) -> some View {
+        let isSelected = item == tab
+        let shape = RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous)
+        return Button {
+            tab = item
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                Image(systemName: item.symbolName)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(isSelected ? Design.Palette.accent : Design.Palette.secondaryText)
+                Spacer(minLength: Design.Space.s)
+                Text(item.label)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Design.Palette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(Design.Space.l)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: SettingsRootView.cardHeight)
+            .background(shape.fill(BentoGrid.surface))
+            .overlay {
+                if isSelected { shape.strokeBorder(Design.Palette.accent, lineWidth: 2) }
+            }
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        // A Button already publishes its label subtree as one element, so naming it
+        // here is all it takes to announce "General, selected, button" instead of
+        // walking into the card's decoration.
+        //
+        // Not `.accessibilityElement(children: .ignore)`, which reads the same but
+        // builds a replacement element in place of the button and so carries no press
+        // action. The rows still announced themselves as buttons, because a trait is a
+        // description and not an action, and nothing happened when VoiceOver activated
+        // them.
+        .accessibilityLabel(item.label)
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityHint("Show \(item.label) settings")
+    }
+
     private var windowWidth: CGFloat { SettingsRootView.windowSize.width }
     private var windowHeight: CGFloat { SettingsRootView.windowSize.height }
     private static let sidebarWidth: CGFloat = 184
+    private static let cardHeight: CGFloat = 64
 
     @ViewBuilder
     private var pane: some View {
         switch tab {
         case .general: GeneralPane(settings: settings, engine: engine, updater: updater)
-        case .appearance: AppearancePane(settings: settings)
         case .notifications: NotificationsPane(settings: settings, engine: engine,
                                                authority: authority)
         case .shortcuts: ShortcutsPane(settings: settings)

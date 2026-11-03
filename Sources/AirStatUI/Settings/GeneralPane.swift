@@ -15,6 +15,26 @@ struct GeneralPane: View {
 
     var body: some View {
         Form {
+            // How Bento Stats looks, which was a pane of its own until its history
+            // settings went. It is always dark, and each card has its own colours.
+            Section {
+                Picker("Layout", selection: settings.binding(\.panel.style)) {
+                    ForEach(PanelStyle.allCases, id: \.self) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Picker("Chart style", selection: settings.binding(\.charts.style)) {
+                    ForEach(ChartStyle.allCases, id: \.self) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+            } header: {
+                Text("Appearance")
+            } footer: {
+                SettingsFootnote(String(localized: "Bento and Bento Small each keep their own arrangement. To arrange the cards, press and hold one, or Control-click it and choose Edit Layout. Point at a card to see its detail."))
+            }
+
             MenuBarPreviewSection(settings: settings, engine: engine)
 
             Section {

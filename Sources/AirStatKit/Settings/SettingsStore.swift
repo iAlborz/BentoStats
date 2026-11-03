@@ -168,7 +168,6 @@ public final class SettingsStore {
         // A user who disables every menu bar item still needs a way to open the app.
         if s.menuBar.enabledItems.isEmpty { s.menuBar.items[0].isEnabled = true }
         s.general.updateInterval = min(max(s.general.updateInterval, 0.5), 60)
-        s.charts.historyDuration = min(max(s.charts.historyDuration, 30), 3600)
         return s
     }
 

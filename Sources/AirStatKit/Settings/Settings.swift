@@ -375,8 +375,6 @@ public enum PanelStyle: String, Sendable, Codable, CaseIterable, Equatable {
 /// unfolded in its first, list-shaped layouts. What remains is the layout, and the two
 /// bento arrangements, which the user sets in the panel itself rather than here.
 public struct PanelSettings: Sendable, Codable, Equatable {
-    /// Draw the module's history in the detail beside the panel.
-    public var showsHistoryChart: Bool
     /// The panel's layout.
     public var style: PanelStyle
     /// The bento layout's cards, in order, each in one of its designs. Arranged in the
@@ -388,10 +386,9 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     /// The narrowest a detail or panel window starts at before it has measured itself.
     public static let width: Double = 380
 
-    public init(showsHistoryChart: Bool = true, style: PanelStyle = .bento,
+    public init(style: PanelStyle = .bento,
                 bentoTiles: [BentoTile] = BentoLayout.defaultTiles,
                 bentoSmallTiles: [BentoTile] = BentoLayout.defaultSmallTiles) {
-        self.showsHistoryChart = showsHistoryChart
         self.style = style
         self.bentoTiles = BentoLayout.sanitized(bentoTiles)
         self.bentoSmallTiles = BentoLayout.sanitized(bentoSmallTiles)
@@ -401,14 +398,13 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public var visibleModules: [PanelModule] { PanelModule.allCases }
 
     private enum CodingKeys: String, CodingKey {
-        case showsHistoryChart, style, bentoTiles, bentoSmallTiles
+        case style, bentoTiles, bentoSmallTiles
     }
 
     /// Decoded leniently: settings files written before carry keys that are no longer
     /// read, and a layout that no longer exists, Original or List, opens as Bento.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        showsHistoryChart = c.value(.showsHistoryChart, or: true)
         style = c.value(.style, or: .bento)
         bentoTiles = BentoLayout.sanitized(c.value(.bentoTiles, or: BentoLayout.defaultTiles))
         bentoSmallTiles = BentoLayout.sanitized(c.value(.bentoSmallTiles, or: BentoLayout.defaultSmallTiles))
@@ -431,16 +427,21 @@ public enum ChartStyle: String, Sendable, Codable, CaseIterable, Equatable, Hash
 
 /// What the charts remember.
 ///
-/// Two settings, where there were six. Grid, value labels, curve smoothing and
+/// One setting, where there were six. Grid, value labels, curve smoothing and
 /// adaptive scaling were each a toggle governing one detail of how a 28-point
 /// sparkline is drawn — four decisions the app is better placed to make than the
 /// user, and four rows of settings standing between them and the two that change
 /// what a chart actually says. They are constants now, at the values every one of
 /// them shipped switched on.
+///
+/// The span went the same way once the panel's chart kept the day regardless.
 public struct ChartSettings: Sendable, Codable, Equatable {
-    /// Seconds of history retained and drawn.
-    public var historyDuration: TimeInterval
     public var style: ChartStyle
+
+    /// Previously `historyDuration`: seconds of raw samples retained, which the cards'
+    /// sparklines and the chart's short range draw. The last 24 hours are the minute
+    /// tier's, so this is only the live stretch, at the most it ever offered.
+    public static let historyDuration: TimeInterval = 3600
 
     /// Previously `showsGrid`.
     public static let showsGrid = true
@@ -453,23 +454,18 @@ public struct ChartSettings: Sendable, Codable, Equatable {
     /// averaged, so a spike is still a spike in the number beside it.
     public static let smoothsCurves = true
 
-    public init(historyDuration: TimeInterval = 300,
-                style: ChartStyle = .filledLine) {
-        self.historyDuration = historyDuration
+    public init(style: ChartStyle = .filledLine) {
         self.style = style
     }
 
-    public static let allowedDurations: [TimeInterval] = [60, 300, 600, 1800, 3600]
-
     private enum CodingKeys: String, CodingKey {
-        case historyDuration, style
+        case style
     }
 
     /// Files written before the drawing toggles were removed still load: the keys they
     /// carry are simply not read, and an unknown key has never been an error here.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        historyDuration = min(max(c.value(.historyDuration, or: 300.0), 30), 3600)
         style = c.value(.style, or: ChartStyle.filledLine)
     }
 }
@@ -770,7 +766,7 @@ public struct Settings: Sendable, Codable, Equatable {
         for item in menuBar.enabledItems { sources.insert(item.metric.requiredSource) }
         if panelVisible {
             for module in panel.visibleModules { sources.insert(module.requiredSource) }
-        } else if panel.showsHistoryChart {
+        } else {
             // The panel's charts draw the last day by the clock, and a minute nobody
             // sampled is a hole in it. So the charted modules keep sampling while the
             // panel is closed. The process list is not charted and is the expensive
@@ -790,6 +786,6 @@ public struct Settings: Sendable, Codable, Equatable {
     /// Number of retained samples implied by the chart history and update interval.
     public var historyCapacity: Int {
         let interval = max(general.updateInterval, 0.5)
-        return min(max(Int(charts.historyDuration / interval) + 2, 30), 4096)
+        return min(max(Int(ChartSettings.historyDuration / interval) + 2, 30), 4096)
     }
 }
