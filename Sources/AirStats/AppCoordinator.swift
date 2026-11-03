@@ -63,7 +63,6 @@ final class AppCoordinator {
             guard let self else { return }
             switch action {
             case .togglePanel: self.togglePanel()
-            case .toggleMenuBarItem: self.toggleMenuBarItem()
             case .openSettings: self.showSettings()
             }
         }
@@ -131,15 +130,6 @@ final class AppCoordinator {
     func showSettings() {
         panel.hide()
         settingsWindow.show()
-    }
-
-    /// The panel hangs from the item, so it goes with it.
-    private func toggleMenuBarItem() {
-        if panel.isVisible {
-            panel.hide()
-            panelAnchor = nil
-        }
-        settingsStore.update { $0.menuBar.isVisible.toggle() }
     }
 
     private func showContextMenu() {

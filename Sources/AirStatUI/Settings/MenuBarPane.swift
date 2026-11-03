@@ -7,9 +7,10 @@ struct MenuBarPane: View {
     let engine: MetricsEngine?
 
     @State private var dropTarget: MenuBarItemConfig.ID?
+    /// The preview's own, so dragging over the bar does not also light up the list.
+    @State private var previewDropTarget: MenuBarItemConfig.ID?
 
     private var items: [MenuBarItemConfig] { settings.settings.menuBar.items }
-    private var isVisible: Bool { settings.settings.menuBar.isVisible }
 
     private var availability: MetricAvailability {
         MetricAvailability(snapshot: SettingsPreview.snapshot(engine))
@@ -18,14 +19,16 @@ struct MenuBarPane: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Show in the menu bar", isOn: settings.binding(\.menuBar.isVisible))
-            }
-
-            Section {
-                MenuBarPreviewStrip(model: previewModel, isEmpty: previewModel.items.isEmpty)
-                    .listRowInsets(EdgeInsets())
+                MenuBarPreviewStrip(model: previewModel, isEmpty: previewModel.items.isEmpty) { slot in
+                    previewReadout(slot)
+                } accessory: {
+                    AddReadoutButton { addMenuItems }
+                }
+                .listRowInsets(EdgeInsets())
             } header: {
                 Text("Preview")
+            } footer: {
+                SettingsFootnote(String(localized: "Click a readout to choose its style or remove it. Drag one to move it."))
             }
 
             Section {
@@ -34,10 +37,6 @@ struct MenuBarPane: View {
             } header: {
                 Text("Readouts")
             }
-            .disabled(!isVisible)
-
-            .disabled(!isVisible)
-
         }
         .settingsFormStyle()
     }
@@ -162,17 +161,7 @@ struct MenuBarPane: View {
     private var readoutListControls: some View {
         HStack(spacing: Design.Space.m) {
             Menu {
-                ForEach(MenuBarMetric.allCases, id: \.self) { metric in
-                    Button {
-                        add(metric)
-                    } label: {
-                        // Still selectable: a settings file travels between Macs, and
-                        // a readout this machine cannot serve may work on the next.
-                        Text(availability.note(for: metric) == nil
-                             ? metric.label
-                             : String(localized: "\(metric.label) (unavailable here)"))
-                    }
-                }
+                addMenuItems
             } label: {
                 Label("Add Readout", systemImage: "plus")
             }
@@ -181,6 +170,88 @@ struct MenuBarPane: View {
             .accessibilityLabel("Add a readout")
 
             Spacer()
+        }
+    }
+
+    /// Every metric, shared by the list's Add Readout and the preview's plus.
+    private var addMenuItems: some View {
+        ForEach(MenuBarMetric.allCases, id: \.self) { metric in
+            Button {
+                add(metric)
+            } label: {
+                // Still selectable: a settings file travels between Macs, and
+                // a readout this machine cannot serve may work on the next.
+                Text(availability.note(for: metric) == nil
+                     ? metric.label
+                     : String(localized: "\(metric.label) (unavailable here)"))
+            }
+        }
+    }
+
+    // MARK: Preview editing
+
+    /// A readout in the preview, as a control: click it for its styles, drag it to move it.
+    @ViewBuilder
+    private func previewReadout(_ slot: MenuBarPreviewSlot) -> some View {
+        if let index = items.firstIndex(where: { $0.id == slot.id }) {
+            let item = items[index]
+            PreviewReadout(item: item, isDropTarget: previewDropTarget == item.id) {
+                readoutMenu(item)
+            }
+            .draggable(item.id.uuidString) {
+                Text(item.metric.label).padding(Design.Space.xs)
+            }
+            .dropDestination(for: String.self) { payload, _ in
+                previewDropTarget = nil
+                guard let dragged = payload.first else { return false }
+                return move(idString: dragged, to: index)
+            } isTargeted: { targeted in
+                previewDropTarget = targeted ? item.id : (previewDropTarget == item.id ? nil : previewDropTarget)
+            }
+        }
+    }
+
+    /// The readout's styles, each drawn as it would sit in the menu bar, then Remove.
+    private func readoutMenu(_ item: MenuBarItemConfig) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(.sectionHeader(title: item.metric.label))
+        for style in item.metric.supportedStyles {
+            let entry = ActionMenuItem(title: style.label) {
+                styleBinding(for: item).wrappedValue = style
+            }
+            entry.state = style == item.style ? .on : .off
+            entry.image = sample(of: item, as: style)
+            menu.addItem(entry)
+        }
+        menu.addItem(.separator())
+        let remove = ActionMenuItem(title: String(localized: "Remove")) { self.remove(item) }
+        if isLastEnabled(item) {
+            remove.isEnabled = false
+            remove.toolTip = String(localized: "At least one readout must stay visible so the menu bar item remains clickable.")
+        }
+        menu.addItem(remove)
+        return menu
+    }
+
+    /// The readout drawn in one style, with the same numbers the preview has, so the
+    /// menu shows what each style looks like rather than only naming it. Drawn when the
+    /// menu draws it, at the menu's own scale and in its appearance.
+    private func sample(of item: MenuBarItemConfig, as style: MenuBarDisplayStyle) -> NSImage {
+        var config = item
+        config.style = style
+        var sampled = settings.settings
+        sampled.menuBar.items = [config]
+        let view = MenuBarContentView(frame: .zero)
+        view.update(with: MenuBarRenderModel(snapshot: SettingsPreview.snapshot(engine),
+                                             history: SettingsPreview.history(engine),
+                                             settings: sampled,
+                                             isStale: false))
+        let size = view.intrinsicContentSize
+        view.frame.size = size
+        return NSImage(size: size, flipped: false) { rect in
+            view.draw(rect)
+            return true
         }
     }
 
@@ -300,7 +371,7 @@ struct MenuBarPane: View {
         }
     }
 
-    // MARK: Preview
+    // MARK: Preview model
 
     /// Built from live data when the app is running and from fixtures when it is
     /// not, but through the same model either way — the preview never invents a
@@ -315,4 +386,133 @@ struct MenuBarPane: View {
                            // being broken. The real menu bar still dims.
                            isStale: false)
     }
+}
+
+/// One readout in the preview, highlighted the way the menu bar highlights an item:
+/// faintly under the pointer, more while its menu is open.
+///
+/// The menu is AppKit's, popped on click. A SwiftUI `Menu` opens on mouse-down, so the
+/// readout under it could never be dragged.
+private struct PreviewReadout: View {
+    let item: MenuBarItemConfig
+    let isDropTarget: Bool
+    let menu: () -> NSMenu
+
+    @State private var isHovering = false
+    @State private var isMenuOpen = false
+    @State private var anchor = MenuAnchor()
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
+            .fill(Design.Palette.primaryText.opacity(isMenuOpen ? 0.16 : isHovering ? 0.08 : 0))
+            .overlay {
+                if isDropTarget {
+                    RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
+                        .strokeBorder(Design.Palette.accent, lineWidth: 2)
+                }
+            }
+            .contentShape(Rectangle())
+            .background(MenuAnchorView(anchor: anchor))
+            .onHover { hovering in
+                withAnimation(Design.Motion.hover) { isHovering = hovering }
+            }
+            .onTapGesture(perform: open)
+            .help(item.metric.label)
+            .accessibilityElement()
+            .accessibilityLabel(item.metric.label)
+            .accessibilityValue(item.style.label)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default, open)
+    }
+
+    /// The menu tracks in a loop of its own until it closes, so it opens a turn later,
+    /// once the highlight has drawn.
+    private func open() {
+        isMenuOpen = true
+        DispatchQueue.main.async {
+            anchor.popUp(menu())
+            isMenuOpen = false
+        }
+    }
+}
+
+/// The plus after the readouts: every metric, one click away from the bar it goes in.
+private struct AddReadoutButton<Items: View>: View {
+    @ViewBuilder let items: () -> Items
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Menu {
+            items()
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isHovering ? Design.Palette.primaryText : Design.Palette.secondaryText)
+                .frame(width: 22, height: 22)
+                .background {
+                    RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
+                        .fill(Design.Palette.primaryText.opacity(isHovering ? 0.10 : 0))
+                }
+                .contentShape(RoundedRectangle(cornerRadius: Design.Radius.control,
+                                               style: .continuous))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering in
+            withAnimation(Design.Motion.hover) { isHovering = hovering }
+        }
+        .help("Add a readout")
+        .accessibilityLabel("Add a readout")
+    }
+}
+
+/// The view an AppKit menu pops up under: the one SwiftUI laid out behind a readout.
+@MainActor
+private final class MenuAnchor {
+    weak var view: NSView?
+
+    func popUp(_ menu: NSMenu) {
+        guard let view else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.height + 4), in: view)
+    }
+}
+
+private struct MenuAnchorView: NSViewRepresentable {
+    let anchor: MenuAnchor
+
+    func makeNSView(context: Context) -> NSView {
+        let view = AnchorView()
+        anchor.view = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        anchor.view = view
+    }
+
+    /// Flipped, so "under it" is its height down. Never hit: the clicks belong to the
+    /// SwiftUI view in front.
+    private final class AnchorView: NSView {
+        override var isFlipped: Bool { true }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+}
+
+/// A menu item that runs a closure, for menus built in code.
+private final class ActionMenuItem: NSMenuItem {
+    private let handler: () -> Void
+
+    init(title: String, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(run), keyEquivalent: "")
+        target = self
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError("not supported") }
+
+    @objc private func run() { handler() }
 }

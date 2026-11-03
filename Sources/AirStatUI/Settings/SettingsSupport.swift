@@ -661,6 +661,29 @@ private enum MenuBarPreviewMetrics {
         prototype.update(with: model)
         return prototype.intrinsicContentSize
     }
+
+    /// Each readout's share of the bar, left to right. The boundaries sit halfway across
+    /// the gaps, so the shares meet and every point of the bar belongs to a readout.
+    static func slots(of model: MenuBarRenderModel) -> [MenuBarPreviewSlot] {
+        prototype.update(with: model)
+        let spans = prototype.readoutSpans
+        let width = prototype.intrinsicContentSize.width
+        var slots: [MenuBarPreviewSlot] = []
+        var start: CGFloat = 0
+        for (index, span) in spans.enumerated() {
+            let end = index + 1 < spans.count ? (span.maxX + spans[index + 1].minX) / 2 : width
+            slots.append(MenuBarPreviewSlot(id: span.id, width: end - start))
+            start = end
+        }
+        return slots
+    }
+}
+
+/// One readout's share of the preview: the id of the readout, and how wide a control
+/// laid over it should be.
+struct MenuBarPreviewSlot: Identifiable {
+    let id: UUID
+    let width: CGFloat
 }
 
 /// Presents the preview on a surface that reads as a menu bar, because contrast in
@@ -673,9 +696,16 @@ private enum MenuBarPreviewMetrics {
 /// beside the clock and scroll inside it. Letting them take their natural width is
 /// what pushed the sidebar and the pane out of the window frame; dropping the overflow
 /// instead of scrolling it would be a lie, since those readouts do fit in a real bar.
-struct MenuBarPreviewStrip: View {
+///
+/// It is also where the readouts are edited: a control lies over each one, and an
+/// accessory, such as a way to add another, sits after the last.
+struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
     let model: MenuBarRenderModel
     let isEmpty: Bool
+    /// Laid over one readout and sized to its share of the bar.
+    @ViewBuilder let readout: (MenuBarPreviewSlot) -> Readout
+    /// After the readouts, before the system's own icons.
+    @ViewBuilder let accessory: () -> Accessory
 
     /// Width the readouts were actually given. Held against their natural width it is
     /// the only thing that says whether the bar continues past the slot. Unbounded
@@ -704,6 +734,8 @@ struct MenuBarPreviewStrip: View {
                         .accessibilityHidden(true)
                 }
             }
+            accessory()
+                .padding(.leading, Design.Space.s)
             Image(systemName: "wifi").foregroundStyle(Design.Palette.tertiaryText)
                 .padding(.leading, Design.Space.l)
             Image(systemName: "battery.75").foregroundStyle(Design.Palette.tertiaryText)
@@ -720,7 +752,7 @@ struct MenuBarPreviewStrip: View {
         .frame(maxWidth: .infinity)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: Design.Radius.card,
                                                                   style: .continuous))
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Menu bar preview")
         .accessibilityValue(accessibilityValue)
     }
@@ -730,6 +762,14 @@ struct MenuBarPreviewStrip: View {
     private var readouts: some View {
         ScrollView(.horizontal) {
             MenuBarPreview(model: model)
+                .overlay(alignment: .leading) {
+                    HStack(spacing: 0) {
+                        ForEach(MenuBarPreviewMetrics.slots(of: model)) { slot in
+                            readout(slot)
+                                .frame(width: slot.width)
+                        }
+                    }
+                }
         }
         .frame(maxWidth: naturalSize.width)
         .frame(height: naturalSize.height)

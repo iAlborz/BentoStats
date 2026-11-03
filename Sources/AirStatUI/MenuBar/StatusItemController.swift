@@ -1,18 +1,6 @@
 import AppKit
 import AirStatKit
 
-/// What the menu bar is currently made of: one item drawing every readout, or none.
-enum MenuBarItemLayout: Equatable {
-    case combined
-    /// The user has taken the app out of the menu bar. Nothing is installed, and the
-    /// controller reports that explicit absence to its visibility callback.
-    case hidden
-
-    init(settings: MenuBarSettings) {
-        self = settings.isVisible ? .combined : .hidden
-    }
-}
-
 /// Owns the app's `NSStatusItem`s and the custom views drawn inside them.
 ///
 /// The menu bar is the most scrutinised surface in the app: it sits two pixels from
@@ -30,7 +18,6 @@ public final class StatusItemController {
     private let engine: MetricsEngine
     private let settings: SettingsStore
     private var hosted: [Hosted] = []
-    private var layout: MenuBarItemLayout?
     /// The item the user last clicked. Everything anchored to "the status item" means
     /// this one, because with several of them the only sensible answer is the one the
     /// user just touched.
@@ -52,7 +39,7 @@ public final class StatusItemController {
     // MARK: Installation
 
     public func install() {
-        syncLayout()
+        installItem()
         beginRendering()
         render()
     }
@@ -61,30 +48,18 @@ public final class StatusItemController {
         renderTask?.cancel()
         renderTask = nil
         tearDownItems()
-        layout = nil
     }
 
     /// The item keeps the name it has always had, so it stays where the user dragged it.
     static let combinedAutosaveName = "AirStatsStatusItem"
 
-    /// Brings the installed item in line with the settings: in the bar, or out of it. A
-    /// no-op unless that changed, so an unrelated settings write costs one comparison
-    /// and no menu bar churn.
-    private func syncLayout() {
-        let desired = MenuBarItemLayout(settings: settings.settings.menuBar)
-        guard desired != layout else { return }
-        tearDownItems()
-        layout = desired
-
-        switch desired {
-        case .combined:
-            if let entry = makeItem(autosaveName: StatusItemController.combinedAutosaveName,
-                                    label: String(localized: "Bento Stats system statistics")) {
-                hosted = [entry]
-            }
-
-        case .hidden:
-            break
+    /// Puts the one item in the bar. It stays there: the menu bar item is how the panel
+    /// opens, so there is no setting that takes it out.
+    private func installItem() {
+        guard hosted.isEmpty else { return }
+        if let entry = makeItem(autosaveName: StatusItemController.combinedAutosaveName,
+                                label: String(localized: "Bento Stats system statistics")) {
+            hosted = [entry]
         }
         reportVisibility()
     }
@@ -187,9 +162,6 @@ public final class StatusItemController {
     }
 
     private func render() {
-        // Settings are read here rather than watched separately, so hiding or showing the
-        // item takes effect on the same pass that redraws the numbers in it.
-        syncLayout()
         guard !hosted.isEmpty else { return }
         let model = MenuBarRenderModel(snapshot: engine.snapshot,
                                        history: engine.history,

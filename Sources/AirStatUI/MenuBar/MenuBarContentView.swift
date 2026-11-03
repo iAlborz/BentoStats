@@ -193,6 +193,13 @@ public final class MenuBarContentView: NSView {
                height: NSStatusBar.system.thickness)
     }
 
+    /// Where each readout is drawn, left to right, in this view's coordinates. The
+    /// settings preview lays a control over each, so a click lands on the readout it
+    /// points at rather than on a second copy of this layout.
+    public var readoutSpans: [(id: UUID, minX: CGFloat, maxX: CGFloat)] {
+        placements.map { (id: $0.item.id, minX: $0.x, maxX: $0.x + $0.geometry.width) }
+    }
+
     // MARK: Layout
 
     /// Everything expensive — measurement, symbol lookup, arithmetic — happens once

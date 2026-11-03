@@ -236,11 +236,9 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
 }
 
 public struct MenuBarSettings: Sendable, Codable, Equatable {
-    /// The readouts, in order. Always drawn together in one menu bar item.
+    /// The readouts, in order. Always drawn together in one menu bar item, which is
+    /// always there: it is how the panel opens.
     public var items: [MenuBarItemConfig]
-    /// Off, and the app puts nothing in the menu bar at all: Settings is reached by
-    /// launching the app again or by its hot key.
-    public var isVisible: Bool
 
     /// Numbers are always set in a fixed-width face. Previously a toggle; a column of
     /// proportional digits shimmers as it changes, which is the single most visible
@@ -262,10 +260,8 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// the moment a metric is worth watching is not reliably the moment it is high.
     public static let hidesIdleItems = false
 
-    public init(items: [MenuBarItemConfig] = MenuBarSettings.defaultItems,
-                isVisible: Bool = true) {
+    public init(items: [MenuBarItemConfig] = MenuBarSettings.defaultItems) {
         self.items = items
-        self.isVisible = isVisible
     }
 
     /// CPU, its temperature, GPU, and the battery.
@@ -299,18 +295,18 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }
 
     private enum CodingKeys: String, CodingKey {
-        case items, isVisible
+        case items
     }
 
     /// Files written before the packing settings were removed still load: the keys
     /// they carry for spacing, fixed width and quiet mode are simply not read, and an
-    /// unknown key has never been an error here.
+    /// unknown key has never been an error here. So does `isVisible`, from when the
+    /// item could be taken out of the menu bar: a file that took it out gets it back.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let decodedItems = c.value(.items, or: MenuBarSettings.defaultItems)
         // An empty menu bar would leave the user with no way back into the app.
         items = decodedItems.isEmpty ? MenuBarSettings.defaultItems : decodedItems.map { $0.sanitized() }
-        isVisible = c.value(.isVisible, or: true)
     }
 }
 
@@ -612,13 +608,11 @@ public struct KeyboardShortcut: Sendable, Codable, Equatable, Hashable {
 
 public enum ShortcutAction: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
     case togglePanel = "togglePanel"
-    case toggleMenuBarItem = "toggleMenuBarItem"
     case openSettings = "openSettings"
 
     public var label: String {
         switch self {
         case .togglePanel: return String(localized: "Show / Hide Panel")
-        case .toggleMenuBarItem: return String(localized: "Show / Hide Menu Bar Item")
         case .openSettings: return String(localized: "Open Settings")
         }
     }
@@ -633,9 +627,20 @@ public struct ShortcutSettings: Sendable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey { case bindings }
 
+    /// Read pair by pair rather than as a dictionary, so a shortcut for an action that
+    /// no longer exists is dropped on its own instead of taking every other shortcut
+    /// with it. Show / Hide Menu Bar Item went when the item became permanent.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        bindings = c.value(.bindings, or: [:])
+        var bindings: [ShortcutAction: KeyboardShortcut] = [:]
+        if var pairs = try? c.nestedUnkeyedContainer(forKey: .bindings) {
+            while !pairs.isAtEnd {
+                guard let raw = try? pairs.decode(String.self),
+                      let shortcut = try? pairs.decode(KeyboardShortcut.self) else { break }
+                if let action = ShortcutAction(rawValue: raw) { bindings[action] = shortcut }
+            }
+        }
+        self.bindings = bindings
     }
 }
 
