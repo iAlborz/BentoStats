@@ -735,8 +735,8 @@ struct MenuBarPreviewSlot: Identifiable {
 ///
 /// The strip is a viewport onto a bar wider than itself. A settings window 760 points
 /// across cannot show a screen's worth of menu bar — all sixteen readouts measure more
-/// than twice the room this row has — so they get a slot bounded by what is left
-/// beside the clock and scroll inside it. Letting them take their natural width is
+/// than twice the room this row has — so they get a slot bounded by the row and
+/// scroll inside it. Letting them take their natural width is
 /// what pushed the sidebar and the pane out of the window frame; dropping the overflow
 /// instead of scrolling it would be a lie, since those readouts do fit in a real bar.
 ///
@@ -747,7 +747,7 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
     let isEmpty: Bool
     /// Laid over one readout and sized to its share of the bar.
     @ViewBuilder let readout: (MenuBarPreviewSlot) -> Readout
-    /// After the readouts, before the system's own icons.
+    /// After the readouts.
     @ViewBuilder let accessory: () -> Accessory
 
     /// Width the readouts were actually given. Held against their natural width it is
@@ -760,7 +760,7 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
 
     private var isTruncated: Bool { naturalSize.width - slotWidth > 0.5 }
 
-    /// The rest of the bar is drawn at the readouts' size, so it still reads as one bar.
+    /// The spacing and marks around the readouts grow with them.
     private let scale = MenuBarPreview.scale
 
     var body: some View {
@@ -782,15 +782,6 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
             }
             accessory()
                 .padding(.leading, Design.Space.s * scale)
-            Image(systemName: "wifi").foregroundStyle(Design.Palette.tertiaryText)
-                .padding(.leading, Design.Space.l * scale)
-            Image(systemName: "battery.75").foregroundStyle(Design.Palette.tertiaryText)
-                .padding(.leading, Design.Space.m * scale)
-            Text(Date(), format: .dateTime.weekday(.abbreviated).hour().minute())
-                .foregroundStyle(Design.Palette.tertiaryText)
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.leading, Design.Space.l * scale)
             Spacer(minLength: Design.Space.xl)
         }
         .font(.system(size: Design.MenuBar.valueFontSize * scale))
