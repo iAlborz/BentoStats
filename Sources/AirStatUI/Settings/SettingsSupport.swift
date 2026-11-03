@@ -630,22 +630,62 @@ enum SettingsLabels {
 /// Wrapping `MenuBarContentView` rather than reimplementing it is the whole point:
 /// the preview is the same drawing code, the same measurement, and the same model
 /// the menu bar itself uses, so it cannot drift away from what the user will see.
+///
+/// It is drawn at twice the menu bar's size, so the readouts are big enough to judge
+/// and to click.
 struct MenuBarPreview: NSViewRepresentable {
+    static let scale: CGFloat = 2
+
     let model: MenuBarRenderModel
 
-    func makeNSView(context: Context) -> MenuBarContentView {
-        let view = MenuBarContentView(frame: .zero)
+    func makeNSView(context: Context) -> ScaledMenuBarView {
+        let view = ScaledMenuBarView(scale: Self.scale)
         view.update(with: model)
         return view
     }
 
-    func updateNSView(_ view: MenuBarContentView, context: Context) {
+    func updateNSView(_ view: ScaledMenuBarView, context: Context) {
         view.update(with: model)
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: MenuBarContentView,
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: ScaledMenuBarView,
                       context: Context) -> CGSize? {
         nsView.intrinsicContentSize
+    }
+}
+
+/// Holds the status item view at a multiple of its size. The bounds are scaled rather
+/// than the layer, so the readouts are drawn again at the larger size and stay sharp,
+/// where a stretched layer would be a blurred copy of the small ones.
+final class ScaledMenuBarView: NSView {
+    private let content = MenuBarContentView(frame: .zero)
+    private let scale: CGFloat
+
+    init(scale: CGFloat) {
+        self.scale = scale
+        super.init(frame: .zero)
+        addSubview(content)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override var intrinsicContentSize: NSSize {
+        let size = content.intrinsicContentSize
+        return NSSize(width: size.width * scale, height: size.height * scale)
+    }
+
+    func update(with model: MenuBarRenderModel) {
+        content.update(with: model)
+        invalidateIntrinsicContentSize()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        setBoundsSize(NSSize(width: newSize.width / scale, height: newSize.height / scale))
+        content.frame = bounds
     }
 }
 
@@ -657,9 +697,12 @@ struct MenuBarPreview: NSViewRepresentable {
 private enum MenuBarPreviewMetrics {
     private static let prototype = MenuBarContentView(frame: .zero)
 
+    private static let scale = MenuBarPreview.scale
+
     static func size(of model: MenuBarRenderModel) -> CGSize {
         prototype.update(with: model)
-        return prototype.intrinsicContentSize
+        let size = prototype.intrinsicContentSize
+        return CGSize(width: size.width * scale, height: size.height * scale)
     }
 
     /// Each readout's share of the bar, left to right. The boundaries sit halfway across
@@ -672,7 +715,7 @@ private enum MenuBarPreviewMetrics {
         var start: CGFloat = 0
         for (index, span) in spans.enumerated() {
             let end = index + 1 < spans.count ? (span.maxX + spans[index + 1].minX) / 2 : width
-            slots.append(MenuBarPreviewSlot(id: span.id, width: end - start))
+            slots.append(MenuBarPreviewSlot(id: span.id, width: (end - start) * scale))
             start = end
         }
         return slots
@@ -717,6 +760,9 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
 
     private var isTruncated: Bool { naturalSize.width - slotWidth > 0.5 }
 
+    /// The rest of the bar is drawn at the readouts' size, so it still reads as one bar.
+    private let scale = MenuBarPreview.scale
+
     var body: some View {
         HStack(spacing: 0) {
             Spacer(minLength: Design.Space.xl)
@@ -730,25 +776,25 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
                 if isTruncated {
                     Image(systemName: "ellipsis")
                         .foregroundStyle(Design.Palette.tertiaryText)
-                        .padding(.leading, Design.Space.s)
+                        .padding(.leading, Design.Space.s * scale)
                         .accessibilityHidden(true)
                 }
             }
             accessory()
-                .padding(.leading, Design.Space.s)
+                .padding(.leading, Design.Space.s * scale)
             Image(systemName: "wifi").foregroundStyle(Design.Palette.tertiaryText)
-                .padding(.leading, Design.Space.l)
+                .padding(.leading, Design.Space.l * scale)
             Image(systemName: "battery.75").foregroundStyle(Design.Palette.tertiaryText)
-                .padding(.leading, Design.Space.m)
+                .padding(.leading, Design.Space.m * scale)
             Text(Date(), format: .dateTime.weekday(.abbreviated).hour().minute())
                 .foregroundStyle(Design.Palette.tertiaryText)
                 .lineLimit(1)
                 .fixedSize()
-                .padding(.leading, Design.Space.l)
+                .padding(.leading, Design.Space.l * scale)
             Spacer(minLength: Design.Space.xl)
         }
-        .font(.system(size: Design.MenuBar.valueFontSize))
-        .padding(.vertical, Design.Space.m)
+        .font(.system(size: Design.MenuBar.valueFontSize * scale))
+        .padding(.vertical, Design.Space.m * scale)
         .frame(maxWidth: .infinity)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: Design.Radius.card,
                                                                   style: .continuous))

@@ -447,9 +447,9 @@ private struct AddReadoutButton<Items: View>: View {
             items()
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 11 * MenuBarPreview.scale, weight: .semibold))
                 .foregroundStyle(isHovering ? Design.Palette.primaryText : Design.Palette.secondaryText)
-                .frame(width: 22, height: 22)
+                .frame(width: 22 * MenuBarPreview.scale, height: 22 * MenuBarPreview.scale)
                 .background {
                     RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
                         .fill(Design.Palette.primaryText.opacity(isHovering ? 0.10 : 0))
