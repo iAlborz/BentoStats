@@ -31,13 +31,19 @@ public enum Logo {
     /// nested there keeps whatever signature it had when Organizer re-signs the app for
     /// distribution, and App Store Connect refuses one not signed for distribution.
     public static let image: NSImage? = {
-        guard let url = Bundle.main.url(forResource: "Logo", withExtension: "png")
-                ?? resources.url(forResource: "Logo", withExtension: "png"),
+        guard let url = resourceURL("Logo", withExtension: "png"),
               let image = NSImage(contentsOf: url) else { return nil }
         image.isTemplate = true
         image.accessibilityDescription = "Bento Stats"
         return image
     }()
+
+    /// One of the UI's packaged files, wherever this build keeps it: loose in the app's
+    /// Resources for the App Store, in the UI's own bundle otherwise.
+    static func resourceURL(_ name: String, withExtension ext: String) -> URL? {
+        Bundle.main.url(forResource: name, withExtension: ext)
+            ?? resources.url(forResource: name, withExtension: ext)
+    }
 }
 
 /// The mark at a given size, tinted by whatever `foregroundStyle` is in effect.

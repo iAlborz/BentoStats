@@ -15,7 +15,6 @@ final class AppCoordinator {
     private let panel: PanelController
     private let settingsWindow: SettingsWindowController
     private let thresholdMonitor: ThresholdMonitor
-    private let hotKeys: GlobalHotKeyCenter
     /// Only in the copy downloaded from GitHub.
     private let updater: Updater?
 
@@ -38,7 +37,6 @@ final class AppCoordinator {
         self.settingsWindow = SettingsWindowController(engine: engine, settings: store,
                                                       authority: authority, updater: updater)
         self.thresholdMonitor = ThresholdMonitor(engine: engine, settings: store, authority: authority)
-        self.hotKeys = GlobalHotKeyCenter(settings: store)
     }
 
     // MARK: Lifecycle
@@ -56,21 +54,9 @@ final class AppCoordinator {
         panel.onRequestSettings = { [weak self] in self?.showSettings() }
         panel.onRequestQuit = { NSApp.terminate(nil) }
 
-        // A hot key must do exactly what the equivalent menu item does, including
-        // leaving the frontmost app alone: the panel is worth having precisely because
-        // it can be summoned over another app without interrupting it.
-        hotKeys.onAction = { [weak self] action in
-            guard let self else { return }
-            switch action {
-            case .togglePanel: self.togglePanel()
-            case .openSettings: self.showSettings()
-            }
-        }
-
         statusItem.install()
         engine.start()
         thresholdMonitor.start()
-        hotKeys.start()
         updater?.start()
 
         registerSystemObservers()
@@ -91,7 +77,6 @@ final class AppCoordinator {
             NotificationCenter.default.removeObserver(observer)
         }
         observers.removeAll()
-        hotKeys.stop()
         updater?.stop()
         thresholdMonitor.stop()
         engine.stop()

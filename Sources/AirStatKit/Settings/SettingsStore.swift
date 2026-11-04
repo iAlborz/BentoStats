@@ -67,15 +67,13 @@ public final class SettingsStore {
             switch section {
             case .general: s.general = GeneralSettings()
             case .menuBar: s.menuBar = MenuBarSettings()
-            case .charts: s.charts = ChartSettings()
             case .notifications: s.notifications = NotificationSettings()
-            case .shortcuts: s.shortcuts = ShortcutSettings()
             }
         }
     }
 
     public enum SettingsSection: String, Sendable, CaseIterable {
-        case general, menuBar, charts, notifications, shortcuts
+        case general, menuBar, notifications
 
         /// What this subtree is called in the window. Here rather than in the UI layer
         /// because the reset menu lists sections, not panes — one pane now edits more
@@ -84,9 +82,7 @@ public final class SettingsStore {
             switch self {
             case .general: return String(localized: "General")
             case .menuBar: return String(localized: "Menu Bar")
-            case .charts: return String(localized: "Charts")
             case .notifications: return String(localized: "Notifications")
-            case .shortcuts: return String(localized: "Shortcuts")
             }
         }
     }

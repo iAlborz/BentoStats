@@ -39,9 +39,35 @@ struct AboutPane: View {
                     SettingsCaution(diagnostic)
                 }
             }
+
+            Section {
+                HStack(spacing: Design.Space.xl) {
+                    if let portrait = Self.portrait {
+                        Image(nsImage: portrait)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 64, height: 64)
+                            .clipShape(Circle())
+                            .accessibilityHidden(true)
+                    }
+                    VStack(alignment: .leading, spacing: Design.Space.xs) {
+                        Text("Bento Stats is made by one designer, in his free time.")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Link(destination: URL(string: "https://alborz.design")!) {
+                            Text(verbatim: "alborz.design")
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, Design.Space.xs)
+            }
         }
         .settingsFormStyle()
     }
+
+    private static let portrait: NSImage? = Logo.resourceURL("Author", withExtension: "jpg")
+        .flatMap { NSImage(contentsOf: $0) }
 
     private var versionText: String {
         guard let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String else {

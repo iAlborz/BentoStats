@@ -1386,7 +1386,7 @@ struct BentoGrid: View {
                       companion: series.secondary.map {
                           ChartSeries($0, from: engine.history, tint: Color(nsColor: .systemOrange))
                       },
-                      settings: settings.settings.charts, height: height)
+                      height: height)
         }
     }
 

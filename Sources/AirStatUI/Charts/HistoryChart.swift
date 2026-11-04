@@ -54,7 +54,6 @@ public struct HistoryChart: View {
     private let module: ModuleHistory
     private let history: MetricHistory
     private let day: MinuteHistory
-    private let settings: ChartSettings
     private let lineTint: Color
     private let bandTint: Color
     private let height: CGFloat
@@ -68,7 +67,6 @@ public struct HistoryChart: View {
     public init(_ module: ModuleHistory,
                 history: MetricHistory,
                 day: MinuteHistory,
-                settings: ChartSettings,
                 tint: Color,
                 band: Color,
                 height: CGFloat = Design.Chart.detailHeight,
@@ -76,7 +74,6 @@ public struct HistoryChart: View {
         self.module = module
         self.history = history
         self.day = day
-        self.settings = settings
         self.lineTint = tint
         self.bandTint = band
         self.height = height
@@ -294,7 +291,7 @@ public struct HistoryChart: View {
                         SecondaryLayer(plot: secondary, tint: lineTint)
                     }
                     BandLayer(plot: plot, lineTint: lineTint, bandTint: bandTint,
-                              style: settings.style, levelsWhenSparse: window.range == .recent,
+                              style: ChartSettings.style, levelsWhenSparse: window.range == .recent,
                               scrubbed: scrub.map { plot.column(at: rect.minX + rect.width * CGFloat($0.fraction)) })
                     if let scrub {
                         crosshair(plot, at: scrub.fraction)

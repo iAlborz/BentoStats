@@ -26,11 +26,6 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     public func show() {
         let window = self.window ?? makeWindow()
         self.window = window
-        // The Dock icon is process state rather than a stored value, so it takes
-        // effect only when something applies it. Doing it here means opening
-        // settings always reconciles the app with what the user asked for, whatever
-        // happened at launch.
-        applyProcessPreferences()
         // A menu bar app is an accessory; it must activate explicitly or the
         // settings window opens behind whatever the user was doing.
         NSApp.activate(ignoringOtherApps: true)
@@ -92,10 +87,6 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.setContentSize(SettingsRootView.windowSize)
         window.setFrameAutosaveName("AirStatsSettingsWindow")
         return window
-    }
-
-    private func applyProcessPreferences() {
-        NSApp.setActivationPolicy(settings.settings.general.showsDockIcon ? .regular : .accessory)
     }
 }
 
@@ -163,35 +154,26 @@ struct SettingsRootView: View {
     /// black 0.5pt rule between the columns — measured `#000000` at the seam in both
     /// appearances, in the real window as well as the render.
     ///
-    /// The panes are cards, the panel's own: its surface on its black, at its radius, the
-    /// selected one ringed the way an open card is. Buttons rather than a `List`: every
-    /// card stays keyboard-focusable, and the source list survives offscreen rendering,
-    /// which an `NSTableView` does not.
+    /// The panes are square cards, the panel's own: its surface on its black, at its
+    /// radius, the selected one ringed the way an open card is. Each is its icon alone;
+    /// the name is in the tooltip and in what VoiceOver reads. Buttons rather than a
+    /// `List`: every card stays keyboard-focusable, and the source list survives
+    /// offscreen rendering, which an `NSTableView` does not.
     private var sidebar: some View {
         ScrollView {
             VStack(spacing: Design.Space.m) {
                 // The window's title bar is transparent and carries no title, so the
-                // mark is what says whose settings these are.
-                //
-                // Set as a masthead rather than as a card: smaller caps and the metrics
-                // tint put it in a different register. This labels the list, it is not
-                // the top of it.
-                HStack(spacing: Design.Space.xs) {
-                    LogoMark(size: 13)
-                    Text("BENTO STATS")
-                        .font(.system(size: 10, weight: .semibold))
-                        .kerning(0.6)
-                }
-                .foregroundStyle(Design.Palette.tertiaryText)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, Design.Space.xs)
-                .accessibilityHidden(true)
+                // mark is what says whose settings these are. Small and in the tertiary
+                // tint: this labels the list, it is not the top of it.
+                LogoMark(size: 16)
+                    .foregroundStyle(Design.Palette.tertiaryText)
+                    .padding(.bottom, Design.Space.xs)
 
                 ForEach(SettingsTab.allCases) { item in
                     paneCard(item)
                 }
             }
-            .padding(Design.Space.m)
+            .padding(SettingsRootView.sidebarInset)
         }
         .accessibilityLabel("Settings sections")
     }
@@ -202,27 +184,18 @@ struct SettingsRootView: View {
         return Button {
             tab = item
         } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: item.symbolName)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(isSelected ? Design.Palette.accent : Design.Palette.secondaryText)
-                Spacer(minLength: Design.Space.s)
-                Text(item.label)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Design.Palette.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .padding(Design.Space.l)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: SettingsRootView.cardHeight)
-            .background(shape.fill(BentoGrid.surface))
+            Image(systemName: item.symbolName)
+                .font(.system(size: 26))
+                .foregroundStyle(isSelected ? Design.Palette.accent : Design.Palette.secondaryText)
+                .frame(width: SettingsRootView.cardSide, height: SettingsRootView.cardSide)
+                .background(shape.fill(BentoGrid.surface))
             .overlay {
                 if isSelected { shape.strokeBorder(Design.Palette.accent, lineWidth: 2) }
             }
             .contentShape(shape)
         }
         .buttonStyle(.plain)
+        .help(item.label)
         // A Button already publishes its label subtree as one element, so naming it
         // here is all it takes to announce "General, selected, button" instead of
         // walking into the card's decoration.
@@ -239,8 +212,9 @@ struct SettingsRootView: View {
 
     private var windowWidth: CGFloat { SettingsRootView.windowSize.width }
     private var windowHeight: CGFloat { SettingsRootView.windowSize.height }
-    private static let sidebarWidth: CGFloat = 184
-    private static let cardHeight: CGFloat = 64
+    private static let cardSide: CGFloat = 72
+    private static let sidebarInset: CGFloat = Design.Space.l
+    private static let sidebarWidth: CGFloat = cardSide + 2 * sidebarInset
 
     @ViewBuilder
     private var pane: some View {
@@ -248,7 +222,6 @@ struct SettingsRootView: View {
         case .general: GeneralPane(settings: settings, engine: engine, updater: updater)
         case .notifications: NotificationsPane(settings: settings, engine: engine,
                                                authority: authority)
-        case .shortcuts: ShortcutsPane(settings: settings)
         case .about: AboutPane(settings: settings)
         }
     }

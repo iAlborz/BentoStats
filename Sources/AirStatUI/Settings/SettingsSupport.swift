@@ -8,20 +8,16 @@ import AirStatKit
 ///
 /// Charts was its own pane of two settings and a wall of prose about four more that no
 /// longer exist; it became a section of Appearance, and Appearance, down to the layout
-/// and the chart style once the history settings went, a section of General.
-/// Shortcuts went the other way: folded into General, it ended up below Sampling and
-/// Units in a scroll nobody reached, which is a poor place for the one setting a user
-/// arrives already looking for. Three rows is a thin pane, but a pane
-/// is findable and the bottom of another pane's scroll is not.
+/// once the history settings and the chart style went, a section of General. Shortcuts
+/// went altogether.
 ///
 /// Menu Bar went into General: once its preview was where the readouts are edited, the
 /// preview was all the pane had.
 public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
     // Order is the source list's order: what the app is and how it looks, then what
-    // it does besides the panel, then how you reach it, then about.
+    // it does besides the panel, then about.
     case general
     case notifications
-    case shortcuts
     case about
 
     public var id: String { rawValue }
@@ -30,7 +26,6 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .general: return String(localized: "General")
         case .notifications: return String(localized: "Notifications")
-        case .shortcuts: return String(localized: "Shortcuts")
         case .about: return String(localized: "About")
         }
     }
@@ -39,7 +34,6 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .general: return "gearshape"
         case .notifications: return "bell.badge"
-        case .shortcuts: return "keyboard"
         case .about: return "info.circle"
         }
     }
@@ -48,9 +42,8 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
     /// restore-defaults without hardcoding the mapping. About edits nothing of its own.
     public var sections: [SettingsStore.SettingsSection] {
         switch self {
-        case .general: return [.general, .menuBar, .charts]
+        case .general: return [.general, .menuBar]
         case .notifications: return [.notifications]
-        case .shortcuts: return [.shortcuts]
         case .about: return []
         }
     }

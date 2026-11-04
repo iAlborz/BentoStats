@@ -20,23 +20,18 @@ struct NotificationsPane: View {
     private var rules: [ThresholdRule] { settings.settings.notifications.rules }
     private var isEnabled: Bool { settings.settings.notifications.isEnabled }
 
+    /// Each rule has its own switch and there is no switch over them: notifications
+    /// are on exactly when a rule is.
     var body: some View {
         Form {
             Section {
-                Toggle("Notify me about these conditions",
-                       isOn: settings.binding(\.notifications.isEnabled, onChange: askIfNeeded))
                 permissionNotice
-            }
-
-            Section {
                 ForEach(rules) { rule in
                     ruleRows(rule)
                 }
             } header: {
-                Text("Rules")
+                Text("Notify me when")
             }
-            .disabled(!isEnabled)
-
         }
         .settingsFormStyle()
     }
@@ -46,9 +41,8 @@ struct NotificationsPane: View {
     /// What macOS has actually granted, which is the difference between a rule that
     /// will fire and one that is switched on and silent.
     ///
-    /// Nothing is said until the user has asked for notifications: a permission
-    /// warning on a feature nobody turned on is noise, and the grant is not requested
-    /// until then either.
+    /// Nothing is said until a rule is on: a permission warning on a feature nobody
+    /// turned on is noise, and the grant is not requested until then either.
     @ViewBuilder
     private var permissionNotice: some View {
         if isEnabled, let authority {
@@ -68,7 +62,7 @@ struct NotificationsPane: View {
     }
 
     /// Asked here rather than at the first threshold crossing, which could be days
-    /// later and out of any context the user could judge it in. Switching this on is
+    /// later and out of any context the user could judge it in. Switching a rule on is
     /// the moment they said they want notifications.
     private func askIfNeeded(_ enabled: Bool) {
         guard enabled else { return }
@@ -111,7 +105,7 @@ struct NotificationsPane: View {
         .accessibilityValue(unavailable ?? accessibilityValue(rule))
         // A rule whose metric this Mac cannot measure could never fire, so the
         // control says so rather than accepting a setting that does nothing.
-        .disabled(!isEnabled || unavailable != nil)
+        .disabled(unavailable != nil)
 
         if rule.isEnabled, unavailable == nil {
             VStack(alignment: .leading, spacing: Design.Space.m) {
@@ -128,7 +122,6 @@ struct NotificationsPane: View {
                 SettingsFootnote(summary(rule))
             }
             .padding(.leading, Design.Space.xl)
-            .disabled(!isEnabled)
         }
     }
 
@@ -205,7 +198,10 @@ struct NotificationsPane: View {
 
     private func enabledBinding(_ rule: ThresholdRule) -> Binding<Bool> {
         Binding(get: { rule.isEnabled },
-                set: { isOn in mutate(rule) { $0.isEnabled = isOn } })
+                set: { isOn in
+                    mutate(rule) { $0.isEnabled = isOn }
+                    askIfNeeded(isOn)
+                })
     }
 
     private func thresholdBinding(_ rule: ThresholdRule) -> Binding<Double> {

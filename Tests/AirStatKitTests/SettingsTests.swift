@@ -154,10 +154,37 @@ struct RequiredSourceTests {
     func notificationRulesRequireSources() {
         var settings = Settings()
         settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
-        settings.notifications.isEnabled = true
         settings.notifications.rules = [ThresholdRule(metric: .batteryLow, isEnabled: true)]
         let sources = settings.requiredSources(panelVisible: false)
         #expect(sources.contains(.power))
+    }
+}
+
+@Suite("Notifications are on when a rule is")
+struct NotificationSwitchTests {
+
+    private func decode(_ json: String) throws -> NotificationSettings {
+        try JSONDecoder().decode(NotificationSettings.self, from: Data(json.utf8))
+    }
+
+    @Test("switching a rule on switches notifications on")
+    func ruleTurnsItOn() {
+        var notifications = NotificationSettings()
+        #expect(!notifications.isEnabled)
+        notifications.rules[0].isEnabled = true
+        #expect(notifications.isEnabled)
+    }
+
+    @Test("a rule left on under the old switch, switched off, stays off")
+    func silentRuleStaysSilent() throws {
+        let decoded = try decode(#"{"isEnabled":false,"rules":[{"metric":"cpuUsage","isEnabled":true}]}"#)
+        #expect(decoded.enabledRules.isEmpty)
+    }
+
+    @Test("a rule on under the old switch, switched on, stays on")
+    func liveRuleStaysLive() throws {
+        let decoded = try decode(#"{"isEnabled":true,"rules":[{"metric":"cpuUsage","isEnabled":true}]}"#)
+        #expect(decoded.enabledRules.map(\.metric) == [.cpuUsage])
     }
 }
 

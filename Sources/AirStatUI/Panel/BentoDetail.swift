@@ -480,7 +480,6 @@ struct BentoDetail: View {
                 HistoryChart(series,
                              history: engine.history,
                              day: engine.dayHistory,
-                             settings: settings.settings.charts,
                              tint: palette[0],
                              band: palette[0].opacity(0.14),
                              range: $historyRange)

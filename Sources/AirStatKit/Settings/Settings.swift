@@ -415,33 +415,22 @@ public struct PanelSettings: Sendable, Codable, Equatable {
 
 public enum ChartStyle: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
     case line, filledLine, bars
-
-    public var label: String {
-        switch self {
-        case .line: return String(localized: "Line")
-        case .filledLine: return String(localized: "Filled Line")
-        case .bars: return String(localized: "Bars")
-        }
-    }
 }
 
-/// What the charts remember.
+/// How the charts are drawn.
 ///
-/// One setting, where there were six. Grid, value labels, curve smoothing and
-/// adaptive scaling were each a toggle governing one detail of how a 28-point
-/// sparkline is drawn — four decisions the app is better placed to make than the
-/// user, and four rows of settings standing between them and the two that change
-/// what a chart actually says. They are constants now, at the values every one of
-/// them shipped switched on.
-///
-/// The span went the same way once the panel's chart kept the day regardless.
-public struct ChartSettings: Sendable, Codable, Equatable {
-    public var style: ChartStyle
-
+/// There were six settings. Grid, value labels, curve smoothing and adaptive scaling
+/// were each a toggle governing one detail of how a 28-point sparkline is drawn — four
+/// decisions the app is better placed to make than the user. The span went once the
+/// panel's chart kept the day regardless, and the style last: it changed how a chart
+/// looked and nothing about what it said. They are constants now.
+public enum ChartSettings {
     /// Previously `historyDuration`: seconds of raw samples retained, which the cards'
     /// sparklines and the chart's short range draw. The last 24 hours are the minute
     /// tier's, so this is only the live stretch, at the most it ever offered.
     public static let historyDuration: TimeInterval = 3600
+    /// Previously `style`, at the value it shipped with.
+    public static let style = ChartStyle.filledLine
 
     /// Previously `showsGrid`.
     public static let showsGrid = true
@@ -453,21 +442,6 @@ public struct ChartSettings: Sendable, Codable, Equatable {
     /// Previously `smoothsCurves`. Smooths the drawn line only; samples are never
     /// averaged, so a spike is still a spike in the number beside it.
     public static let smoothsCurves = true
-
-    public init(style: ChartStyle = .filledLine) {
-        self.style = style
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case style
-    }
-
-    /// Files written before the drawing toggles were removed still load: the keys they
-    /// carry are simply not read, and an unknown key has never been an error here.
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        style = c.value(.style, or: ChartStyle.filledLine)
-    }
 }
 
 // MARK: - Notifications
@@ -556,25 +530,32 @@ public struct ThresholdRule: Sendable, Codable, Equatable, Hashable, Identifiabl
     }
 }
 
+/// The rules, each switched on by itself. There used to be a switch over all of them
+/// as well; notifications are on now exactly when a rule is.
 public struct NotificationSettings: Sendable, Codable, Equatable {
-    public var isEnabled: Bool
     public var rules: [ThresholdRule]
 
-    public init(isEnabled: Bool = false, rules: [ThresholdRule] = NotificationSettings.defaultRules) {
-        self.isEnabled = isEnabled
+    public init(rules: [ThresholdRule] = NotificationSettings.defaultRules) {
         self.rules = rules
     }
+
+    public var isEnabled: Bool { !enabledRules.isEmpty }
 
     public static var defaultRules: [ThresholdRule] {
         ThresholdMetric.allCases.map { ThresholdRule(metric: $0) }
     }
 
-    private enum CodingKeys: String, CodingKey { case isEnabled, rules }
+    private enum CodingKeys: String, CodingKey { case rules }
+    private enum LegacyKeys: String, CodingKey { case isEnabled }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        isEnabled = c.value(.isEnabled, or: false)
         var decoded = c.value(.rules, or: NotificationSettings.defaultRules)
+        // A rule left on under the old switch, while the switch was off, was silent. It
+        // stays silent rather than starting to notify on the first launch of this one.
+        if try decoder.container(keyedBy: LegacyKeys.self).value(.isEnabled, or: true) == false {
+            for index in decoded.indices { decoded[index].isEnabled = false }
+        }
         // Add rules for any metric introduced since the file was written.
         let present = Set(decoded.map(\.metric))
         for metric in ThresholdMetric.allCases where !present.contains(metric) {
@@ -584,60 +565,6 @@ public struct NotificationSettings: Sendable, Codable, Equatable {
     }
 
     public var enabledRules: [ThresholdRule] { rules.filter(\.isEnabled) }
-}
-
-// MARK: - Shortcuts
-
-/// A recorded key combination. Stored as a raw key code plus modifier bitmask so it
-/// survives keyboard layout changes.
-public struct KeyboardShortcut: Sendable, Codable, Equatable, Hashable {
-    public var keyCode: UInt16
-    public var modifierFlags: UInt
-    public var characters: String
-
-    public init(keyCode: UInt16, modifierFlags: UInt, characters: String) {
-        self.keyCode = keyCode
-        self.modifierFlags = modifierFlags
-        self.characters = characters
-    }
-}
-
-public enum ShortcutAction: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
-    case togglePanel = "togglePanel"
-    case openSettings = "openSettings"
-
-    public var label: String {
-        switch self {
-        case .togglePanel: return String(localized: "Show / Hide Panel")
-        case .openSettings: return String(localized: "Open Settings")
-        }
-    }
-}
-
-public struct ShortcutSettings: Sendable, Codable, Equatable {
-    public var bindings: [ShortcutAction: KeyboardShortcut]
-
-    public init(bindings: [ShortcutAction: KeyboardShortcut] = [:]) {
-        self.bindings = bindings
-    }
-
-    private enum CodingKeys: String, CodingKey { case bindings }
-
-    /// Read pair by pair rather than as a dictionary, so a shortcut for an action that
-    /// no longer exists is dropped on its own instead of taking every other shortcut
-    /// with it. Show / Hide Menu Bar Item went when the item became permanent.
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        var bindings: [ShortcutAction: KeyboardShortcut] = [:]
-        if var pairs = try? c.nestedUnkeyedContainer(forKey: .bindings) {
-            while !pairs.isAtEnd {
-                guard let raw = try? pairs.decode(String.self),
-                      let shortcut = try? pairs.decode(KeyboardShortcut.self) else { break }
-                if let action = ShortcutAction(rawValue: raw) { bindings[action] = shortcut }
-            }
-        }
-        self.bindings = bindings
-    }
 }
 
 // MARK: - General
@@ -658,7 +585,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     public var pausesOnLowPower: Bool
     /// Fetch the public IP address: the one feature that leaves the machine.
     public var fetchesPublicIP: Bool
-    public var showsDockIcon: Bool
     /// Look for a newer release once a day. Only the copy downloaded from GitHub does:
     /// the App Store copy is updated by the store, and a build from source by its builder.
     public var checksForUpdates: Bool
@@ -672,7 +598,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
                 throttlesWhenOccluded: Bool = true,
                 pausesOnLowPower: Bool = false,
                 fetchesPublicIP: Bool = false,
-                showsDockIcon: Bool = false,
                 checksForUpdates: Bool = true) {
         self.updateInterval = updateInterval
         self.launchAtLogin = launchAtLogin
@@ -683,7 +608,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         self.throttlesWhenOccluded = throttlesWhenOccluded
         self.pausesOnLowPower = pausesOnLowPower
         self.fetchesPublicIP = fetchesPublicIP
-        self.showsDockIcon = showsDockIcon
         self.checksForUpdates = checksForUpdates
     }
 
@@ -692,7 +616,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case updateInterval, launchAtLogin, temperatureUnit, networkRateUnit
         case byteUnitStyle, showsPercentSign, throttlesWhenOccluded, pausesOnLowPower
-        case fetchesPublicIP, showsDockIcon, checksForUpdates
+        case fetchesPublicIP, checksForUpdates
     }
 
     public init(from decoder: Decoder) throws {
@@ -706,7 +630,6 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         throttlesWhenOccluded = c.value(.throttlesWhenOccluded, or: true)
         pausesOnLowPower = c.value(.pausesOnLowPower, or: false)
         fetchesPublicIP = c.value(.fetchesPublicIP, or: false)
-        showsDockIcon = c.value(.showsDockIcon, or: false)
         checksForUpdates = c.value(.checksForUpdates, or: true)
     }
 }
@@ -720,9 +643,7 @@ public struct Settings: Sendable, Codable, Equatable {
     public var general: GeneralSettings
     public var menuBar: MenuBarSettings
     public var panel: PanelSettings
-    public var charts: ChartSettings
     public var notifications: NotificationSettings
-    public var shortcuts: ShortcutSettings
 
     public static let currentSchemaVersion = 1
 
@@ -730,20 +651,16 @@ public struct Settings: Sendable, Codable, Equatable {
                 general: GeneralSettings = .init(),
                 menuBar: MenuBarSettings = .init(),
                 panel: PanelSettings = .init(),
-                charts: ChartSettings = .init(),
-                notifications: NotificationSettings = .init(),
-                shortcuts: ShortcutSettings = .init()) {
+                notifications: NotificationSettings = .init()) {
         self.schemaVersion = schemaVersion
         self.general = general
         self.menuBar = menuBar
         self.panel = panel
-        self.charts = charts
         self.notifications = notifications
-        self.shortcuts = shortcuts
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, general, menuBar, panel, charts, notifications, shortcuts
+        case schemaVersion, general, menuBar, panel, notifications
     }
 
     public init(from decoder: Decoder) throws {
@@ -752,9 +669,7 @@ public struct Settings: Sendable, Codable, Equatable {
         general = c.value(.general, or: GeneralSettings())
         menuBar = c.value(.menuBar, or: MenuBarSettings())
         panel = c.value(.panel, or: PanelSettings())
-        charts = c.value(.charts, or: ChartSettings())
         notifications = c.value(.notifications, or: NotificationSettings())
-        shortcuts = c.value(.shortcuts, or: ShortcutSettings())
     }
 
     /// Collectors that must run to satisfy everything currently on screen.

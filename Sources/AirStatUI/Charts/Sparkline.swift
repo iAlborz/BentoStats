@@ -12,18 +12,15 @@ public struct Sparkline: View {
     /// compared by height: a network's upload under its download, a disk's writes under
     /// its reads.
     private let companion: ChartSeries?
-    private let settings: ChartSettings
     private let height: CGFloat
 
     @Environment(\.metricFormatter) private var formatter
 
     public init(_ series: ChartSeries,
                 companion: ChartSeries? = nil,
-                settings: ChartSettings = ChartSettings(),
                 height: CGFloat = Design.Chart.sparklineHeight) {
         self.series = series
         self.companion = companion
-        self.settings = settings
         self.height = height
     }
 
@@ -105,10 +102,10 @@ public struct Sparkline: View {
                     if let companion, !companion.stats.isEmpty {
                         SeriesLayer(plot: ChartPlot(rect: rect, scale: scale, samples: companion.samples),
                                     size: size, tint: companion.tint,
-                                    style: settings.style, smoothed: ChartSettings.smoothsCurves)
+                                    style: ChartSettings.style, smoothed: ChartSettings.smoothsCurves)
                     }
                     SeriesLayer(plot: plot, size: size, tint: series.tint,
-                                style: settings.style, smoothed: ChartSettings.smoothsCurves)
+                                style: ChartSettings.style, smoothed: ChartSettings.smoothsCurves)
                     if ChartSettings.showsValueLabels, plot.supportsTrend,
                        let last = plot.points.last {
                         PlotShape(ChartLayout.marker(at: CGPoint(x: rect.maxX, y: plot.y(last))))

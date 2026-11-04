@@ -15,20 +15,10 @@ struct GeneralPane: View {
 
     var body: some View {
         Form {
-            // How Bento Stats looks, which was a pane of its own until its history
-            // settings went. It is always dark, and each card has its own colours.
+            // How Bento Stats looks, which was a pane of its own until its history and
+            // chart settings went. It is always dark, and each card has its own colours.
             Section {
-                Picker("Layout", selection: settings.binding(\.panel.style)) {
-                    ForEach(PanelStyle.allCases, id: \.self) { style in
-                        Text(style.label).tag(style)
-                    }
-                }
-                .pickerStyle(.segmented)
-                Picker("Chart style", selection: settings.binding(\.charts.style)) {
-                    ForEach(ChartStyle.allCases, id: \.self) { style in
-                        Text(style.label).tag(style)
-                    }
-                }
+                LayoutPicker(selection: settings.binding(\.panel.style))
             } header: {
                 Text("Appearance")
             } footer: {
@@ -43,8 +33,6 @@ struct GeneralPane: View {
                 if let loginItemError {
                     SettingsCaution(loginItemError)
                 }
-                Toggle("Show icon in the Dock",
-                       isOn: settings.binding(\.general.showsDockIcon, onChange: applyDockIcon))
             } header: {
                 Text("Startup")
             }
@@ -118,15 +106,6 @@ struct GeneralPane: View {
 
     // MARK: Side effects
 
-    /// Process-level state rather than a stored preference, so the store's value alone
-    /// would change nothing until the next launch.
-    private func applyDockIcon(_ shows: Bool) {
-        NSApp.setActivationPolicy(shows ? .regular : .accessory)
-        // Switching policy drops key window status; take it back so the settings
-        // window the user is standing in does not slide behind everything.
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
     private func applyLoginItem(_ enabled: Bool) {
         if let error = LoginItem.synchronize(enabled: enabled) {
             loginItemError = enabled
@@ -138,6 +117,72 @@ struct GeneralPane: View {
             loginItemError = nil
         }
     }
+}
+
+/// The panel's layouts, each over a picture of it, so the choice is made by looking.
+///
+/// The pictures are the panel itself, rendered offscreen on fixture data and kept as
+/// files: four live panels in a settings window would cost what four open panels do.
+private struct LayoutPicker: View {
+    @Binding var selection: PanelStyle
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Design.Space.l) {
+            ForEach(PanelStyle.allCases, id: \.self) { style in
+                option(style)
+            }
+        }
+        .padding(.vertical, Design.Space.xs)
+    }
+
+    private func option(_ style: PanelStyle) -> some View {
+        let isSelected = style == selection
+        let shape = RoundedRectangle(cornerRadius: Design.Radius.card + 2, style: .continuous)
+        return Button {
+            selection = style
+        } label: {
+            VStack(spacing: Design.Space.s) {
+                Group {
+                    if let image = Self.thumbnails[style] {
+                        Image(nsImage: image)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                    }
+                }
+                .padding(Design.Space.s)
+                .frame(maxWidth: .infinity)
+                .frame(height: Self.thumbnailHeight)
+                .background(shape.fill(Color(nsColor: PanelWindow.backdropColor)))
+                .overlay {
+                    shape.strokeBorder(isSelected ? Design.Palette.accent : Design.Palette.separator,
+                                       lineWidth: isSelected ? 2 : Design.Space.hairline)
+                }
+                Text(style.label)
+                    .font(.callout)
+                    .foregroundStyle(isSelected ? Design.Palette.primaryText : Design.Palette.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(style.label)
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    private static let thumbnailHeight: CGFloat = 92
+
+    private static let thumbnails: [PanelStyle: NSImage] = {
+        var images: [PanelStyle: NSImage] = [:]
+        for style in PanelStyle.allCases {
+            if let url = Logo.resourceURL("Layout-\(style.rawValue)", withExtension: "png"),
+               let image = NSImage(contentsOf: url) {
+                images[style] = image
+            }
+        }
+        return images
+    }()
 }
 
 /// Where this copy stands: the version, when it last looked, and the one thing to do next.
