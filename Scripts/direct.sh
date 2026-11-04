@@ -27,6 +27,15 @@ ZIP="dist/BentoStats.zip"
 rm -rf "$WORK" "$DMG" "$ZIP"
 mkdir -p "$WORK"
 
+# Xcode signs in with the account in its settings, whose keychain entry can go stale
+# ("exportArchive No Accounts"). An App Store Connect API key works instead: set
+# AUTH_KEY_PATH, AUTH_KEY_ID and AUTH_KEY_ISSUER, and both exports below use it.
+AUTH=()
+if [ -n "${AUTH_KEY_PATH:-}" ]; then
+  AUTH=(-authenticationKeyPath "$AUTH_KEY_PATH" -authenticationKeyID "$AUTH_KEY_ID"
+        -authenticationKeyIssuerID "$AUTH_KEY_ISSUER")
+fi
+
 ARCHIVE="$(ARCHIVE="$PWD/$WORK/$NAME.xcarchive" ENTITLEMENTS= \
   RELEASES_URL="https://api.github.com/repos/iAlborz/BentoStats/releases/latest" \
   Scripts/appstore.sh | tail -1)"
@@ -45,12 +54,13 @@ cat > "$WORK/ExportOptions.plist" <<EOF
 EOF
 
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$WORK/ExportOptions.plist" \
-  -exportPath "$WORK/upload" -allowProvisioningUpdates
+  -exportPath "$WORK/upload" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"}
 
 # Apple usually answers within a few minutes. Until it has, there is no notarized app
 # to export and this fails, so it is retried rather than waited on once.
 for _ in $(seq 60); do
-  if xcodebuild -exportNotarizedApp -archivePath "$ARCHIVE" -exportPath "$WORK/notarized" >/dev/null 2>&1; then
+  if xcodebuild -exportNotarizedApp -archivePath "$ARCHIVE" -exportPath "$WORK/notarized" \
+       ${AUTH[@]+"${AUTH[@]}"} >/dev/null 2>&1; then
     break
   fi
   sleep 30
