@@ -155,6 +155,8 @@ public enum Design {
         public static let present = Animation.easeOut(duration: 0.14)
         /// Hover highlight.
         public static let hover = Animation.easeOut(duration: 0.12)
+        /// Things sliding out of the way of one being dragged.
+        public static let reorder = Animation.snappy(duration: 0.22)
 
         /// Honours "Reduce Motion". Call this instead of using the constants directly
         /// anywhere a position or size changes.

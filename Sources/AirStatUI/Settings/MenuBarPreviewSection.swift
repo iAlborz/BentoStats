@@ -37,17 +37,19 @@ struct MenuBarPreviewSection: View {
         }
     }
 
-    /// The bar rearranges itself as a readout is dragged across it, so where it will go
-    /// is where it already is. Each place is worked out from the stored order, not the
-    /// draft, so the drag never compounds on itself; leaving the bar puts it back.
+    /// The bar rearranges itself as a readout is dragged across it, the others sliding
+    /// out of its way, so where it will go is where it already is. Each place is worked
+    /// out from the stored order, not the draft, so the drag never compounds on itself;
+    /// leaving the bar slides it back.
     private func drag(_ event: MenuBarPreviewDrag) {
         guard let dragged else { return }
+        let slide = Design.Motion.respectingAccessibility(Design.Motion.reorder)
         switch event {
         case .over(let place):
             let moved = Self.moving(dragged, to: place, in: settings.settings.menuBar.items)
-            if moved != draft { draft = moved }
+            if moved != draft { withAnimation(slide) { draft = moved } }
         case .left:
-            draft = nil
+            withAnimation(slide) { draft = nil }
         case .dropped(let place):
             settings.update { $0.menuBar.items = Self.moving(dragged, to: place, in: $0.menuBar.items) }
             draft = nil

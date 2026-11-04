@@ -426,68 +426,15 @@ enum SettingsLabels {
 
 // MARK: - Live menu bar preview
 
-/// The real status item view, hosted in the settings window.
+/// The menu bar as the settings window shows it: the real status item view, drawn at
+/// twice the menu bar's size so the readouts are big enough to judge and to click.
 ///
-/// Wrapping `MenuBarContentView` rather than reimplementing it is the whole point:
-/// the preview is the same drawing code, the same measurement, and the same model
-/// the menu bar itself uses, so it cannot drift away from what the user will see.
-///
-/// It is drawn at twice the menu bar's size, so the readouts are big enough to judge
-/// and to click.
-struct MenuBarPreview: NSViewRepresentable {
+/// Drawn by `MenuBarContentView` rather than a reimplementation of it, which is the
+/// whole point: the preview is the same drawing code, the same measurement, and the
+/// same model the menu bar itself uses, so it cannot drift away from what the user will
+/// see.
+enum MenuBarPreview {
     static let scale: CGFloat = 2
-
-    let model: MenuBarRenderModel
-
-    func makeNSView(context: Context) -> ScaledMenuBarView {
-        let view = ScaledMenuBarView(scale: Self.scale)
-        view.update(with: model)
-        return view
-    }
-
-    func updateNSView(_ view: ScaledMenuBarView, context: Context) {
-        view.update(with: model)
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: ScaledMenuBarView,
-                      context: Context) -> CGSize? {
-        nsView.intrinsicContentSize
-    }
-}
-
-/// Holds the status item view at a multiple of its size. The bounds are scaled rather
-/// than the layer, so the readouts are drawn again at the larger size and stay sharp,
-/// where a stretched layer would be a blurred copy of the small ones.
-final class ScaledMenuBarView: NSView {
-    private let content = MenuBarContentView(frame: .zero)
-    private let scale: CGFloat
-
-    init(scale: CGFloat) {
-        self.scale = scale
-        super.init(frame: .zero)
-        addSubview(content)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override var intrinsicContentSize: NSSize {
-        let size = content.intrinsicContentSize
-        return NSSize(width: size.width * scale, height: size.height * scale)
-    }
-
-    func update(with model: MenuBarRenderModel) {
-        content.update(with: model)
-        invalidateIntrinsicContentSize()
-    }
-
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        setBoundsSize(NSSize(width: newSize.width / scale, height: newSize.height / scale))
-        content.frame = bounds
-    }
 }
 
 /// Measures the readouts with the same view that draws them, so the strip can size a
@@ -516,17 +463,46 @@ private enum MenuBarPreviewMetrics {
         var start: CGFloat = 0
         for (index, span) in spans.enumerated() {
             let end = index + 1 < spans.count ? (span.maxX + spans[index + 1].minX) / 2 : width
-            slots.append(MenuBarPreviewSlot(id: span.id, width: (end - start) * scale))
+            slots.append(MenuBarPreviewSlot(id: span.id, start: start * scale,
+                                            width: (end - start) * scale))
             start = end
         }
         return slots
     }
+
+    /// Each readout's share as a picture of its own, cut from the whole bar drawn once.
+    /// Pieces rather than one drawing so a readout can slide to a new place on its own,
+    /// and cut from the bar rather than drawn alone so each looks exactly as it does in
+    /// it, gaps included.
+    ///
+    /// Drawn when SwiftUI draws them, at its scale, by a view of their own: the
+    /// prototype is updated for every measurement and would not still hold this model.
+    static func pieces(of model: MenuBarRenderModel,
+                       slots: [MenuBarPreviewSlot]) -> [MenuBarPreviewSlot.ID: NSImage] {
+        let bar = MenuBarContentView(frame: .zero)
+        bar.update(with: model)
+        bar.frame = NSRect(origin: .zero, size: bar.intrinsicContentSize)
+        let height = bar.bounds.height * scale
+        var pieces: [MenuBarPreviewSlot.ID: NSImage] = [:]
+        for slot in slots {
+            pieces[slot.id] = NSImage(size: NSSize(width: slot.width, height: height),
+                                      flipped: false) { _ in
+                guard let context = NSGraphicsContext.current?.cgContext else { return false }
+                context.scaleBy(x: scale, y: scale)
+                context.translateBy(x: -slot.start / scale, y: 0)
+                bar.draw(bar.bounds)
+                return true
+            }
+        }
+        return pieces
+    }
 }
 
-/// One readout's share of the preview: the id of the readout, and how wide a control
-/// laid over it should be.
+/// One readout's share of the preview: the id of the readout, where its share starts in
+/// the bar, and how wide it is.
 struct MenuBarPreviewSlot: Identifiable {
     let id: UUID
+    let start: CGFloat
     let width: CGFloat
 
     /// Where a readout `width` wide, dragged to `x`, lands among the others: the place
@@ -674,19 +650,22 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
     /// The slot is capped at the readouts' natural width so a short bar still sits
     /// centred, and floors at nothing so the window's width always wins.
     private func readouts(_ slots: [MenuBarPreviewSlot]) -> some View {
-        ScrollView(.horizontal) {
-            MenuBarPreview(model: model)
-                .overlay(alignment: .leading) {
-                    HStack(spacing: 0) {
-                        ForEach(slots) { slot in
-                            readout(slot)
-                                .frame(width: slot.width)
+        let pieces = MenuBarPreviewMetrics.pieces(of: model, slots: slots)
+        return ScrollView(.horizontal) {
+            HStack(spacing: 0) {
+                ForEach(slots) { slot in
+                    Group {
+                        if let piece = pieces[slot.id] {
+                            Image(nsImage: piece)
                         }
                     }
-                    .onGeometryChange(for: CGFloat.self) {
-                        $0.frame(in: .named(menuBarStripSpace)).minX
-                    } action: { readoutsOrigin = $0 }
+                    .frame(width: slot.width, height: naturalSize.height)
+                    .overlay { readout(slot) }
                 }
+            }
+            .onGeometryChange(for: CGFloat.self) {
+                $0.frame(in: .named(menuBarStripSpace)).minX
+            } action: { readoutsOrigin = $0 }
         }
         .frame(maxWidth: naturalSize.width)
         .frame(height: naturalSize.height)
