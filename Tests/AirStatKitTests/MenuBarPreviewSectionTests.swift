@@ -102,6 +102,33 @@ struct MenuBarPreviewSectionTests {
         #expect(settings.settings.menuBar.items[0].showsCaption == false)
     }
 
+    @Test("a dragged readout lands where its centre is nearest, whatever the bar looks like now")
+    func landing() {
+        // Three others, 40, 60 and 40 wide; the dragged one is 20 wide. Its centre at each
+        // place: 10, 50, 110, 150.
+        let others: [CGFloat] = [40, 60, 40]
+        #expect(MenuBarPreviewSlot.landing(at: 0, width: 20, among: others) == 0)
+        #expect(MenuBarPreviewSlot.landing(at: 45, width: 20, among: others) == 1)
+        #expect(MenuBarPreviewSlot.landing(at: 100, width: 20, among: others) == 2)
+        #expect(MenuBarPreviewSlot.landing(at: 500, width: 20, among: others) == 3)
+    }
+
+    @Test("moving a readout counts places among the readouts shown")
+    func movingSkipsHidden() {
+        let cpu = MenuBarItemConfig(metric: .cpuUsage)
+        let hidden = MenuBarItemConfig(metric: .uptime, isEnabled: false)
+        let gpu = MenuBarItemConfig(metric: .gpuUsage)
+        let memory = MenuBarItemConfig(metric: .memoryUsage)
+        let items = [cpu, hidden, gpu, memory]
+
+        #expect(MenuBarPreviewSection.moving(memory.id, to: 0, in: items).map(\.id)
+                == [memory.id, cpu.id, hidden.id, gpu.id])
+        #expect(MenuBarPreviewSection.moving(cpu.id, to: 2, in: items).map(\.id)
+                == [hidden.id, gpu.id, memory.id, cpu.id])
+        #expect(MenuBarPreviewSection.moving(cpu.id, to: 1, in: items).map(\.id)
+                == [hidden.id, gpu.id, cpu.id, memory.id])
+    }
+
     @Test("adding a metric with no hidden readout adds a new one")
     func addingAppends() {
         let settings = store()

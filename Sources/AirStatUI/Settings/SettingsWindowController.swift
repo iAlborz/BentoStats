@@ -155,7 +155,7 @@ struct SettingsRootView: View {
     /// appearances, in the real window as well as the render.
     ///
     /// The panes are square cards, the panel's own: its surface on its black, at its
-    /// radius, the selected one ringed the way an open card is. Each is its icon alone;
+    /// radius, and the selected one filled with the accent. Each is its icon alone;
     /// the name is in the tooltip and in what VoiceOver reads. Buttons rather than a
     /// `List`: every card stays keyboard-focusable, and the source list survives
     /// offscreen rendering, which an `NSTableView` does not.
@@ -186,13 +186,11 @@ struct SettingsRootView: View {
         } label: {
             Image(systemName: item.symbolName)
                 .font(.system(size: 26))
-                .foregroundStyle(isSelected ? Design.Palette.accent : Design.Palette.secondaryText)
+                .foregroundStyle(.white)
                 .frame(width: SettingsRootView.cardSide, height: SettingsRootView.cardSide)
-                .background(shape.fill(BentoGrid.surface))
-            .overlay {
-                if isSelected { shape.strokeBorder(Design.Palette.accent, lineWidth: 2) }
-            }
-            .contentShape(shape)
+                .background(shape.fill(isSelected ? AnyShapeStyle(Design.Palette.accent)
+                                                  : AnyShapeStyle(BentoGrid.surface)))
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
         .help(item.label)

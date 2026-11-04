@@ -9,9 +9,13 @@ struct MenuBarPreviewSection: View {
     let settings: SettingsStore
     let engine: MetricsEngine?
 
-    @State private var dropTarget: MenuBarItemConfig.ID?
+    /// The readout being dragged, from the moment it is picked up.
+    @State private var dragged: MenuBarItemConfig.ID?
+    /// The order the bar would have if the dragged readout were dropped where it is,
+    /// which the preview shows in the meantime. Nil while nothing is over the bar.
+    @State private var draft: [MenuBarItemConfig]?
 
-    private var items: [MenuBarItemConfig] { settings.settings.menuBar.items }
+    private var items: [MenuBarItemConfig] { draft ?? settings.settings.menuBar.items }
 
     private var availability: MetricAvailability {
         MetricAvailability(snapshot: SettingsPreview.snapshot(engine))
@@ -19,7 +23,8 @@ struct MenuBarPreviewSection: View {
 
     var body: some View {
         Section {
-            MenuBarPreviewStrip(model: previewModel, isEmpty: previewModel.items.isEmpty) { slot in
+            MenuBarPreviewStrip(model: previewModel, isEmpty: previewModel.items.isEmpty,
+                                dragged: dragged, onDrag: drag) { slot in
                 previewReadout(slot)
             } accessory: {
                 AddReadoutButton { addMenuItems }
@@ -30,6 +35,37 @@ struct MenuBarPreviewSection: View {
         } footer: {
             SettingsFootnote(String(localized: "Click a readout to choose its style or remove it. Drag one to move it."))
         }
+    }
+
+    /// The bar rearranges itself as a readout is dragged across it, so where it will go
+    /// is where it already is. Each place is worked out from the stored order, not the
+    /// draft, so the drag never compounds on itself; leaving the bar puts it back.
+    private func drag(_ event: MenuBarPreviewDrag) {
+        guard let dragged else { return }
+        switch event {
+        case .over(let place):
+            let moved = Self.moving(dragged, to: place, in: settings.settings.menuBar.items)
+            if moved != draft { draft = moved }
+        case .left:
+            draft = nil
+        case .dropped(let place):
+            settings.update { $0.menuBar.items = Self.moving(dragged, to: place, in: $0.menuBar.items) }
+            draft = nil
+            self.dragged = nil
+        }
+    }
+
+    /// `items` with the readout `id` moved to `place` among the other readouts the bar
+    /// shows. A hidden one keeps its spot among the rest. Internal for the test.
+    static func moving(_ id: MenuBarItemConfig.ID, to place: Int,
+                       in items: [MenuBarItemConfig]) -> [MenuBarItemConfig] {
+        guard let from = items.firstIndex(where: { $0.id == id }) else { return items }
+        var result = items
+        let item = result.remove(at: from)
+        let shown = result.indices.filter { result[$0].isEnabled }
+        let at = place < shown.count ? shown[place] : (shown.last.map { $0 + 1 } ?? result.count)
+        result.insert(item, at: at)
+        return result
     }
 
     /// Every metric, for the plus.
@@ -52,22 +88,31 @@ struct MenuBarPreviewSection: View {
     /// A readout in the preview, as a control: click it for its styles, drag it to move it.
     @ViewBuilder
     private func previewReadout(_ slot: MenuBarPreviewSlot) -> some View {
-        if let index = items.firstIndex(where: { $0.id == slot.id }) {
-            let item = items[index]
-            PreviewReadout(item: item, isDropTarget: dropTarget == item.id) {
+        if let item = items.first(where: { $0.id == slot.id }) {
+            PreviewReadout(item: item, isDragged: dragged == item.id && draft != nil) {
                 readoutMenu(item)
             }
-            .draggable(item.id.uuidString) {
-                Text(item.metric.label).padding(Design.Space.xs)
-            }
-            .dropDestination(for: String.self) { payload, _ in
-                dropTarget = nil
-                guard let dragged = payload.first else { return false }
-                return move(idString: dragged, to: index)
-            } isTargeted: { targeted in
-                dropTarget = targeted ? item.id : (dropTarget == item.id ? nil : dropTarget)
+            .onDrag {
+                dragged = item.id
+                return NSItemProvider(object: item.id.uuidString as NSString)
+            } preview: {
+                dragPreview(item)
             }
         }
+    }
+
+    /// The readout itself under the pointer, at the preview's size.
+    private func dragPreview(_ item: MenuBarItemConfig) -> some View {
+        let image = sample(of: item, as: Choice(style: item.style, showsCaption: item.showsCaption,
+                                                title: item.style.label))
+        return Image(nsImage: image)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: image.size.width * MenuBarPreview.scale,
+                   height: image.size.height * MenuBarPreview.scale)
+            .padding(Design.Space.xs)
+            .background(Color.black.opacity(0.6),
+                        in: RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous))
     }
 
     /// One entry in a readout's menu: a style, and whether it carries its caption.
@@ -167,21 +212,6 @@ struct MenuBarPreviewSection: View {
         lastEnabledItem?.id == item.id
     }
 
-    /// Drop handler. Returns false for a payload that is not one of our readouts, so a
-    /// stray drag from another app is refused rather than silently ignored.
-    private func move(idString: String, to destination: Int) -> Bool {
-        guard let id = UUID(uuidString: idString),
-              let source = items.firstIndex(where: { $0.id == id }),
-              source != destination else { return false }
-        settings.update { s in
-            guard s.menuBar.items.indices.contains(source),
-                  s.menuBar.items.indices.contains(destination) else { return }
-            let moved = s.menuBar.items.remove(at: source)
-            s.menuBar.items.insert(moved, at: destination)
-        }
-        return true
-    }
-
     /// Appended after the last readout, where the plus is. A readout hidden from the
     /// list this used to have is not drawn anywhere now, so adding its metric brings
     /// that one back, in its own style, rather than a second copy beside it. Internal
@@ -215,25 +245,27 @@ struct MenuBarPreviewSection: View {
     /// not, but through the same model either way — the preview never invents a
     /// value, it renders whatever the metric actually reports.
     private var previewModel: MenuBarRenderModel {
-        MenuBarRenderModel(snapshot: SettingsPreview.snapshot(engine),
-                           history: SettingsPreview.history(engine),
-                           settings: settings.settings,
-                           // Never stale-dimmed. This preview answers "what will my
-                           // menu bar look like", and greying it because the last
-                           // sample is a few seconds old would read as the setting
-                           // being broken. The real menu bar still dims.
-                           isStale: false)
+        var shown = settings.settings
+        shown.menuBar.items = items
+        return MenuBarRenderModel(snapshot: SettingsPreview.snapshot(engine),
+                                  history: SettingsPreview.history(engine),
+                                  settings: shown,
+                                  // Never stale-dimmed. This preview answers "what will my
+                                  // menu bar look like", and greying it because the last
+                                  // sample is a few seconds old would read as the setting
+                                  // being broken. The real menu bar still dims.
+                                  isStale: false)
     }
 }
 
 /// One readout in the preview, highlighted the way the menu bar highlights an item:
-/// faintly under the pointer, more while its menu is open.
+/// faintly under the pointer, more while its menu is open or it is being moved.
 ///
 /// The menu is AppKit's, popped on click. A SwiftUI `Menu` opens on mouse-down, so the
 /// readout under it could never be dragged.
 private struct PreviewReadout: View {
     let item: MenuBarItemConfig
-    let isDropTarget: Bool
+    let isDragged: Bool
     let menu: () -> NSMenu
 
     @State private var isHovering = false
@@ -242,13 +274,7 @@ private struct PreviewReadout: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
-            .fill(Design.Palette.primaryText.opacity(isMenuOpen ? 0.16 : isHovering ? 0.08 : 0))
-            .overlay {
-                if isDropTarget {
-                    RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
-                        .strokeBorder(Design.Palette.accent, lineWidth: 2)
-                }
-            }
+            .fill(Design.Palette.primaryText.opacity(isMenuOpen || isDragged ? 0.16 : isHovering ? 0.08 : 0))
             .contentShape(Rectangle())
             .background(MenuAnchorView(anchor: anchor))
             .onHover { hovering in

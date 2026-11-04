@@ -528,7 +528,73 @@ private enum MenuBarPreviewMetrics {
 struct MenuBarPreviewSlot: Identifiable {
     let id: UUID
     let width: CGFloat
+
+    /// Where a readout `width` wide, dragged to `x`, lands among the others: the place
+    /// whose centre is nearest. Worked out from the widths alone rather than from the
+    /// bar as it stands, so the answer does not flicker as the bar rearranges itself
+    /// under the pointer.
+    static func landing(at x: CGFloat, width: CGFloat, among others: [CGFloat]) -> Int {
+        var start: CGFloat = 0
+        var nearest = (index: 0, distance: CGFloat.infinity)
+        for index in 0...others.count {
+            let distance = abs(x - (start + width / 2))
+            if distance < nearest.distance { nearest = (index, distance) }
+            if index < others.count { start += others[index] }
+        }
+        return nearest.index
+    }
 }
+
+/// A readout dragged across the preview: over the place it would land, gone from the
+/// bar, or dropped in a place.
+enum MenuBarPreviewDrag: Equatable {
+    case over(Int)
+    case left
+    case dropped(Int)
+}
+
+/// Turns the pointer's position over the strip into the place the dragged readout
+/// would land. Places count the other readouts, left to right. The whole strip takes
+/// the drop, not just the readouts, so overshooting either end lands at that end;
+/// only leaving the strip puts the readout back.
+private struct MenuBarPreviewDropDelegate: DropDelegate {
+    let slots: [MenuBarPreviewSlot]
+    /// Where the first readout starts, in the strip's coordinates.
+    let origin: CGFloat
+    let dragged: UUID?
+    let send: (MenuBarPreviewDrag) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool { place(at: info.location.x) != nil }
+
+    func dropEntered(info: DropInfo) { report(info) }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        report(info)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) { send(.left) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let place = place(at: info.location.x) else { return false }
+        send(.dropped(place))
+        return true
+    }
+
+    private func report(_ info: DropInfo) {
+        if let place = place(at: info.location.x) { send(.over(place)) }
+    }
+
+    private func place(at x: CGFloat) -> Int? {
+        guard let dragged, let width = slots.first(where: { $0.id == dragged })?.width else { return nil }
+        return MenuBarPreviewSlot.landing(at: x - origin, width: width,
+                                          among: slots.filter { $0.id != dragged }.map(\.width))
+    }
+}
+
+/// The strip's own coordinates, which a drop's position and the readouts' frame are
+/// both read in.
+private let menuBarStripSpace = "MenuBarPreviewStrip"
 
 /// Presents the preview on a surface that reads as a menu bar, because contrast in
 /// the menu bar is the thing being judged and a preview on a form background would
@@ -546,6 +612,10 @@ struct MenuBarPreviewSlot: Identifiable {
 struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
     let model: MenuBarRenderModel
     let isEmpty: Bool
+    /// The readout being dragged, once it has been picked up.
+    let dragged: UUID?
+    /// Where it is, as it crosses the readouts.
+    let onDrag: (MenuBarPreviewDrag) -> Void
     /// Laid over one readout and sized to its share of the bar.
     @ViewBuilder let readout: (MenuBarPreviewSlot) -> Readout
     /// After the readouts.
@@ -556,6 +626,8 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
     /// until the first measurement lands, because starting at zero means every open
     /// of the pane flashes the marker for a frame.
     @State private var slotWidth: CGFloat = .infinity
+    /// Where the readouts start in the strip, scrolled or not, for placing a drop.
+    @State private var readoutsOrigin: CGFloat = 0
 
     private var naturalSize: CGSize { MenuBarPreviewMetrics.size(of: model) }
 
@@ -565,7 +637,8 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
     private let scale = MenuBarPreview.scale
 
     var body: some View {
-        HStack(spacing: 0) {
+        let slots = MenuBarPreviewMetrics.slots(of: model)
+        return HStack(spacing: 0) {
             Spacer(minLength: Design.Space.xl)
             if isEmpty {
                 Text("No readouts are enabled.")
@@ -573,7 +646,7 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
                     .foregroundStyle(Design.Palette.secondaryText)
                     .lineLimit(1)
             } else {
-                readouts
+                readouts(slots)
                 if isTruncated {
                     Image(systemName: "ellipsis")
                         .foregroundStyle(Design.Palette.tertiaryText)
@@ -590,6 +663,9 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
         .frame(maxWidth: .infinity)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: Design.Radius.card,
                                                                   style: .continuous))
+        .coordinateSpace(name: menuBarStripSpace)
+        .onDrop(of: [.text], delegate: MenuBarPreviewDropDelegate(slots: slots, origin: readoutsOrigin,
+                                                                 dragged: dragged, send: onDrag))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Menu bar preview")
         .accessibilityValue(accessibilityValue)
@@ -597,16 +673,19 @@ struct MenuBarPreviewStrip<Readout: View, Accessory: View>: View {
 
     /// The slot is capped at the readouts' natural width so a short bar still sits
     /// centred, and floors at nothing so the window's width always wins.
-    private var readouts: some View {
+    private func readouts(_ slots: [MenuBarPreviewSlot]) -> some View {
         ScrollView(.horizontal) {
             MenuBarPreview(model: model)
                 .overlay(alignment: .leading) {
                     HStack(spacing: 0) {
-                        ForEach(MenuBarPreviewMetrics.slots(of: model)) { slot in
+                        ForEach(slots) { slot in
                             readout(slot)
                                 .frame(width: slot.width)
                         }
                     }
+                    .onGeometryChange(for: CGFloat.self) {
+                        $0.frame(in: .named(menuBarStripSpace)).minX
+                    } action: { readoutsOrigin = $0 }
                 }
         }
         .frame(maxWidth: naturalSize.width)
