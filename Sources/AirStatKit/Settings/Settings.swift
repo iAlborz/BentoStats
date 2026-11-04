@@ -112,6 +112,11 @@ public enum MenuBarMetric: String, Sendable, Codable, CaseIterable, Equatable, H
         }
     }
 
+    /// Whether the number says what it measures by itself. A temperature is the one
+    /// reading its unit names: 52°C needs no TEMP before it, and whoever put it in the
+    /// menu bar knows what its graph is of.
+    public var namesItself: Bool { self == .cpuTemperature }
+
     /// Styles that make sense for this metric. Only the metrics that keep a series
     /// can be graphed; the rest are a number, with or without their icon.
     ///
@@ -209,11 +214,15 @@ public struct MenuBarItemConfig: Sendable, Codable, Equatable, Hashable, Identif
     }
 
     /// Clamp a decoded config back into a coherent state — an old build may have
-    /// stored a style this metric no longer supports.
+    /// stored a style this metric no longer supports, or a caption over a number that
+    /// names itself.
     public func sanitized() -> MenuBarItemConfig {
         var copy = self
         if !metric.supportedStyles.contains(style) {
             copy.style = metric.supportedStyles.first ?? .text
+        }
+        if metric.namesItself, copy.style == .text {
+            copy.showsCaption = false
         }
         return copy
     }
@@ -271,8 +280,8 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// dropped on a notched display when a few other extras are present. It is one
     /// click away in Settings for those who want it.
     ///
-    /// The three numbers carry their name above their number rather than an icon beside
-    /// it. An icon is a guess the reader has to make — a chip glyph is CPU to whoever
+    /// CPU and GPU carry their name above their number rather than an icon beside it;
+    /// the temperature's degree sign names it. An icon is a guess the reader has to make — a chip glyph is CPU to whoever
     /// drew it and "some hardware" to everyone else — while "CPU" is four narrow
     /// characters set at eight points, above the number, in a column the number was
     /// already paying for. No sparkline: at 34pt wide it reads as a scribble, and it
@@ -287,7 +296,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// temperature, starts without it.
     public static let defaultItems: [MenuBarItemConfig] = [
         MenuBarItemConfig(metric: .cpuUsage, style: .text, showsCaption: true),
-        MenuBarItemConfig(metric: .cpuTemperature, style: .text, showsCaption: true),
+        MenuBarItemConfig(metric: .cpuTemperature, style: .text, showsCaption: false),
         MenuBarItemConfig(metric: .gpuUsage, style: .text, showsCaption: true),
         MenuBarItemConfig(metric: .battery, style: .battery, showsCaption: false),
     ].filter { Capabilities.readsSensors || $0.metric.requiredSource != .thermal }

@@ -61,10 +61,10 @@ struct MenuBarDefaultItemsTests {
                 == [.cpuUsage, .cpuTemperature, .gpuUsage, .battery])
     }
 
-    @Test("the battery ships as the indicator, the rest as captioned numbers")
+    @Test("the battery ships as the indicator, the rest as numbers, captioned unless they name themselves")
     func defaultStyles() {
         let items = MenuBarSettings.defaultItems
-        #expect(items.dropLast().allSatisfy { $0.style == .text && $0.showsCaption })
+        #expect(items.dropLast().allSatisfy { $0.style == .text && $0.showsCaption != $0.metric.namesItself })
         #expect(items.last?.style == .battery)
     }
 

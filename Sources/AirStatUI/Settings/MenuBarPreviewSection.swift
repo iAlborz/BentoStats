@@ -70,17 +70,36 @@ struct MenuBarPreviewSection: View {
         }
     }
 
+    /// One entry in a readout's menu: a style, and whether it carries its caption.
+    private struct Choice {
+        let style: MenuBarDisplayStyle
+        let showsCaption: Bool
+        let title: String
+    }
+
+    /// Each style once, keeping the readout's caption as it is. A number that names
+    /// itself offers its graph twice, with its caption and without.
+    private func choices(for item: MenuBarItemConfig) -> [Choice] {
+        item.metric.supportedStyles.flatMap { style -> [Choice] in
+            guard item.metric.namesItself, style == .graph else {
+                return [Choice(style: style, showsCaption: item.showsCaption, title: style.label)]
+            }
+            return [Choice(style: .graph, showsCaption: true, title: style.label),
+                    Choice(style: .graph, showsCaption: false, title: String(localized: "Graph Only"))]
+        }
+    }
+
     /// The readout's styles, each drawn as it would sit in the menu bar, then Remove.
     private func readoutMenu(_ item: MenuBarItemConfig) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.addItem(.sectionHeader(title: item.metric.label))
-        for style in item.metric.supportedStyles {
-            let entry = ActionMenuItem(title: style.label) {
-                styleBinding(for: item).wrappedValue = style
+        for choice in choices(for: item) {
+            let entry = ActionMenuItem(title: choice.title) {
+                choose(choice.style, showsCaption: choice.showsCaption, for: item)
             }
-            entry.state = style == item.style ? .on : .off
-            entry.image = sample(of: item, as: style)
+            entry.state = choice.style == item.style && choice.showsCaption == item.showsCaption ? .on : .off
+            entry.image = sample(of: item, as: choice)
             menu.addItem(entry)
         }
         menu.addItem(.separator())
@@ -96,9 +115,10 @@ struct MenuBarPreviewSection: View {
     /// The readout drawn in one style, with the same numbers the preview has, so the
     /// menu shows what each style looks like rather than only naming it. Drawn when the
     /// menu draws it, at the menu's own scale and in its appearance.
-    private func sample(of item: MenuBarItemConfig, as style: MenuBarDisplayStyle) -> NSImage {
+    private func sample(of item: MenuBarItemConfig, as choice: Choice) -> NSImage {
         var config = item
-        config.style = style
+        config.style = choice.style
+        config.showsCaption = choice.showsCaption
         var sampled = settings.settings
         sampled.menuBar.items = [config]
         let view = MenuBarContentView(frame: .zero)
@@ -117,12 +137,9 @@ struct MenuBarPreviewSection: View {
     // MARK: Model access
 
     /// Writes find the item by its id rather than its position, so a reorder cannot
-    /// silently write to whichever readout now sits at that index.
-    ///
-    /// The style binding's getter answers from the captured item instead of going back
-    /// to the array, so a binding read after something shortened `menuBar.items` —
-    /// Restore Defaults, or an import — cannot trap. It is internal rather than private
-    /// so the regression test can hold one across exactly that reset.
+    /// silently write to whichever readout now sits at that index, and a menu still open
+    /// after something shortened `menuBar.items` — Restore Defaults, or an import —
+    /// writes nothing rather than trapping.
     private func mutate(_ item: MenuBarItemConfig,
                         _ body: @escaping (inout MenuBarItemConfig) -> Void) {
         settings.update { s in
@@ -131,9 +148,13 @@ struct MenuBarPreviewSection: View {
         }
     }
 
-    func styleBinding(for item: MenuBarItemConfig) -> Binding<MenuBarDisplayStyle> {
-        Binding(get: { item.style },
-                set: { style in mutate(item) { $0.style = style } })
+    /// What a menu entry does. Internal so the regression tests can call it across a
+    /// reset and a reorder.
+    func choose(_ style: MenuBarDisplayStyle, showsCaption: Bool, for item: MenuBarItemConfig) {
+        mutate(item) {
+            $0.style = style
+            $0.showsCaption = showsCaption
+        }
     }
 
     /// The item the store would refuse to disable, or nil when more than one is on.
@@ -178,8 +199,8 @@ struct MenuBarPreviewSection: View {
         }
     }
 
-    /// Removed by identity rather than by position, for the same reason the bindings
-    /// are: the readout a user clicked is the one that goes, whatever the array has
+    /// Removed by identity rather than by position, for the same reason the menu's
+    /// choices are: the readout a user clicked is the one that goes, whatever the array has
     /// done since.
     private func remove(_ item: MenuBarItemConfig) {
         settings.update { s in

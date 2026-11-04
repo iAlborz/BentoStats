@@ -3,11 +3,11 @@ import Foundation
 @testable import AirStatKit
 @testable import AirStatUI
 
-/// A binding built for a readout can be read after Restore Defaults or an import has
-/// replaced `menuBar.items` with a shorter list. It used to subscript by index there
-/// and take the app down.
+/// A readout's menu can still be open after Restore Defaults or an import has replaced
+/// `menuBar.items` with a shorter list. Its writes used to subscript by index there and
+/// take the app down.
 @MainActor
-@Suite("Menu bar readout bindings outlive the list they were built for")
+@Suite("Menu bar readout menus outlive the list they were built for")
 struct MenuBarPreviewSectionTests {
 
     private func store() -> SettingsStore {
@@ -26,7 +26,7 @@ struct MenuBarPreviewSectionTests {
     private func overflowingReadouts(_ settings: SettingsStore) -> MenuBarItemConfig {
         let filler: [MenuBarMetric] = [.cpuUsage, .memoryUsage, .diskFree, .uptime,
                                        .batteryTime, .cpuFrequency, .memoryPressure]
-        // Network throughput is always last, so the readout the bindings are built for
+        // Network throughput is always last, so the readout the choices are made for
         // is the same graph-capable metric however long the list has to be.
         let metrics = Array(filler.prefix(Self.overflowCount - 1)) + [.networkThroughput]
         settings.update { s in
@@ -36,35 +36,21 @@ struct MenuBarPreviewSectionTests {
         return settings.settings.menuBar.items[metrics.count - 1]
     }
 
-    @Test("reading a binding after Restore Defaults returns the captured value")
-    func readSurvivesReset() {
-        let settings = store()
-        let section = MenuBarPreviewSection(settings: settings, engine: nil)
-        let last = overflowingReadouts(settings)
-
-        let style = section.styleBinding(for: last)
-
-        settings.resetSection(.menuBar)
-        #expect(settings.settings.menuBar.items.count < Self.overflowCount)
-
-        #expect(style.wrappedValue == last.style)
-    }
-
-    @Test("writing through a binding whose readout is gone changes nothing")
+    @Test("choosing a style for a readout that is gone changes nothing")
     func writeAfterResetIsInert() {
         let settings = store()
         let section = MenuBarPreviewSection(settings: settings, engine: nil)
         let last = overflowingReadouts(settings)
-        let style = section.styleBinding(for: last)
 
         settings.resetSection(.menuBar)
+        #expect(settings.settings.menuBar.items.count < Self.overflowCount)
         let afterReset = settings.settings.menuBar.items
-        style.wrappedValue = .graph
+        section.choose(.graph, showsCaption: true, for: last)
 
         #expect(settings.settings.menuBar.items == afterReset)
     }
 
-    @Test("a binding follows its readout across a reorder")
+    @Test("a choice follows its readout across a reorder")
     func writeFollowsTheItem() {
         let settings = store()
         let section = MenuBarPreviewSection(settings: settings, engine: nil)
@@ -72,10 +58,10 @@ struct MenuBarPreviewSectionTests {
 
         let displaced = settings.settings.menuBar.items[0]
         settings.update { $0.menuBar.items.reverse() }
-        section.styleBinding(for: last).wrappedValue = .graph
+        section.choose(.graph, showsCaption: true, for: last)
 
-        // An index-based binding would have written to whatever the reversal left at
-        // the last index, which is the readout that started at index 0.
+        // An index-based write would have gone to whatever the reversal left at the
+        // last index, which is the readout that started at index 0.
         #expect(settings.settings.menuBar.items.first { $0.id == last.id }?.style == .graph)
         #expect(settings.settings.menuBar.items.first { $0.id == displaced.id }?.style == displaced.style)
     }
@@ -99,6 +85,21 @@ struct MenuBarPreviewSectionTests {
         #expect(items.last?.id == hidden.id)
         #expect(items.last?.style == .graph)
         #expect(items.filter { !$0.isEnabled }.isEmpty)
+    }
+
+    @Test("a temperature's graph can go without its caption, and its text always does")
+    func temperatureCaption() {
+        let settings = store()
+        let section = MenuBarPreviewSection(settings: settings, engine: nil)
+        settings.update { $0.menuBar.items = [MenuBarItemConfig(metric: .cpuTemperature, style: .graph)] }
+        let temperature = settings.settings.menuBar.items[0]
+
+        section.choose(.graph, showsCaption: false, for: temperature)
+        #expect(settings.settings.menuBar.items[0].showsCaption == false)
+
+        section.choose(.text, showsCaption: true, for: temperature)
+        #expect(settings.settings.menuBar.items[0].style == .text)
+        #expect(settings.settings.menuBar.items[0].showsCaption == false)
     }
 
     @Test("adding a metric with no hidden readout adds a new one")
