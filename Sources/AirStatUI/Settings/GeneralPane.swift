@@ -123,6 +123,7 @@ struct GeneralPane: View {
 ///
 /// The pictures are the panel itself, rendered offscreen on fixture data and kept as
 /// files: four live panels in a settings window would cost what four open panels do.
+/// The App Store's copy has its own, where a layout shows temperatures it cannot read.
 private struct LayoutPicker: View {
     @Binding var selection: PanelStyle
 
@@ -176,7 +177,9 @@ private struct LayoutPicker: View {
     private static let thumbnails: [PanelStyle: NSImage] = {
         var images: [PanelStyle: NSImage] = [:]
         for style in PanelStyle.allCases {
-            if let url = Logo.resourceURL("Layout-\(style.rawValue)", withExtension: "png"),
+            let name = "Layout-\(style.rawValue)"
+            let store = Capabilities.readsSensors ? nil : Logo.resourceURL(name + "-store", withExtension: "png")
+            if let url = store ?? Logo.resourceURL(name, withExtension: "png"),
                let image = NSImage(contentsOf: url) {
                 images[style] = image
             }

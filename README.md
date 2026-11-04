@@ -12,7 +12,7 @@ the battery is doing, and how hot the Mac is running.
 
 It is built to stay light, because a monitor runs all day. It has no Dock icon, reads the
 system through Mach, IOKit, sysctl and CoreWLAN, and keeps everything on your Mac: no
-accounts, no analytics, no tracking.
+accounts, no analytics, no tracking. It speaks English and 14 more languages.
 
 <img src="docs/screenshots/bento.png" alt="The Bento panel: CPU, memory, SSD, battery, GPU, network, uptime and CPU temperature cards" width="100%">
 
@@ -34,10 +34,12 @@ Point at any card for history charts and the details the card leaves out.
 
 - Press and hold a card to rearrange the grid: drag cards around, resize them, and pick from several designs for each
 - **Bento** for the full picture, **Bento Small** for a compact one, or **MacBook mode**
-- Choose what the menu bar itself shows
+- Set up the menu bar on a preview of it in Settings: click a readout to change its style, drag it to move it
 - Get a notification when a reading crosses a limit you set
 
 <img src="docs/screenshots/bento-small.png" alt="Bento Small" width="49%"> <img src="docs/screenshots/arrange.png" alt="Arranging the grid" width="49%">
+
+<img src="docs/screenshots/settings.png" alt="Settings: the layouts as pictures, and the menu bar's readouts on a preview of it" width="100%">
 
 ## Install
 
@@ -59,9 +61,9 @@ General. Version 1.0 predates this, so from 1.0, download the latest release onc
 
 ### This download or the Mac App Store?
 
-Bento Stats is also coming to the Mac App Store, but macOS does not let App Store apps read
-temperature sensors or fan speeds, so that version shows the Mac's thermal state (normal,
-elevated, high or critical) in their place.
+Bento Stats is also on the [Mac App Store](https://apps.apple.com/app/id6825569812), but
+macOS does not let App Store apps read temperature sensors or fan speeds, so that version
+shows the Mac's thermal state (normal, elevated, high or critical) in their place.
 
 | | This download | Mac App Store |
 |---|:---:|:---:|
