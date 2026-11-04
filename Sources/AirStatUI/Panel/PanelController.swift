@@ -263,6 +263,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
         isPositioning = true
         defer { isPositioning = false }
 
+        (window as? PanelWindow)?.cornerRadius = cornerRadius
         window.layoutIfNeeded()
         let fitting = window.contentView?.fittingSize
             ?? NSSize(width: PanelSettings.width, height: 400)
@@ -271,6 +272,12 @@ public final class PanelController: NSObject, NSWindowDelegate {
         guard frame != window.frame else { return }
         window.setFrame(frame, display: true)
         if detailWindow?.isVisible == true { positionDetail() }
+    }
+
+    /// The panel's corners run parallel to what its layout draws inside them: a bento
+    /// card's corners, or the MacBook's case.
+    private var cornerRadius: CGFloat {
+        settings.settings.panel.style == .macbook ? MacBookView.panelCornerRadius : Design.Radius.panel
     }
 
     private func targetFrame(for fitting: NSSize, anchoredTo anchor: NSRect?,
@@ -614,6 +621,16 @@ final class PanelWindow: NSPanel {
     }
 
     var onCancel: (() -> Void)?
+
+    /// The backdrop's corners, and so the window's. The shadow follows the new shape.
+    var cornerRadius: CGFloat {
+        get { contentView?.layer?.cornerRadius ?? 0 }
+        set {
+            guard let layer = contentView?.layer, layer.cornerRadius != newValue else { return }
+            layer.cornerRadius = newValue
+            invalidateShadow()
+        }
+    }
 
     init(contentView: NSView) {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 340, height: 400),

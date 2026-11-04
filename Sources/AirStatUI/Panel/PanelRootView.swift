@@ -85,8 +85,9 @@ public struct PanelRootView: View {
             // case that it reaches the ceiling below.
             .scrollIndicators(.never)
             .defaultScrollAnchor(.top)
-            // The bento layouts carry Settings and Quit as cards of their own.
-            if style == .macbook || style == .debug {
+            // The bento layouts carry Settings and Quit as cards of their own, and the
+            // MacBook in its hinge.
+            if style == .debug {
                 PanelSeparator()
                 PanelFooterView()
             }

@@ -8,7 +8,8 @@ import AirStatKit
 /// on one logic board, each showing how hard it is working.
 ///
 /// Laid out the way the machine is, but spaced out so each part has room for its
-/// reading: the hinge and its vents along the top; a blower fan in each upper corner,
+/// reading: the hinge and its vents along the top, parted in the middle for Settings and
+/// Quit; a blower fan in each upper corner,
 /// spinning with the fan's real speed and blowing through copper fins into the hinge;
 /// the logic board up between the fans and right across under them, its edge running
 /// round their housings, with heat pipes from the fins along the tops of the CPU and
@@ -17,7 +18,7 @@ import AirStatKit
 /// all; then the battery's cells either side of the trackpad, a speaker at each edge,
 /// and the ports along the sides.
 ///
-///     ┌── hinge ─────────────────── vents ──────────────────── hinge ──┐
+///     ┌── hinge ───── vents ─ (Settings…) (Quit) ─ vents ───── hinge ──┐
 ///     │ ┌ fins ┐ ╭────────────── logic board ───────────────╮ ┌ fins ┐ │
 ///     │ │ fan  │ │   ┃  ┌─ CPU ─┐  ┌────── GPU ──────┐  ┃   │ │ fan  │ │
 ///     │ │ 27%  │ │   ┃  │  34%  │  │       18%       │  ┃   │ │ 26%  │ │
@@ -43,9 +44,16 @@ struct MacBookView: View {
     let settings: SettingsStore
     let layout: PanelLayoutState?
 
+    @Environment(\.panelActions) private var actions
+
     private static let size = CGSize(width: 706, height: 470)
     private static let inset: CGFloat = 14
     static let width = size.width + inset * 2
+    /// The case's corners.
+    private static let caseRadius: CGFloat = 34
+    /// The panel's corners while it draws the MacBook: the case's, plus the margin round
+    /// it, so the panel's edge runs parallel to the case's at all four corners.
+    static let panelCornerRadius = caseRadius + inset
 
     // Where everything sits, in the machine's own points, mirrored about the middle.
     private static let leftHinge = CGRect(x: 40, y: 16, width: 96, height: 14)
@@ -108,7 +116,7 @@ struct MacBookView: View {
     // MARK: Case
 
     private var chassis: some View {
-        let shell = RoundedRectangle(cornerRadius: 34, style: .continuous)
+        let shell = RoundedRectangle(cornerRadius: Self.caseRadius, style: .continuous)
         let floor = RoundedRectangle(cornerRadius: 27, style: .continuous)
         return canvas {
             shell.fill(LinearGradient(colors: [Tone.rimTop, Tone.rim], startPoint: .top, endPoint: .bottom))
@@ -130,36 +138,84 @@ struct MacBookView: View {
         }
     }
 
-    /// The display's hinges at either end and the exhaust between them. The App Store's
-    /// copy, which reads no fan, has macOS's thermal state printed in the middle instead.
+    /// The display's hinges at either end and the exhaust between them, parted in the
+    /// middle for Settings and Quit, which the bento layouts carry as cards and this one
+    /// has nowhere else to put: a footer under the case would square off the panel's
+    /// bottom corners round it. The App Store's copy, which reads no fan, has macOS's
+    /// thermal state printed beside them.
     private var hinge: some View {
-        let barrel = ZStack {
+        let state = Capabilities.readsSensors ? nil : engine.thermal.value?.pressure
+        return canvas {
+            place(Self.barrel, Self.leftHinge)
+            place(Self.barrel, Self.rightHinge)
+            HStack(spacing: Design.Space.m) {
+                VentSlots().fill(Tone.vent)
+                    .frame(height: Self.vent.height)
+                if let state {
+                    HStack(spacing: Design.Space.s) {
+                        caption(String(localized: "Thermal state"))
+                        Text(Self.stateWord(state))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(gradient(Self.stateColors(state)))
+                    }
+                    .fixedSize()
+                    .hoverRegion(.thermal, layout: layout)
+                }
+                VentButton(title: String(localized: "Settings…"), symbol: "gearshape",
+                           action: actions.openSettings)
+                    .keyboardShortcut(",", modifiers: .command)
+                VentButton(title: String(localized: "Quit"), symbol: "power", action: actions.quit)
+                    .keyboardShortcut("q", modifiers: .command)
+                VentSlots().fill(Tone.vent)
+                    .frame(height: Self.vent.height)
+            }
+            .frame(width: Self.vent.width)
+            .position(x: Self.vent.midX, y: Self.vent.midY)
+        }
+    }
+
+    /// A hinge's barrel, and the shape of the buttons between them.
+    private static var barrel: some View {
+        ZStack {
             Capsule().fill(LinearGradient(colors: [Tone.partTop, Tone.part], startPoint: .top, endPoint: .bottom))
             Capsule().strokeBorder(Tone.edge, lineWidth: 1)
         }
-        let state = Capabilities.readsSensors ? nil : engine.thermal.value?.pressure
-        return canvas {
-            place(barrel, Self.leftHinge)
-            place(barrel, Self.rightHinge)
-            if let state {
-                let gap: CGFloat = 150
-                let run = (Self.vent.width - gap) / 2
-                place(VentSlots().fill(Tone.vent),
-                      CGRect(x: Self.vent.minX, y: Self.vent.minY, width: run, height: Self.vent.height))
-                place(VentSlots().fill(Tone.vent),
-                      CGRect(x: Self.vent.maxX - run, y: Self.vent.minY, width: run, height: Self.vent.height))
-                HStack(spacing: Design.Space.s) {
-                    caption(String(localized: "Thermal state"))
-                    Text(Self.stateWord(state))
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(gradient(Self.stateColors(state)))
+    }
+
+    /// A pill in the hinge's grey, lighter under the pointer.
+    private struct VentButton: View {
+        let title: String
+        let symbol: String
+        let action: @MainActor () -> Void
+
+        @State private var isHovering = false
+
+        var body: some View {
+            Button(action: action) {
+                HStack(spacing: Design.Space.xs) {
+                    Image(systemName: symbol)
+                        .font(Design.Text.caption)
+                        .foregroundStyle(Design.Palette.secondaryText)
+                    Text(title)
+                        .font(Design.Text.label)
+                        .foregroundStyle(Design.Palette.primaryText)
                 }
-                .fixedSize()
-                .hoverRegion(.thermal, layout: layout)
-                .position(x: Self.vent.midX, y: Self.vent.midY)
-            } else {
-                place(VentSlots().fill(Tone.vent), Self.vent)
+                .padding(.horizontal, Design.Space.m + 2)
+                .frame(height: 20)
+                .background {
+                    MacBookView.barrel
+                        .brightness(isHovering ? 0.08 : 0)
+                }
+                .contentShape(Capsule())
             }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .onHover { hovering in
+                withAnimation(Design.Motion.respectingAccessibility(Design.Motion.hover)) {
+                    isHovering = hovering
+                }
+            }
+            .accessibilityLabel(title)
         }
     }
 
