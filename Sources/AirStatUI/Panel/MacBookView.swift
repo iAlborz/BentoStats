@@ -1041,12 +1041,19 @@ struct SpinningFan: View {
         return 2.6 - 2.1 * step
     }
 
+    /// How strongly the speed lines show: not at all up to half speed, fully flat out.
+    /// They follow the pace's steps, as the turning does.
+    private var streaks: Double {
+        let step = (min(max(fraction, 0), 1) * 6).rounded() / 6
+        return min(max((step - 0.5) / 0.5, 0), 1)
+    }
+
     var body: some View {
         let period = isSpinning && !reduceMotion ? self.period : nil
         // A new rotor at each new pace, which starts turning from rest. The angle cannot
         // live here: set back to 0 and on to 360 in one update, it would not change at
         // all, and the fan would stop at the first change of pace.
-        FanRotor(period: period, isMirrored: isMirrored)
+        FanRotor(period: period, isMirrored: isMirrored, streaks: period == nil ? 0 : streaks)
             .id(period ?? 0)
     }
 }
@@ -1054,6 +1061,8 @@ struct SpinningFan: View {
 private struct FanRotor: View {
     let period: Double?
     let isMirrored: Bool
+    /// 0...1, how strongly the speed lines show.
+    let streaks: Double
 
     @State private var angle: Double = 0
 
@@ -1080,6 +1089,15 @@ private struct FanRotor: View {
             }
             FanBlades().fill(Color.white.opacity(0.38))
             FanBlades().stroke(Color.black.opacity(0.15), lineWidth: 0.5)
+            if streaks > 0 {
+                ForEach(SpeedStreak.all.indices, id: \.self) { index in
+                    let streak = SpeedStreak.all[index]
+                    streak.stroke(AngularGradient(colors: [.white.opacity(0), .white.opacity(0.9 * streaks)],
+                                                  center: .center, startAngle: .degrees(streak.start),
+                                                  endAngle: .degrees(streak.start + streak.sweep)),
+                                  style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                }
+            }
             Circle().fill(Color(white: 0.35)).frame(width: 34, height: 34)
             Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1).frame(width: 34, height: 34)
         }
@@ -1091,6 +1109,29 @@ private struct FanRotor: View {
                 angle = isMirrored ? -360 : 360
             }
         }
+    }
+}
+
+/// A speed line: an arc round the fan's middle that turns with the blades, faint at its
+/// tail and bright where it leads, as a cartoon draws something spinning fast. Drawn
+/// clockwise, the way the rotor turns; a mirrored fan mirrors them with it.
+private struct SpeedStreak: Shape {
+    /// Of the fan's radius.
+    let radius: CGFloat
+    /// Degrees clockwise from three o'clock.
+    let start: Double
+    let sweep: Double
+
+    /// Three, at different radii and lengths, a third of a turn apart.
+    static let all = [SpeedStreak(radius: 0.9, start: 15, sweep: 95),
+                      SpeedStreak(radius: 0.72, start: 140, sweep: 80),
+                      SpeedStreak(radius: 0.82, start: 255, sweep: 85)]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: min(rect.width, rect.height) / 2 * radius,
+                    startAngle: .degrees(start), endAngle: .degrees(start + sweep), clockwise: false)
+        return path
     }
 }
 
