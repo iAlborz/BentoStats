@@ -1025,8 +1025,8 @@ private struct HoverRegion: ViewModifier {
 /// A fan's blades, curved, turning at a pace set by how fast the real fan is running:
 /// a slow drift at idle, a blur at full speed, still when the fan is stopped.
 ///
-/// A Mac's two fans are drawn as each other's reflection: the second one's blades curve
-/// the other way, and it turns anticlockwise.
+/// The blades turn anticlockwise. A Mac's two fans are drawn as each other's reflection:
+/// the second one's blades curve the other way, and it turns clockwise.
 struct SpinningFan: View {
     /// 0...1, idle to flat out.
     let fraction: Double
@@ -1084,7 +1084,7 @@ private struct FanRotor: View {
                 ForEach(1...Self.trails, id: \.self) { trail in
                     let along = Double(trail) / Double(Self.trails)
                     FanBlades().fill(Color.white.opacity(0.38 * (1 - along) * 0.55))
-                        .rotationEffect(.degrees(-smear * along))
+                        .rotationEffect(.degrees(smear * along))
                 }
             }
             FanBlades().fill(Color.white.opacity(0.38))
@@ -1092,7 +1092,7 @@ private struct FanRotor: View {
             if streaks > 0 {
                 ForEach(SpeedStreak.all.indices, id: \.self) { index in
                     let streak = SpeedStreak.all[index]
-                    streak.stroke(AngularGradient(colors: [.white.opacity(0), .white.opacity(0.9 * streaks)],
+                    streak.stroke(AngularGradient(colors: [.white.opacity(0.9 * streaks), .white.opacity(0)],
                                                   center: .center, startAngle: .degrees(streak.start),
                                                   endAngle: .degrees(streak.start + streak.sweep)),
                                   style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
@@ -1106,15 +1106,15 @@ private struct FanRotor: View {
         .onAppear {
             guard let period else { return }
             withAnimation(.linear(duration: period).repeatForever(autoreverses: false)) {
-                angle = isMirrored ? -360 : 360
+                angle = isMirrored ? 360 : -360
             }
         }
     }
 }
 
 /// A speed line: an arc round the fan's middle that turns with the blades, faint at its
-/// tail and bright where it leads, as a cartoon draws something spinning fast. Drawn
-/// clockwise, the way the rotor turns; a mirrored fan mirrors them with it.
+/// tail and bright where it leads, as a cartoon draws something spinning fast. Bright at
+/// its start, since the rotor turns anticlockwise; a mirrored fan mirrors them with it.
 private struct SpeedStreak: Shape {
     /// Of the fan's radius.
     let radius: CGFloat
