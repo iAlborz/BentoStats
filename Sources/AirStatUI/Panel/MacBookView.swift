@@ -16,7 +16,8 @@ import AirStatKit
 /// the GPU, a thermometer on the outer side of each, under the fans the memory in its
 /// slot, the Wi-Fi module and the SSD in its socket, and traces running between them
 /// all; then the battery's cells either side of the trackpad, a speaker at each edge,
-/// and the ports along the sides.
+/// and the ports along the sides. That is a Mac with two fans, drawn below; `Geometry`
+/// rearranges it for one fan or none.
 ///
 ///     ┌── hinge ───── vents ─ (Settings…) (Quit) ─ vents ───── hinge ──┐
 ///     │ ┌ fins ┐ ╭────────────── logic board ───────────────╮ ┌ fins ┐ │
@@ -46,52 +47,222 @@ struct MacBookView: View {
 
     @Environment(\.panelActions) private var actions
 
-    private static let size = CGSize(width: 706, height: 470)
     private static let inset: CGFloat = 14
-    static let width = size.width + inset * 2
+    /// The same whatever the fans: a drawing with fewer is shorter instead.
+    static let width = Geometry.machineWidth + inset * 2
     /// The case's corners.
     private static let caseRadius: CGFloat = 34
     /// The panel's corners while it draws the MacBook: the case's, plus the margin round
     /// it, so the panel's edge runs parallel to the case's at all four corners.
     static let panelCornerRadius = caseRadius + inset
 
-    // Where everything sits, in the machine's own points, mirrored about the middle.
+    // The hinge, the same on every Mac, in the machine's own points, mirrored about the middle.
     private static let leftHinge = CGRect(x: 40, y: 16, width: 96, height: 14)
     private static let rightHinge = CGRect(x: 570, y: 16, width: 96, height: 14)
     private static let vent = CGRect(x: 148, y: 17, width: 410, height: 12)
-    /// The fin stack above, the housing below it, round at its foot.
-    private static let leftFan = CGRect(x: 20, y: 40, width: 140, height: 158)
-    private static let rightFan = CGRect(x: 546, y: 40, width: 140, height: 158)
-    /// The logic board: up between the fans from `boardTop`, and right across under
-    /// them to `boardBottom`, its edge running `boardGap` clear of each fan's housing.
-    private static let boardTop: CGFloat = 40
-    private static let boardBottom: CGFloat = 292
-    private static let boardGap: CGFloat = 8
-    /// The bento's parts at the sizes their cards draw them, and where they sit here:
-    /// the chips centred on the fans' hubs, a thermometer on the outer side of each.
+    /// The bento's parts at the sizes their cards draw them.
     private static let chipNative = CGSize(width: 140, height: 140)
     private static let gpuNative = CGSize(width: 200, height: 106)
     private static let memoryNative = CGSize(width: 200, height: 56)
     private static let ssdNative = CGSize(width: 200, height: 44)
-    private static let cpu = CGRect(x: 206, y: 70, width: 116, height: 116)
-    private static let gpu = CGRect(x: 338, y: 85.07, width: 162, height: 85.86)
-    private static let cpuThermometer = CGRect(x: 174, y: 74, width: 26, height: 108)
-    private static let gpuThermometer = CGRect(x: 506, y: 74, width: 26, height: 108)
-    /// The module and the drive at one scale, centred on one line, and the Wi-Fi module,
-    /// pins and all, between them.
-    private static let memory = CGRect(x: 22, y: 216, width: 152, height: 42.56)
-    private static let ssd = CGRect(x: 532, y: 220.56, width: 152, height: 33.44)
-    private static let wifi = CGRect(x: 272, y: 208.28, width: 162, height: 58)
-    private static let leftSpeaker = CGRect(x: 20, y: 304, width: 28, height: 150)
-    private static let leftCells = CGRect(x: 58, y: 304, width: 168, height: 150)
-    private static let trackpad = CGRect(x: 238, y: 304, width: 230, height: 150)
-    private static let rightCells = CGRect(x: 480, y: 304, width: 168, height: 150)
-    private static let rightSpeaker = CGRect(x: 658, y: 304, width: 28, height: 150)
-    /// Where the labels under the memory and the SSD start.
-    private static let labelsTop: CGFloat = 267
+
+    /// Where everything else sits, for the fans this Mac has.
+    private var geometry: Geometry { Self.geometries[fanCount] }
+    private static let geometries = [Geometry.noFans, Geometry.oneFan, Geometry.twoFans]
 
     private var formatter: MetricFormatter {
         MetricFormatter(settings: settings.settings.general)
+    }
+
+    /// Where the fans, the board and its parts, and the battery sit, in the machine's own
+    /// points.
+    ///
+    /// Two fans is the drawing as it was made: a fan in each upper corner, the chips
+    /// between them, and the memory, Wi-Fi and SSD in a row under all three. With one fan
+    /// the second corner takes the memory, Wi-Fi and SSD, one over another, the row under
+    /// the chips goes, and the machine is that much shorter; the one heat pipe runs along
+    /// the tops of both chips. With none, the chips grow into the first corner too.
+    private struct Geometry {
+        static let machineWidth: CGFloat = 706
+        static let boardGap: CGFloat = 8
+
+        var size: CGSize
+        /// Where each fan sits, and so where the board's sides run, whether or not the fan
+        /// is there. The fin stack above, the housing below it, round at its foot.
+        var leftFan = CGRect(x: 20, y: 40, width: 140, height: 158)
+        var rightFan = CGRect(x: 546, y: 40, width: 140, height: 158)
+        var fans: Int
+        /// The logic board: up between the fans from `boardTop`, and right across under
+        /// them to `boardBottom`, its edge running `boardGap` clear of each fan's housing.
+        var boardTop: CGFloat = 40
+        var boardBottom: CGFloat
+        var cpu: CGRect
+        var gpu: CGRect
+        var cpuThermometer: CGRect
+        var gpuThermometer: CGRect
+        var memory: CGRect
+        var ssd: CGRect
+        var wifi: CGRect
+        /// The tops of the labels under the memory and the SSD.
+        var memoryLabel: CGPoint
+        var ssdLabel: CGPoint
+        var pipes: [HeatPipe]
+        var traces: [BoardTraces.Bus]
+        var boardChips: [CGRect]
+        var capacitors: [CGRect]
+
+        /// The battery's cells either side of the trackpad, a speaker at each edge, from `top`.
+        var batteryTop: CGFloat
+        var leftSpeaker: CGRect { CGRect(x: 20, y: batteryTop, width: 28, height: 150) }
+        var leftCells: CGRect { CGRect(x: 58, y: batteryTop, width: 168, height: 150) }
+        var trackpad: CGRect { CGRect(x: 238, y: batteryTop, width: 230, height: 150) }
+        var rightCells: CGRect { CGRect(x: 480, y: batteryTop, width: 168, height: 150) }
+        var rightSpeaker: CGRect { CGRect(x: 658, y: batteryTop, width: 28, height: 150) }
+
+        /// A row of capacitors, one every 7 points.
+        static func capacitors(from x: CGFloat, through last: CGFloat, y: CGFloat) -> [CGRect] {
+            stride(from: x, through: last, by: 7).map { CGRect(x: $0, y: y, width: 2.5, height: 4) }
+        }
+
+        /// The memory, Wi-Fi module and SSD one over another in the second fan's corner,
+        /// each with its label under it.
+        private static let columnMemory = CGRect(x: 546, y: 46, width: 140, height: 39.2)
+        private static let columnWifi = CGRect(x: 546, y: 106, width: 140, height: 54)
+        private static let columnSSD = CGRect(x: 546, y: 166, width: 140, height: 30.8)
+
+        /// Buses from the column into the chips: the memory and the Wi-Fi into the GPU's
+        /// side, the SSD under the GPU into the CPU's foot, and the GPU's left pins across
+        /// into the CPU. Runs are square and at 45°.
+        private static func columnTraces(cpu: CGRect, gpu: CGRect) -> [BoardTraces.Bus] {
+            let gpuScale = gpu.width / gpuNative.width
+            let pins = gpu.minY + (12 + 8 * 5) * gpuScale
+            let memory = columnMemory, wifi = columnWifi, ssd = columnSSD
+            let memoryEntry = gpu.minY + gpu.height * 0.3
+            let rise = memoryEntry - memory.midY
+            let run = max(ssd.midY, gpu.maxY + 10)
+            let drop = run - ssd.midY
+            let foot = cpu.maxX - 20
+            var ssdRoute = [CGPoint(x: ssd.minX + 4, y: ssd.midY), CGPoint(x: 536, y: ssd.midY),
+                            CGPoint(x: 536 - drop, y: run)]
+            if run > cpu.maxY - 4 {
+                let climb = run - (cpu.maxY - 4)
+                ssdRoute += [CGPoint(x: foot + climb, y: run), CGPoint(x: foot, y: cpu.maxY - 4)]
+            } else {
+                ssdRoute.append(CGPoint(x: foot, y: run))
+            }
+            return [
+                BoardTraces.Bus(route: [CGPoint(x: cpu.maxX - 4, y: pins), CGPoint(x: gpu.minX + 4, y: pins)],
+                                count: 11, pitch: 8 * gpuScale),
+                BoardTraces.Bus(route: [CGPoint(x: memory.minX + 4, y: memory.midY),
+                                        CGPoint(x: gpu.maxX + 12 + rise, y: memory.midY),
+                                        CGPoint(x: gpu.maxX + 12, y: memoryEntry),
+                                        CGPoint(x: gpu.maxX - 4, y: memoryEntry)],
+                                count: 4, pitch: 6),
+                BoardTraces.Bus(route: [CGPoint(x: wifi.minX + 4, y: wifi.midY), CGPoint(x: gpu.maxX - 4, y: wifi.midY)],
+                                count: 3, pitch: 8),
+                BoardTraces.Bus(route: ssdRoute, count: 3, pitch: 5),
+            ]
+        }
+
+        static let twoFans: Geometry = {
+            let cpu = CGRect(x: 206, y: 70, width: 116, height: 116)
+            let gpu = CGRect(x: 338, y: 85.07, width: 162, height: 85.86)
+            let memory = CGRect(x: 22, y: 216, width: 152, height: 42.56)
+            let ssd = CGRect(x: 532, y: 220.56, width: 152, height: 33.44)
+            let wifi = CGRect(x: 272, y: 208.28, width: 162, height: 58)
+            // The traces, run in under the parts' edges: the GPU's left pins straight
+            // across into the CPU; buses up into the CPU's foot from the memory, from the
+            // Wi-Fi module's pins and, along under the GPU, from the SSD; and three of the
+            // GPU's pins down to its power controller. Pins are where `ChipLegs` sets them:
+            // 8pt apart from 12pt in, at the GPU's scale.
+            let gpuScale = gpu.width / gpuNative.width
+            let gpuPinsMiddle = gpu.minY + (12 + 8 * 5) * gpuScale
+            let wifiPinsMiddle = wifi.minY + 12 + 8
+            let street: CGFloat = 196
+            let traces = [
+                BoardTraces.Bus(route: [CGPoint(x: cpu.maxX - 4, y: gpuPinsMiddle),
+                                        CGPoint(x: gpu.minX + 4, y: gpuPinsMiddle)],
+                                count: 11, pitch: 8 * gpuScale),
+                BoardTraces.Bus(route: [CGPoint(x: memory.maxX - 4, y: memory.midY - 1), CGPoint(x: 200, y: memory.midY - 1),
+                                        CGPoint(x: 221, y: memory.midY - 22), CGPoint(x: 221, y: cpu.maxY - 4)],
+                                count: 4, pitch: 6),
+                BoardTraces.Bus(route: [CGPoint(x: wifi.minX + 4, y: wifiPinsMiddle), CGPoint(x: 262, y: wifiPinsMiddle),
+                                        CGPoint(x: 250, y: wifiPinsMiddle - 12), CGPoint(x: 250, y: cpu.maxY - 4)],
+                                count: 3, pitch: 8),
+                BoardTraces.Bus(route: [CGPoint(x: ssd.minX + 4, y: ssd.midY), CGPoint(x: 482, y: ssd.midY),
+                                        CGPoint(x: 482 - (ssd.midY - street), y: street), CGPoint(x: 316, y: street),
+                                        CGPoint(x: 306, y: street - 10), CGPoint(x: 306, y: cpu.maxY - 4)],
+                                count: 3, pitch: 5),
+                BoardTraces.Bus(route: [CGPoint(x: gpu.minX + (12 + 8 * 21) * gpuScale, y: gpu.maxY - 4),
+                                        CGPoint(x: gpu.minX + (12 + 8 * 21) * gpuScale, y: 194)],
+                                count: 3, pitch: 8 * gpuScale),
+            ]
+            return Geometry(size: CGSize(width: machineWidth, height: 470), fans: 2, boardBottom: 292,
+                            cpu: cpu, gpu: gpu,
+                            cpuThermometer: CGRect(x: 174, y: 74, width: 26, height: 108),
+                            gpuThermometer: CGRect(x: 506, y: 74, width: 26, height: 108),
+                            memory: memory, ssd: ssd, wifi: wifi,
+                            memoryLabel: CGPoint(x: memory.midX, y: 267), ssdLabel: CGPoint(x: ssd.midX, y: 267),
+                            pipes: [HeatPipe(from: CGPoint(x: 26, y: 52), leaves: 200, lands: 236,
+                                             to: CGPoint(x: cpu.maxX - 6, y: cpu.minY - 3)),
+                                    HeatPipe(from: CGPoint(x: 680, y: 52), leaves: 506, lands: 470,
+                                             to: CGPoint(x: gpu.minX + 6, y: gpu.minY - 3))],
+                            traces: traces,
+                            boardChips: [CGRect(x: 471, y: 190, width: 26, height: 20),
+                                         CGRect(x: 190, y: 252, width: 24, height: 24),
+                                         CGRect(x: 226, y: 256, width: 16, height: 11),
+                                         CGRect(x: 492, y: 252, width: 24, height: 24),
+                                         CGRect(x: 464, y: 256, width: 16, height: 11)],
+                            capacitors: capacitors(from: 226, through: 254, y: 280)
+                                + capacitors(from: 450, through: 478, y: 280),
+                            batteryTop: 304)
+        }()
+
+        /// The chips as two fans have them, the GPU raised so one pipe runs along both.
+        static let oneFan: Geometry = {
+            let cpu = CGRect(x: 206, y: 70, width: 116, height: 116)
+            let gpu = CGRect(x: 338, y: 70, width: 162, height: 85.86)
+            return Geometry(size: CGSize(width: machineWidth, height: 404), fans: 1, boardBottom: 226,
+                            cpu: cpu, gpu: gpu,
+                            cpuThermometer: CGRect(x: 174, y: 74, width: 26, height: 108),
+                            gpuThermometer: CGRect(x: 506, y: 74, width: 26, height: 108),
+                            memory: columnMemory, ssd: columnSSD, wifi: columnWifi,
+                            memoryLabel: CGPoint(x: columnMemory.midX, y: columnMemory.maxY + 5),
+                            ssdLabel: CGPoint(x: columnSSD.midX, y: columnSSD.maxY + 5),
+                            pipes: [HeatPipe(from: CGPoint(x: 26, y: 52), leaves: 200, lands: 236,
+                                             to: CGPoint(x: gpu.maxX - 6, y: gpu.minY - 3))],
+                            traces: columnTraces(cpu: cpu, gpu: gpu),
+                            boardChips: [CGRect(x: 36, y: 203, width: 22, height: 18),
+                                         CGRect(x: 66, y: 207, width: 16, height: 11),
+                                         CGRect(x: 362, y: 197, width: 24, height: 20),
+                                         CGRect(x: 396, y: 201, width: 16, height: 11)],
+                            capacitors: capacitors(from: 100, through: 142, y: 211)
+                                + capacitors(from: 218, through: 260, y: 207)
+                                + capacitors(from: 430, through: 472, y: 207),
+                            batteryTop: 238)
+        }()
+
+        /// No fans: the chips grow into the first corner and fill the board's height.
+        static let noFans: Geometry = {
+            let cpu = CGRect(x: 64, y: 50, width: 160, height: 160)
+            let gpuWidth: CGFloat = 240
+            let gpuHeight = gpuWidth * gpuNative.height / gpuNative.width
+            let gpu = CGRect(x: 240, y: cpu.midY - gpuHeight / 2, width: gpuWidth, height: gpuHeight)
+            return Geometry(size: CGSize(width: machineWidth, height: 404), fans: 0, boardBottom: 226,
+                            cpu: cpu, gpu: gpu,
+                            cpuThermometer: CGRect(x: 30, y: cpu.midY - 54, width: 26, height: 108),
+                            gpuThermometer: CGRect(x: 494, y: cpu.midY - 54, width: 26, height: 108),
+                            memory: columnMemory, ssd: columnSSD, wifi: columnWifi,
+                            memoryLabel: CGPoint(x: columnMemory.midX, y: columnMemory.maxY + 5),
+                            ssdLabel: CGPoint(x: columnSSD.midX, y: columnSSD.maxY + 5),
+                            pipes: [],
+                            traces: columnTraces(cpu: cpu, gpu: gpu),
+                            boardChips: [CGRect(x: 368, y: 210, width: 22, height: 11),
+                                         CGRect(x: 34, y: 197, width: 18, height: 12)],
+                            capacitors: capacitors(from: 290, through: 346, y: 214)
+                                + capacitors(from: 410, through: 466, y: 214),
+                            batteryTop: 238)
+        }()
     }
 
     var body: some View {
@@ -108,7 +279,7 @@ struct MacBookView: View {
             trackpadInfo
             speakers
         }
-        .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
+        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         .padding(Self.inset)
         .environment(\.metricFormatter, formatter)
     }
@@ -238,16 +409,16 @@ struct MacBookView: View {
     /// read them, has nothing there: its blades are the drawing's, not a reading.
     private var fans: some View {
         let fans = engine.thermal.value?.fans ?? []
-        let count = fanCount
+        let count = geometry.fans
         return canvas {
             if count >= 1 {
                 place(fan(fans.first, isMirrored: false, speed: fanSpeed(fans.first))
-                    .hoverRegion(.thermal, layout: layout), Self.leftFan)
+                    .hoverRegion(.thermal, layout: layout), geometry.leftFan)
             }
             if count == 2 {
                 place(fan(fans.count > 1 ? fans[1] : fans.first, isMirrored: true,
                           speed: fans.count > 1 ? fanSpeed(fans[1]) : nil)
-                    .hoverRegion(.thermal, layout: layout), Self.rightFan)
+                    .hoverRegion(.thermal, layout: layout), geometry.rightFan)
             }
         }
     }
@@ -261,7 +432,7 @@ struct MacBookView: View {
     /// that stays still while the blades turn.
     private func fan(_ fan: FanInfo?, isMirrored: Bool, speed: String?) -> some View {
         let fins = RoundedRectangle(cornerRadius: 3, style: .continuous)
-        let radius = Self.leftFan.width / 2
+        let radius = geometry.leftFan.width / 2
         let housing = UnevenRoundedRectangle(cornerRadii: .init(topLeading: 6, bottomLeading: radius,
                                                                 bottomTrailing: radius, topTrailing: 6),
                                              style: .circular)
@@ -310,58 +481,26 @@ struct MacBookView: View {
 
     /// The board runs round the fans there are, and on into a corner without one.
     private var board: some View {
-        let outline = BoardOutline(top: Self.boardTop, bottom: Self.boardBottom, leftFan: Self.leftFan,
-                                   rightFan: Self.rightFan, hasLeftFan: fanCount >= 1, hasRightFan: fanCount == 2,
-                                   gap: Self.boardGap, radius: 12)
+        let geometry = self.geometry
+        let outline = BoardOutline(top: geometry.boardTop, bottom: geometry.boardBottom, leftFan: geometry.leftFan,
+                                   rightFan: geometry.rightFan, hasLeftFan: geometry.fans >= 1,
+                                   hasRightFan: geometry.fans == 2, gap: Geometry.boardGap, radius: 12)
         return canvas {
             outline.fill(LinearGradient(colors: [Tone.boardTop, Tone.board], startPoint: .top, endPoint: .bottom))
             outline.stroke(Tone.edge, lineWidth: 1)
-            BoardTraces(buses: Self.traces)
+            BoardTraces(buses: geometry.traces)
                 .stroke(Tone.trace, style: StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round))
-            BoardParts(kind: .capacitors).fill(Tone.component)
-            BoardParts(kind: .chips).fill(Tone.boardChip)
-            BoardParts(kind: .chips).stroke(Color.white.opacity(0.14), lineWidth: 0.75)
+            BoardParts(rects: geometry.capacitors, cornerRadius: 0.5).fill(Tone.component)
+            BoardParts(rects: geometry.boardChips, cornerRadius: 1.5).fill(Tone.boardChip)
+            BoardParts(rects: geometry.boardChips, cornerRadius: 1.5).stroke(Color.white.opacity(0.14), lineWidth: 0.75)
         }
     }
 
-    /// The traces, run in under the parts' edges: the GPU's left pins straight across
-    /// into the CPU; buses up into the CPU's foot from the memory, from the Wi-Fi
-    /// module's pins and, along under the GPU, from the SSD; and three of the GPU's pins
-    /// down to its power controller. Pins are where `ChipLegs` sets them: 8pt apart from
-    /// 12pt in, at the GPU's scale.
-    private static let traces: [BoardTraces.Bus] = {
-        let gpuScale = gpu.width / gpuNative.width
-        let gpuPinsMiddle = gpu.minY + (12 + 8 * 5) * gpuScale
-        let wifiPinsMiddle = wifi.minY + 12 + 8
-        let street: CGFloat = 196
-        return [
-            BoardTraces.Bus(route: [CGPoint(x: cpu.maxX - 4, y: gpuPinsMiddle),
-                                    CGPoint(x: gpu.minX + 4, y: gpuPinsMiddle)],
-                            count: 11, pitch: 8 * gpuScale),
-            BoardTraces.Bus(route: [CGPoint(x: memory.maxX - 4, y: memory.midY - 1), CGPoint(x: 200, y: memory.midY - 1),
-                                    CGPoint(x: 221, y: memory.midY - 22), CGPoint(x: 221, y: cpu.maxY - 4)],
-                            count: 4, pitch: 6),
-            BoardTraces.Bus(route: [CGPoint(x: wifi.minX + 4, y: wifiPinsMiddle), CGPoint(x: 262, y: wifiPinsMiddle),
-                                    CGPoint(x: 250, y: wifiPinsMiddle - 12), CGPoint(x: 250, y: cpu.maxY - 4)],
-                            count: 3, pitch: 8),
-            BoardTraces.Bus(route: [CGPoint(x: ssd.minX + 4, y: ssd.midY), CGPoint(x: 482, y: ssd.midY),
-                                    CGPoint(x: 482 - (ssd.midY - street), y: street), CGPoint(x: 316, y: street),
-                                    CGPoint(x: 306, y: street - 10), CGPoint(x: 306, y: cpu.maxY - 4)],
-                            count: 3, pitch: 5),
-            BoardTraces.Bus(route: [CGPoint(x: gpu.minX + (12 + 8 * 21) * gpuScale, y: gpu.maxY - 4),
-                                    CGPoint(x: gpu.minX + (12 + 8 * 21) * gpuScale, y: 194)],
-                            count: 3, pitch: 8 * gpuScale),
-        ]
-    }()
-
     /// Copper, thicker than before, from the fan's outer edge right along the foot of its
     /// fins, down in an S over the board, and along the top edge of the chip it cools: the
-    /// CPU on the left, the GPU on the right. A pipe goes with its fan.
+    /// CPU on the left, the GPU on the right, or both when there is one fan.
     private var heatPipes: some View {
-        let pipes = Array([HeatPipe(from: CGPoint(x: 26, y: 52), leaves: 200, lands: 236,
-                                    to: CGPoint(x: Self.cpu.maxX - 6, y: Self.cpu.minY - 3)),
-                           HeatPipe(from: CGPoint(x: 680, y: 52), leaves: 506, lands: 470,
-                                    to: CGPoint(x: Self.gpu.minX + 6, y: Self.gpu.minY - 3))].prefix(fanCount))
+        let pipes = geometry.pipes
         return canvas {
             ForEach(pipes.indices, id: \.self) { index in
                 pipes[index].stroke(Color.black.opacity(0.2),
@@ -396,16 +535,16 @@ struct MacBookView: View {
                                      performanceColors: [.white, .white],
                                      efficiencyColors: [Color(nsColor: .systemGreen), Color(nsColor: .systemMint)],
                                      reading: cpu.map { formatter.percent($0.total.busy) } ?? MetricFormatter.unavailable),
-                         native: Self.chipNative, width: Self.cpu.width)
+                         native: Self.chipNative, width: geometry.cpu.width)
                 .shadow(color: Tone.dropShadow, radius: 3, y: 1)
-                .hoverRegion(.cpu, layout: layout), Self.cpu)
+                .hoverRegion(.cpu, layout: layout), geometry.cpu)
             place(gpuDie(cores: device?.coreCount ?? engine.system.value?.gpuCoreCount ?? 0,
                          load: device?.utilization ?? 0,
                          reading: device?.utilization.map { formatter.percent($0) } ?? MetricFormatter.unavailable)
                 .shadow(color: Tone.dropShadow, radius: 3, y: 1)
-                .hoverRegion(.gpu, layout: layout), Self.gpu)
-            place(thermometer(thermal?.cpuCelsius).hoverRegion(.cpu, layout: layout), Self.cpuThermometer)
-            place(thermometer(thermal?.gpuCelsius).hoverRegion(.gpu, layout: layout), Self.gpuThermometer)
+                .hoverRegion(.gpu, layout: layout), geometry.gpu)
+            place(thermometer(thermal?.cpuCelsius).hoverRegion(.cpu, layout: layout), geometry.cpuThermometer)
+            place(thermometer(thermal?.gpuCelsius).hoverRegion(.gpu, layout: layout), geometry.gpuThermometer)
         }
     }
 
@@ -413,7 +552,7 @@ struct MacBookView: View {
     private func gpuDie(cores: Int, load: Double, reading: String) -> some View {
         if cores > 0 {
             scaled(GPUDie(cores: cores, load: load, colors: palette(.gpu), size: Self.gpuNative, reading: reading),
-                   native: Self.gpuNative, width: Self.gpu.width)
+                   native: Self.gpuNative, width: geometry.gpu.width)
         } else {
             // No core count to lay the cores out by: the package, its name and its load.
             ZStack {
@@ -460,7 +599,7 @@ struct MacBookView: View {
     private var modules: some View {
         let memory = engine.memory.value
         let root = engine.disk.value?.rootVolume
-        let scale = Self.memory.width / Self.memoryNative.width
+        let scale = geometry.memory.width / Self.memoryNative.width
         let slot = RoundedRectangle(cornerRadius: 2, style: .continuous)
         let socket = ZStack {
             slot.fill(Tone.well)
@@ -472,22 +611,22 @@ struct MacBookView: View {
         let memoryUsed = memory.map { $0.totalBytes > 0 ? Double($0.usedBytes) / Double($0.totalBytes) : 0 }
         let diskUsed = root.map { $0.totalBytes > 0 ? 1 - Double($0.availableBytes) / Double($0.totalBytes) : 0 }
         return canvas {
-            place(socket, CGRect(x: Self.memory.minX - 4, y: Self.memory.maxY - 8 * scale - 2,
-                                 width: Self.memory.width + 8, height: 8 * scale + 5))
+            place(socket, CGRect(x: geometry.memory.minX - 4, y: geometry.memory.maxY - 8 * scale - 2,
+                                 width: geometry.memory.width + 8, height: 8 * scale + 5))
             place(scaled(MemoryGraphic(label: memoryFree.map { String(localized: "\(formatter.memory($0)) free") },
                                        fraction: memoryUsed ?? 0, load: palette(.memory)[0]),
-                         native: Self.memoryNative, width: Self.memory.width)
+                         native: Self.memoryNative, width: geometry.memory.width)
                 .shadow(color: Tone.dropShadow, radius: 2, y: 1)
-                .hoverRegion(.memory, layout: layout), Self.memory)
-            place(socket, CGRect(x: Self.ssd.minX - 4, y: Self.ssd.minY - 3,
-                                 width: 9 * scale + 6, height: Self.ssd.height + 6))
+                .hoverRegion(.memory, layout: layout), geometry.memory)
+            place(socket, CGRect(x: geometry.ssd.minX - 4, y: geometry.ssd.minY - 3,
+                                 width: 9 * scale + 6, height: geometry.ssd.height + 6))
             place(scaled(SSDGraphic(fraction: diskUsed ?? 0, colors: palette(.disk),
                                     label: root.map { String(localized: "\(formatter.storage($0.availableBytes)) free") },
                                     surface: Tone.board),
-                         native: Self.ssdNative, width: Self.ssd.width)
+                         native: Self.ssdNative, width: geometry.ssd.width)
                 .shadow(color: Tone.dropShadow, radius: 2, y: 1)
-                .hoverRegion(.disk, layout: layout), Self.ssd)
-            screw.position(x: Self.ssd.maxX, y: Self.ssd.midY)
+                .hoverRegion(.disk, layout: layout), geometry.ssd)
+            screw.position(x: geometry.ssd.maxX, y: geometry.ssd.midY)
         }
     }
 
@@ -501,11 +640,11 @@ struct MacBookView: View {
         return canvas {
             label(String(localized: "Memory"), memory.map { formatter.memory($0.totalBytes) })
                 .hoverRegion(.memory, layout: layout)
-                .top(at: CGPoint(x: Self.memory.midX, y: Self.labelsTop))
-            place(network.hoverRegion(.network, layout: layout), Self.wifi)
+                .top(at: geometry.memoryLabel)
+            place(network.hoverRegion(.network, layout: layout), geometry.wifi)
             label(String(localized: "SSD"), root.map { formatter.storage($0.totalBytes) }, celsius: Self.hottest(thermal, .storage))
                 .hoverRegion(.disk, layout: layout)
-                .top(at: CGPoint(x: Self.ssd.midX, y: Self.labelsTop))
+                .top(at: geometry.ssdLabel)
         }
     }
 
@@ -610,11 +749,11 @@ struct MacBookView: View {
                 reading(String(localized: "Battery"), power?.percentage.map { formatter.percentValue($0) }, colors: colors,
                         size: 17, celsius: power?.temperatureCelsius ?? Self.hottest(engine.thermal.value, .battery))
             }
-            .hoverRegion(.battery, layout: layout), Self.leftCells)
+            .hoverRegion(.battery, layout: layout), geometry.leftCells)
             place(cells(charge: charge, color: colors[0], tabsTrailing: false) {
                 reading(state?.title ?? String(localized: "Power"), state?.value, colors: colors, size: 15)
             }
-            .hoverRegion(.battery, layout: layout), Self.rightCells)
+            .hoverRegion(.battery, layout: layout), geometry.rightCells)
         }
     }
 
@@ -714,7 +853,7 @@ struct MacBookView: View {
             .padding(.horizontal, Design.Space.l)
         }
         .shadow(color: Tone.dropShadow, radius: 2, y: 1)
-        .hoverRegion(.system, layout: layout), Self.trackpad)
+        .hoverRegion(.system, layout: layout), geometry.trackpad)
     }
 
     private var speakers: some View {
@@ -725,8 +864,8 @@ struct MacBookView: View {
             shape.strokeBorder(Tone.edge, lineWidth: 1)
         }
         return canvas {
-            place(speaker, Self.leftSpeaker)
-            place(speaker, Self.rightSpeaker)
+            place(speaker, geometry.leftSpeaker)
+            place(speaker, geometry.rightSpeaker)
         }
     }
 
@@ -747,7 +886,7 @@ struct MacBookView: View {
     /// The whole machine's area, for layers drawn in its own points.
     private func canvas<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         ZStack(alignment: .topLeading, content: content)
-            .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
     }
 
     /// Sets a part at its place by layout rather than by offset, so the frame it reports
@@ -1152,27 +1291,14 @@ private struct BoardTraces: Shape {
 /// under it, and either side of the Wi-Fi module a controller, a smaller part and a row
 /// of capacitors.
 private struct BoardParts: Shape {
-    enum Kind { case chips, capacitors }
-
-    let kind: Kind
-
     /// In the machine's points.
-    private static let chips = [CGRect(x: 471, y: 190, width: 26, height: 20),
-                                CGRect(x: 190, y: 252, width: 24, height: 24),
-                                CGRect(x: 226, y: 256, width: 16, height: 11),
-                                CGRect(x: 492, y: 252, width: 24, height: 24),
-                                CGRect(x: 464, y: 256, width: 16, height: 11)]
+    let rects: [CGRect]
+    let cornerRadius: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        guard kind == .capacitors else {
-            for chip in Self.chips {
-                path.addRoundedRect(in: chip, cornerSize: CGSize(width: 1.5, height: 1.5))
-            }
-            return path
-        }
-        for x in Array(stride(from: CGFloat(226), through: 254, by: 7)) + Array(stride(from: CGFloat(450), through: 478, by: 7)) {
-            path.addRoundedRect(in: CGRect(x: x, y: 280, width: 2.5, height: 4), cornerSize: CGSize(width: 0.5, height: 0.5))
+        for part in rects {
+            path.addRoundedRect(in: part, cornerSize: CGSize(width: cornerRadius, height: cornerRadius))
         }
         return path
     }
