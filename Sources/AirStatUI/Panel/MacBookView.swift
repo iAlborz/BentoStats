@@ -1041,11 +1041,13 @@ struct SpinningFan: View {
         return 2.6 - 2.1 * step
     }
 
-    /// How strongly the speed lines show: not at all up to half speed, fully flat out.
-    /// They follow the pace's steps, as the turning does.
-    private var streaks: Double {
-        let step = (min(max(fraction, 0), 1) * 6).rounded() / 6
-        return min(max((step - 0.5) / 0.5, 0), 1)
+    /// How many speed lines show: none below 30% of full speed, one there, and one more
+    /// for each further step of the way, all of them flat out.
+    private var streaks: Int {
+        let speed = min(max(fraction, 0), 1)
+        guard speed >= 0.3 else { return 0 }
+        let steps = Double(SpeedStreak.all.count - 1)
+        return 1 + Int(((speed - 0.3) / 0.7 * steps).rounded())
     }
 
     var body: some View {
@@ -1061,8 +1063,8 @@ struct SpinningFan: View {
 private struct FanRotor: View {
     let period: Double?
     let isMirrored: Bool
-    /// 0...1, how strongly the speed lines show.
-    let streaks: Double
+    /// How many speed lines show.
+    let streaks: Int
 
     @State private var angle: Double = 0
 
@@ -1089,15 +1091,17 @@ private struct FanRotor: View {
             }
             FanBlades().fill(Color.white.opacity(0.38))
             FanBlades().stroke(Color.black.opacity(0.15), lineWidth: 0.5)
-            if streaks > 0 {
-                ForEach(SpeedStreak.all.indices, id: \.self) { index in
-                    let streak = SpeedStreak.all[index]
-                    streak.stroke(AngularGradient(colors: [.white.opacity(0.9 * streaks), .white.opacity(0)],
-                                                  center: .center, startAngle: .degrees(streak.start),
-                                                  endAngle: .degrees(streak.start + streak.sweep)),
-                                  style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                }
+            // Each line fades in and out rather than appearing, so a fan that wavers
+            // across a step does not blink one on and off.
+            ForEach(SpeedStreak.all.indices, id: \.self) { index in
+                let streak = SpeedStreak.all[index]
+                streak.stroke(AngularGradient(colors: [.white.opacity(0.85), .white.opacity(0)],
+                                              center: .center, startAngle: .degrees(streak.start),
+                                              endAngle: .degrees(streak.start + streak.sweep)),
+                              style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .opacity(index < streaks ? 1 : 0)
             }
+            .animation(.easeInOut(duration: 0.4), value: streaks)
             Circle().fill(Color(white: 0.35)).frame(width: 34, height: 34)
             Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1).frame(width: 34, height: 34)
         }
@@ -1122,10 +1126,14 @@ private struct SpeedStreak: Shape {
     let start: Double
     let sweep: Double
 
-    /// Three, at different radii and lengths, a third of a turn apart.
+    /// At different radii and lengths, in the order they appear: each next one where the
+    /// ones before leave the most room.
     static let all = [SpeedStreak(radius: 0.9, start: 15, sweep: 95),
-                      SpeedStreak(radius: 0.72, start: 140, sweep: 80),
-                      SpeedStreak(radius: 0.82, start: 255, sweep: 85)]
+                      SpeedStreak(radius: 0.72, start: 195, sweep: 80),
+                      SpeedStreak(radius: 0.82, start: 105, sweep: 85),
+                      SpeedStreak(radius: 0.64, start: 285, sweep: 70),
+                      SpeedStreak(radius: 0.95, start: 240, sweep: 75),
+                      SpeedStreak(radius: 0.58, start: 60, sweep: 65)]
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
