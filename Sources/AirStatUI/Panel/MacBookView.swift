@@ -9,7 +9,7 @@ import AirStatKit
 ///
 /// Laid out the way the machine is, but spaced out so each part has room for its
 /// reading: the hinge and its vents along the top, parted in the middle for Settings and
-/// Quit; a blower fan in each upper corner,
+/// Quit; a blower fan in each upper corner, or in one, or in neither, as the Mac has them,
 /// spinning with the fan's real speed and blowing through copper fins into the hinge;
 /// the logic board up between the fans and right across under them, its edge running
 /// round their housings, with heat pipes from the fins along the tops of the CPU and
@@ -221,18 +221,34 @@ struct MacBookView: View {
 
     // MARK: Fans
 
-    /// Each fan with how fast it is going on its hub. A Mac without fans has "None" on
-    /// the left one; the App Store's copy, which cannot read them, has nothing: its
-    /// blades are the drawing's, not a reading.
+    /// How many fans the drawing has: as many as the Mac reports, up to two, the first
+    /// on the left. Where it cannot be asked, in the App Store's copy or before the first
+    /// reading, the model says: a MacBook Air has none, and any other MacBook two.
+    private var fanCount: Int {
+        if Capabilities.readsSensors, let thermal = engine.thermal.value, thermal.sensorsUnavailableReason == nil {
+            return min(thermal.fans.count, 2)
+        }
+        let system = engine.system.value
+        let isAir = system?.modelName.contains("MacBook Air") == true
+            || system?.modelIdentifier.hasPrefix("MacBookAir") == true
+        return isAir ? 0 : 2
+    }
+
+    /// Each fan with how fast it is going on its hub. The App Store's copy, which cannot
+    /// read them, has nothing there: its blades are the drawing's, not a reading.
     private var fans: some View {
         let fans = engine.thermal.value?.fans ?? []
-        let left = fanSpeed(fans.first) ?? (Capabilities.readsSensors ? String(localized: "None") : nil)
+        let count = fanCount
         return canvas {
-            place(fan(fans.first, isMirrored: false, speed: left).hoverRegion(.thermal, layout: layout),
-                  Self.leftFan)
-            place(fan(fans.count > 1 ? fans[1] : fans.first, isMirrored: true,
-                      speed: fans.count > 1 ? fanSpeed(fans[1]) : nil)
-                .hoverRegion(.thermal, layout: layout), Self.rightFan)
+            if count >= 1 {
+                place(fan(fans.first, isMirrored: false, speed: fanSpeed(fans.first))
+                    .hoverRegion(.thermal, layout: layout), Self.leftFan)
+            }
+            if count == 2 {
+                place(fan(fans.count > 1 ? fans[1] : fans.first, isMirrored: true,
+                          speed: fans.count > 1 ? fanSpeed(fans[1]) : nil)
+                    .hoverRegion(.thermal, layout: layout), Self.rightFan)
+            }
         }
     }
 
@@ -292,9 +308,11 @@ struct MacBookView: View {
 
     // MARK: Board
 
+    /// The board runs round the fans there are, and on into a corner without one.
     private var board: some View {
         let outline = BoardOutline(top: Self.boardTop, bottom: Self.boardBottom, leftFan: Self.leftFan,
-                                   rightFan: Self.rightFan, gap: Self.boardGap, radius: 12)
+                                   rightFan: Self.rightFan, hasLeftFan: fanCount >= 1, hasRightFan: fanCount == 2,
+                                   gap: Self.boardGap, radius: 12)
         return canvas {
             outline.fill(LinearGradient(colors: [Tone.boardTop, Tone.board], startPoint: .top, endPoint: .bottom))
             outline.stroke(Tone.edge, lineWidth: 1)
@@ -338,12 +356,12 @@ struct MacBookView: View {
 
     /// Copper, thicker than before, from the fan's outer edge right along the foot of its
     /// fins, down in an S over the board, and along the top edge of the chip it cools: the
-    /// CPU on the left, the GPU on the right.
+    /// CPU on the left, the GPU on the right. A pipe goes with its fan.
     private var heatPipes: some View {
-        let pipes = [HeatPipe(from: CGPoint(x: 26, y: 52), leaves: 200, lands: 236,
-                              to: CGPoint(x: Self.cpu.maxX - 6, y: Self.cpu.minY - 3)),
-                     HeatPipe(from: CGPoint(x: 680, y: 52), leaves: 506, lands: 470,
-                              to: CGPoint(x: Self.gpu.minX + 6, y: Self.gpu.minY - 3))]
+        let pipes = Array([HeatPipe(from: CGPoint(x: 26, y: 52), leaves: 200, lands: 236,
+                                    to: CGPoint(x: Self.cpu.maxX - 6, y: Self.cpu.minY - 3)),
+                           HeatPipe(from: CGPoint(x: 680, y: 52), leaves: 506, lands: 470,
+                                    to: CGPoint(x: Self.gpu.minX + 6, y: Self.gpu.minY - 3))].prefix(fanCount))
         return canvas {
             ForEach(pipes.indices, id: \.self) { index in
                 pipes[index].stroke(Color.black.opacity(0.2),
@@ -900,8 +918,27 @@ private struct FanRotor: View {
 
     @State private var angle: Double = 0
 
+    /// Copies of the blades trailing each one, fading, over the arc it turns through in
+    /// two and a half frames at 60 Hz: the smear a slow shutter would catch. Without it
+    /// the blades jump from frame to frame, and near a blade's width per frame they seem
+    /// to stand still or turn backwards. Never more than the gap to the next blade.
+    private static let trails = 8
+
+    private var smear: Double {
+        guard let period else { return 0 }
+        return min(360 / period / 60 * 2.5, 360 / Double(FanBlades.count))
+    }
+
     var body: some View {
+        let smear = self.smear
         ZStack {
+            if smear > 0 {
+                ForEach(1...Self.trails, id: \.self) { trail in
+                    let along = Double(trail) / Double(Self.trails)
+                    FanBlades().fill(Color.white.opacity(0.38 * (1 - along) * 0.55))
+                        .rotationEffect(.degrees(-smear * along))
+                }
+            }
             FanBlades().fill(Color.white.opacity(0.38))
             FanBlades().stroke(Color.black.opacity(0.15), lineWidth: 0.5)
             Circle().fill(Color(white: 0.35)).frame(width: 34, height: 34)
@@ -919,12 +956,14 @@ private struct FanRotor: View {
 }
 
 private struct FanBlades: Shape {
+    static let count = 23
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let outer = min(rect.width, rect.height) / 2
         let inner: CGFloat = 18
-        let count = 23
+        let count = Self.count
         for index in 0..<count {
             let a = Double(index) / Double(count) * 2 * .pi
             let sweep = 0.38
@@ -1007,8 +1046,11 @@ private struct LevelLine: Shape {
 private struct BoardOutline: Shape {
     let top: CGFloat
     let bottom: CGFloat
+    /// Where each fan sits. The board's sides keep to them whether or not the fan is there.
     let leftFan: CGRect
     let rightFan: CGRect
+    let hasLeftFan: Bool
+    let hasRightFan: Bool
     let gap: CGFloat
     /// The board's own corners, and those where its sides meet the curves.
     let radius: CGFloat
@@ -1033,22 +1075,34 @@ private struct BoardOutline: Shape {
 
         var path = Path()
         path.move(to: CGPoint(x: (left.maxX + right.minX) / 2, y: top))
-        path.addArc(tangent1End: CGPoint(x: right.minX, y: top), tangent2End: CGPoint(x: right.minX, y: rightHub.y),
-                    radius: radius)
-        path.addArc(center: rightHub, radius: cut, startAngle: .radians(.pi),
-                    endAngle: .radians(angle(from: rightHub, to: rightCorner)), clockwise: true)
-        path.addArc(center: rightCorner, radius: radius, startAngle: .radians(angle(from: rightCorner, to: rightHub)),
-                    endAngle: .zero, clockwise: false)
+        if hasRightFan {
+            path.addArc(tangent1End: CGPoint(x: right.minX, y: top), tangent2End: CGPoint(x: right.minX, y: rightHub.y),
+                        radius: radius)
+            path.addArc(center: rightHub, radius: cut, startAngle: .radians(.pi),
+                        endAngle: .radians(angle(from: rightHub, to: rightCorner)), clockwise: true)
+            path.addArc(center: rightCorner, radius: radius, startAngle: .radians(angle(from: rightCorner, to: rightHub)),
+                        endAngle: .zero, clockwise: false)
+        } else {
+            path.addArc(tangent1End: CGPoint(x: right.maxX, y: top), tangent2End: CGPoint(x: right.maxX, y: bottom),
+                        radius: radius)
+        }
         path.addArc(tangent1End: CGPoint(x: right.maxX, y: bottom), tangent2End: CGPoint(x: left.minX, y: bottom),
                     radius: radius)
-        path.addArc(tangent1End: CGPoint(x: left.minX, y: bottom), tangent2End: CGPoint(x: left.minX, y: leftHub.y),
-                    radius: radius)
-        path.addArc(center: leftCorner, radius: radius, startAngle: .radians(.pi),
-                    endAngle: .radians(angle(from: leftCorner, to: leftHub) + 2 * .pi), clockwise: false)
-        path.addArc(center: leftHub, radius: cut, startAngle: .radians(angle(from: leftHub, to: leftCorner)),
-                    endAngle: .zero, clockwise: true)
-        path.addArc(tangent1End: CGPoint(x: left.maxX, y: top), tangent2End: CGPoint(x: right.minX, y: top),
-                    radius: radius)
+        if hasLeftFan {
+            path.addArc(tangent1End: CGPoint(x: left.minX, y: bottom), tangent2End: CGPoint(x: left.minX, y: leftHub.y),
+                        radius: radius)
+            path.addArc(center: leftCorner, radius: radius, startAngle: .radians(.pi),
+                        endAngle: .radians(angle(from: leftCorner, to: leftHub) + 2 * .pi), clockwise: false)
+            path.addArc(center: leftHub, radius: cut, startAngle: .radians(angle(from: leftHub, to: leftCorner)),
+                        endAngle: .zero, clockwise: true)
+            path.addArc(tangent1End: CGPoint(x: left.maxX, y: top), tangent2End: CGPoint(x: right.minX, y: top),
+                        radius: radius)
+        } else {
+            path.addArc(tangent1End: CGPoint(x: left.minX, y: bottom), tangent2End: CGPoint(x: left.minX, y: top),
+                        radius: radius)
+            path.addArc(tangent1End: CGPoint(x: left.minX, y: top), tangent2End: CGPoint(x: right.minX, y: top),
+                        radius: radius)
+        }
         path.closeSubpath()
         return path
     }
