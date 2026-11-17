@@ -1022,8 +1022,14 @@ private struct HoverRegion: ViewModifier {
 
 // MARK: - Shapes
 
-/// A fan's blades, curved, turning at a pace set by how fast the real fan is running:
-/// a slow drift at idle, a blur at full speed, still when the fan is stopped.
+/// A fan's blades, curved, turning at a pace set by how fast the real fan is running,
+/// still when the fan is stopped.
+///
+/// The blades themselves never turn fast: a fast turn at the display's frame rate is a
+/// jump from frame to frame, and near a blade's width per frame they seem to stand still
+/// or turn backwards. They drift, and how fast the fan is going is in how far each blade
+/// smears behind it and, from 30%, in speed lines that do turn fast, being long smooth
+/// arcs that do not jump.
 ///
 /// The blades turn anticlockwise. A Mac's two fans are drawn as each other's reflection:
 /// the second one's blades curve the other way, and it turns clockwise.
@@ -1035,10 +1041,9 @@ struct SpinningFan: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Seconds per turn, in steps, so a fan that wavers by a few RPM keeps its pace.
-    private var period: Double {
-        let step = (min(max(fraction, 0), 1) * 6).rounded() / 6
-        return 2.6 - 2.1 * step
+    /// The pace, in sixths, so a fan that wavers by a few RPM keeps its pace.
+    private var step: Double {
+        (min(max(fraction, 0), 1) * 6).rounded() / 6
     }
 
     /// How many speed lines show: none below 30% of full speed, one there, and one more
@@ -1051,66 +1056,81 @@ struct SpinningFan: View {
     }
 
     var body: some View {
-        let period = isSpinning && !reduceMotion ? self.period : nil
-        // A new rotor at each new pace, which starts turning from rest. The angle cannot
-        // live here: set back to 0 and on to 360 in one update, it would not change at
+        let step = isSpinning && !reduceMotion ? self.step : nil
+        // A new rotor at each new pace, which starts turning from rest. The angles cannot
+        // live here: set back to 0 and on to 360 in one update, they would not change at
         // all, and the fan would stop at the first change of pace.
-        FanRotor(period: period, isMirrored: isMirrored, streaks: period == nil ? 0 : streaks)
-            .id(period ?? 0)
+        FanRotor(step: step, isMirrored: isMirrored, streaks: step == nil ? 0 : streaks)
+            .id(step ?? -1)
     }
 }
 
 private struct FanRotor: View {
-    let period: Double?
+    /// The pace, idle to flat out in sixths; nil when the fan is still.
+    let step: Double?
     let isMirrored: Bool
     /// How many speed lines show.
     let streaks: Int
 
-    @State private var angle: Double = 0
+    @State private var bladeAngle: Double = 0
+    @State private var streakAngle: Double = 0
 
-    /// Copies of the blades trailing each one, fading, over the arc it turns through in
-    /// two and a half frames at 60 Hz: the smear a slow shutter would catch. Without it
-    /// the blades jump from frame to frame, and near a blade's width per frame they seem
-    /// to stand still or turn backwards. Never more than the gap to the next blade.
-    private static let trails = 8
+    /// Seconds per turn: the blades' slow, from 4.5 at idle to 2 flat out, a few degrees
+    /// a frame at most; the speed lines' fast, from 1.8 to 0.4.
+    private var bladePeriod: Double? { step.map { 4.5 - 2.5 * $0 } }
+    private var streakPeriod: Double? { step.map { 1.8 - 1.4 * $0 } }
 
+    /// Copies of the blades trailing each one, fading: a third of the way to the next
+    /// blade at idle, all the way flat out, where the blades run together into a blur.
+    private static let trails = 10
     private var smear: Double {
-        guard let period else { return 0 }
-        return min(360 / period / 60 * 2.5, 360 / Double(FanBlades.count))
+        step.map { 360 / Double(FanBlades.count) * min(0.35 + 0.65 * $0, 1) } ?? 0
     }
 
     var body: some View {
         let smear = self.smear
         ZStack {
-            if smear > 0 {
-                ForEach(1...Self.trails, id: \.self) { trail in
-                    let along = Double(trail) / Double(Self.trails)
-                    FanBlades().fill(Color.white.opacity(0.38 * (1 - along) * 0.55))
-                        .rotationEffect(.degrees(smear * along))
+            ZStack {
+                if smear > 0 {
+                    ForEach(1...Self.trails, id: \.self) { trail in
+                        let along = Double(trail) / Double(Self.trails)
+                        FanBlades().fill(Color.white.opacity(0.38 * (1 - along) * 0.6))
+                            .rotationEffect(.degrees(smear * along))
+                    }
                 }
+                FanBlades().fill(Color.white.opacity(0.38))
+                FanBlades().stroke(Color.black.opacity(0.15), lineWidth: 0.5)
             }
-            FanBlades().fill(Color.white.opacity(0.38))
-            FanBlades().stroke(Color.black.opacity(0.15), lineWidth: 0.5)
+            .rotationEffect(.degrees(bladeAngle))
             // Each line fades in and out rather than appearing, so a fan that wavers
             // across a step does not blink one on and off.
-            ForEach(SpeedStreak.all.indices, id: \.self) { index in
-                let streak = SpeedStreak.all[index]
-                streak.stroke(AngularGradient(colors: [.white.opacity(0.85), .white.opacity(0)],
-                                              center: .center, startAngle: .degrees(streak.start),
-                                              endAngle: .degrees(streak.start + streak.sweep)),
-                              style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .opacity(index < streaks ? 1 : 0)
+            ZStack {
+                ForEach(SpeedStreak.all.indices, id: \.self) { index in
+                    let streak = SpeedStreak.all[index]
+                    streak.stroke(AngularGradient(colors: [.white.opacity(0.85), .white.opacity(0)],
+                                                  center: .center, startAngle: .degrees(streak.start),
+                                                  endAngle: .degrees(streak.start + streak.sweep)),
+                                  style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .opacity(index < streaks ? 1 : 0)
+                }
             }
             .animation(.easeInOut(duration: 0.4), value: streaks)
+            .rotationEffect(.degrees(streakAngle))
             Circle().fill(Color(white: 0.35)).frame(width: 34, height: 34)
             Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1).frame(width: 34, height: 34)
         }
+        // Turned anticlockwise here; the reflection makes the mirrored fan's clockwise.
         .scaleEffect(x: isMirrored ? -1 : 1)
-        .rotationEffect(.degrees(angle))
         .onAppear {
-            guard let period else { return }
-            withAnimation(.linear(duration: period).repeatForever(autoreverses: false)) {
-                angle = isMirrored ? 360 : -360
+            if let bladePeriod {
+                withAnimation(.linear(duration: bladePeriod).repeatForever(autoreverses: false)) {
+                    bladeAngle = -360
+                }
+            }
+            if let streakPeriod {
+                withAnimation(.linear(duration: streakPeriod).repeatForever(autoreverses: false)) {
+                    streakAngle = -360
+                }
             }
         }
     }
